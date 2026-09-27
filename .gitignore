@@ -1,0 +1,8 @@
+# Godot import cache: rebuilt automatically when the project is opened.
+.godot/
+# iOS exports: made by Tools/export_ios.sh.
+build/
+# Models moved out of the game, kept locally only.
+unused_assets/
+.DS_Store
+__pycache__/
