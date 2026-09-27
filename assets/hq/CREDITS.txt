@@ -1,0 +1,21 @@
+Third-party models in assets/hq (trees are baked into assets/foliage by Tools/bake_foliage.gd).
+CC-BY-4.0 requires these credits to appear in the game or its store listing.
+
+- "Pine tree" by Andriy Shekh, https://sketchfab.com/3d-models/pine-tree-e52769d653cd4e52a4acff3041961e65, CC-BY-4.0
+- "oak trees" by DJMaesen, https://sketchfab.com/3d-models/oak-trees-d841c3bcc5324daebee50f45619e05fc, CC-BY-4.0
+- "Maple tree" by atrodler, https://sketchfab.com/3d-models/maple-tree-4b27adcf92f644bdabf8ecc6c5bef399, CC-BY-4.0
+- "Great Mountain" by Gesy, https://sketchfab.com/3d-models/great-mountain-dd826f1f05c544ccb671949ebca59721, CC-BY-4.0
+- "Dutch Ship Medium" from Poly Haven (polyhaven.com), CC0 (check the source you downloaded it from)
+- "2D Cloud Pack" by markus.blend, https://sketchfab.com/markus.blend, CC-BY-4.0
+- "Cannon 01" from Poly Haven (polyhaven.com), CC0
+- "3 Pack of Storm Lightning" by Incg5764, https://sketchfab.com/incg5764, CC-BY-4.0
+- Props (assets/ph, baked to assets/props) and textures (assets/ph/tex): Poly Haven, CC0
+- Sky (assets/sky/overcast.hdr): Kloofendal Overcast Pure Sky, Poly Haven, CC0
+- Water normals (assets/water): three.js examples, MIT
+- Particles (assets/particles): Kenney Particle Pack and Smoke Particles, CC0
+- Storm audio (assets/audio): supplied by the author; check its licence before release
+- "Coconut Palm" by evolveduk, https://sketchfab.com/evolveduk, CC-BY-4.0
+- "Plant Series – Palm Tree" by Spazio Silvestre, https://sketchfab.com/spazio_silvestre, CC-BY-4.0
+- Ship Pinnace (enemy ships, moored boats) and Barrel 03 (powder barrels): Poly Haven, CC0
+- Cannon, wood, waves and creaking sounds: supplied by the author (creaking from the Freesound
+  community); check each licence before release

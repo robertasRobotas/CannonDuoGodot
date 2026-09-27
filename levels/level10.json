@@ -1,0 +1,501 @@
+{
+  "id": 10,
+  "name": "Twin Keeps",
+  "subtitle": "Two castles, one sloop",
+  "hint": "Two keeps, a gun and a sloop. The cellars are full of TNT.",
+  "projectiles": 6,
+  "par": 3,
+  "stars": {
+    "three": 3,
+    "two": 4
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      3.0,
+      -3.0
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "stone",
+      "position": [
+        -5.2,
+        2.26,
+        -3.0
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.6,
+        2.26,
+        -3.0
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -4.325,
+        0.4,
+        -3.0
+      ],
+      "size": [
+        0.91,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -4.325,
+        1.1,
+        -3.0
+      ],
+      "size": [
+        0.91,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.475,
+        0.4,
+        -3.0
+      ],
+      "size": [
+        0.91,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.475,
+        1.1,
+        -3.0
+      ],
+      "size": [
+        0.91,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -3.4,
+        0.6,
+        -2.95
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -3.4,
+        1.48,
+        -3.12
+      ],
+      "size": [
+        2.64,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -3.4,
+        1.96,
+        -3.0
+      ],
+      "size": [
+        2.76,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -3.4,
+        2.66,
+        -3.0
+      ],
+      "size": [
+        2.76,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        -3.4,
+        3.315,
+        -2.87
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -3.4,
+        3.04,
+        -3.12
+      ],
+      "size": [
+        2.64,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "tnt",
+      "position": [
+        -3.25,
+        0.3,
+        -3.6
+      ],
+      "size": [
+        0.6,
+        0.6,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -5.2,
+        4.27,
+        -2.23
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.6,
+        2.26,
+        -4.2
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:red"
+    },
+    {
+      "material": "stone",
+      "position": [
+        5.2,
+        2.26,
+        -4.2
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:red"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.475,
+        0.4,
+        -4.2
+      ],
+      "size": [
+        0.91,
+        0.8,
+        0.5
+      ],
+      "style": "wall:red"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.475,
+        1.1,
+        -4.2
+      ],
+      "size": [
+        0.91,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        4.325,
+        0.4,
+        -4.2
+      ],
+      "size": [
+        0.91,
+        0.8,
+        0.5
+      ],
+      "style": "wall:red"
+    },
+    {
+      "material": "wood",
+      "position": [
+        4.325,
+        1.1,
+        -4.2
+      ],
+      "size": [
+        0.91,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        3.4,
+        0.6,
+        -4.15
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        3.4,
+        1.48,
+        -4.32
+      ],
+      "size": [
+        2.64,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        3.4,
+        1.96,
+        -4.2
+      ],
+      "size": [
+        2.76,
+        0.8,
+        0.5
+      ],
+      "style": "wall:red"
+    },
+    {
+      "material": "wood",
+      "position": [
+        3.4,
+        2.66,
+        -4.2
+      ],
+      "size": [
+        2.76,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        3.4,
+        3.315,
+        -4.07
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        3.4,
+        3.04,
+        -4.32
+      ],
+      "size": [
+        2.64,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "tnt",
+      "position": [
+        3.55,
+        0.3,
+        -4.8
+      ],
+      "size": [
+        0.6,
+        0.6,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        5.2,
+        4.27,
+        -3.43
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:red"
+    },
+    {
+      "material": "stone",
+      "position": [
+        5.2,
+        4.25,
+        -3.25
+      ],
+      "size": [
+        0.9,
+        0.5,
+        0.9
+      ],
+      "isStatic": true,
+      "style": "wall:red"
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        -3.4,
+        3.405,
+        -3.12
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        -5.2,
+        4.81,
+        -2.23
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        3.4,
+        3.405,
+        -4.32
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        5.2,
+        4.81,
+        -3.43
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.4,
+  "ammo": [
+    "wood",
+    "wood",
+    "iron",
+    "tnt",
+    "iron",
+    "iron"
+  ],
+  "enemyCannons": [
+    {
+      "position": [
+        5.2,
+        4.5,
+        -3.25
+      ],
+      "interval": 6.5,
+      "power": 0.5
+    }
+  ],
+  "enemyShips": [
+    {
+      "position": [
+        7.5,
+        0,
+        3.8
+      ],
+      "speed": 0.0,
+      "hitPoints": 2,
+      "hasCannon": true,
+      "interval": 8.0
+    }
+  ],
+  "terrain": {
+    "biome": "coast",
+    "elevation": 0.0
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "id": 11,
+  "name": "Boarding Party",
+  "subtitle": "Open sea",
+  "hint": "Boats are coming at you across open water. Sink each one before it reaches the hull.",
+  "projectiles": 8,
+  "par": 5,
+  "stars": {
+    "three": 5,
+    "two": 6
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      1.0,
+      -17.0
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [],
+  "targets": [],
+  "sea": 0.25,
+  "ammo": [
+    "iron",
+    "iron",
+    "iron",
+    "iron",
+    "iron",
+    "iron",
+    "iron",
+    "iron"
+  ],
+  "enemyCannons": [],
+  "enemyShips": [
+    {
+      "position": [
+        -6,
+        0,
+        -14
+      ],
+      "speed": 0.55,
+      "hitPoints": 1,
+      "hasCannon": false,
+      "interval": 7.0
+    },
+    {
+      "position": [
+        7,
+        0,
+        -16
+      ],
+      "speed": 0.5,
+      "hitPoints": 1,
+      "hasCannon": false,
+      "interval": 7.0
+    },
+    {
+      "position": [
+        -3,
+        0,
+        -24
+      ],
+      "speed": 0.7,
+      "hitPoints": 1,
+      "hasCannon": false,
+      "interval": 7.0
+    },
+    {
+      "position": [
+        9,
+        0,
+        -26
+      ],
+      "speed": 0.65,
+      "hitPoints": 1,
+      "hasCannon": true,
+      "interval": 9.0
+    },
+    {
+      "position": [
+        0,
+        0,
+        -32
+      ],
+      "speed": 0.6,
+      "hitPoints": 2,
+      "hasCannon": true,
+      "interval": 8.0
+    }
+  ],
+  "terrain": {
+    "biome": "opensea",
+    "elevation": 0.0
+  }
+}

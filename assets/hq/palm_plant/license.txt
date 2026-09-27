@@ -1,0 +1,11 @@
+Model Information:
+* title:	Plant Series – Palm Tree
+* source:	https://sketchfab.com/3d-models/plant-series-palm-tree-e8c0ea53410947b0b7f20d33702f4098
+* author:	Spazio Silvestre (https://sketchfab.com/spazio_silvestre)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Plant Series – Palm Tree" (https://sketchfab.com/3d-models/plant-series-palm-tree-e8c0ea53410947b0b7f20d33702f4098) by Spazio Silvestre (https://sketchfab.com/spazio_silvestre) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

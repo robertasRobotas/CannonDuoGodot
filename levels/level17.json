@@ -1,0 +1,601 @@
+{
+  "id": 17,
+  "name": "Treasury",
+  "subtitle": "Precision",
+  "hint": "Thread the shot between the plates. The cages behind need a lob.",
+  "projectiles": 5,
+  "par": 2,
+  "stars": {
+    "three": 2,
+    "two": 3
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      3.0,
+      -4.5
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "stone",
+      "position": [
+        0,
+        0.4,
+        -3.0
+      ],
+      "size": [
+        1.8,
+        0.8,
+        1.2
+      ],
+      "isStatic": true,
+      "style": "rock"
+    },
+    {
+      "material": "glass",
+      "position": [
+        -0.7,
+        1.3,
+        -3.0
+      ],
+      "size": [
+        0.08,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0.7,
+        1.3,
+        -3.0
+      ],
+      "size": [
+        0.08,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0,
+        1.3,
+        -2.5
+      ],
+      "size": [
+        1.4,
+        1.0,
+        0.08
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0,
+        1.3,
+        -3.5
+      ],
+      "size": [
+        1.4,
+        1.0,
+        0.08
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0,
+        1.85,
+        -3.0
+      ],
+      "size": [
+        1.5,
+        0.1,
+        1.1
+      ]
+    },
+    {
+      "material": "metal",
+      "position": [
+        -1.6,
+        1.2,
+        -2.2
+      ],
+      "size": [
+        0.6,
+        2.4,
+        0.1
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        1.6,
+        1.2,
+        -2.2
+      ],
+      "size": [
+        0.6,
+        2.4,
+        0.1
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.8,
+        2.26,
+        -6.2
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        2.26,
+        -6.2
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.8,
+        2.26,
+        -6.2
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.4,
+        0.4,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.4,
+        1.1,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.4,
+        1.48,
+        -6.32
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.4,
+        1.96,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.4,
+        2.66,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        -1.4,
+        3.315,
+        -6.07
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.4,
+        3.04,
+        -6.32
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.675,
+        0.4,
+        -6.2
+      ],
+      "size": [
+        0.51,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.675,
+        1.1,
+        -6.2
+      ],
+      "size": [
+        0.51,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.125,
+        0.4,
+        -6.2
+      ],
+      "size": [
+        0.51,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.125,
+        1.1,
+        -6.2
+      ],
+      "size": [
+        0.51,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.4,
+        0.6,
+        -6.15
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.4,
+        1.48,
+        -6.32
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.4,
+        1.96,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.4,
+        2.66,
+        -6.2
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        1.4,
+        3.315,
+        -6.07
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.4,
+        3.04,
+        -6.32
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        3.36,
+        -8.1
+      ],
+      "size": [
+        1.4,
+        6.72,
+        1.4
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "metal",
+      "position": [
+        -1.9,
+        3.615,
+        -6.32
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        -0.9,
+        3.615,
+        -6.32
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        -1.4,
+        3.615,
+        -6.82
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        -1.4,
+        3.615,
+        -5.82
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        0.9,
+        3.615,
+        -6.32
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        1.9,
+        3.615,
+        -6.32
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        1.4,
+        3.615,
+        -6.82
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        1.4,
+        3.615,
+        -5.82
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        6.47,
+        -7.03
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        0,
+        1.08,
+        -3.0
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        -1.4,
+        3.405,
+        -6.32
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        1.4,
+        3.405,
+        -6.32
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0,
+        7.01,
+        -7.03
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.0,
+  "ammo": [
+    "wood",
+    "iron",
+    "stone",
+    "tnt",
+    "iron"
+  ],
+  "enemyCannons": [],
+  "enemyShips": [],
+  "terrain": {
+    "biome": "coast",
+    "elevation": 0.0
+  }
+}

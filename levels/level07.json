@@ -1,0 +1,411 @@
+{
+  "id": 7,
+  "name": "Hill Fort",
+  "subtitle": "Far and high",
+  "hint": "Stone balls hit hard but fly slower. Aim well above the hill.",
+  "projectiles": 5,
+  "par": 3,
+  "stars": {
+    "three": 3,
+    "two": 4
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      6.0,
+      -7.5
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "stone",
+      "position": [
+        0,
+        0.7,
+        -8.3
+      ],
+      "size": [
+        9.0,
+        1.4,
+        5.4
+      ],
+      "isStatic": true,
+      "style": "hill"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.7,
+        3.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        3.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.7,
+        3.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.35,
+        1.8,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.35,
+        2.5,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.35,
+        2.88,
+        -7.62
+      ],
+      "size": [
+        1.74,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.35,
+        3.36,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.35,
+        4.06,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        -1.35,
+        4.715,
+        -7.37
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.35,
+        4.44,
+        -7.62
+      ],
+      "size": [
+        1.74,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.65,
+        1.8,
+        -7.5
+      ],
+      "size": [
+        0.46,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.65,
+        2.5,
+        -7.5
+      ],
+      "size": [
+        0.46,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.05,
+        1.8,
+        -7.5
+      ],
+      "size": [
+        0.46,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.05,
+        2.5,
+        -7.5
+      ],
+      "size": [
+        0.46,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.35,
+        2.0,
+        -7.45
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.35,
+        2.88,
+        -7.62
+      ],
+      "size": [
+        1.74,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.35,
+        3.36,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.35,
+        4.06,
+        -7.5
+      ],
+      "size": [
+        1.86,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        1.35,
+        4.715,
+        -7.37
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.35,
+        4.44,
+        -7.62
+      ],
+      "size": [
+        1.74,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        4.76,
+        -9.4
+      ],
+      "size": [
+        1.4,
+        6.72,
+        1.4
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        5.67,
+        -6.73
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        7.87,
+        -8.33
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        -1.35,
+        4.805,
+        -7.62
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        1.35,
+        4.805,
+        -7.62
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0.0,
+        6.21,
+        -6.73
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0,
+        8.41,
+        -8.33
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.5,
+  "ammo": [
+    "stone",
+    "stone",
+    "iron",
+    "stone",
+    "stone"
+  ],
+  "enemyCannons": [],
+  "enemyShips": [],
+  "terrain": {
+    "biome": "highlands",
+    "elevation": 1.4
+  }
+}

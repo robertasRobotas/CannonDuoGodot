@@ -1,0 +1,274 @@
+{
+  "id": 2,
+  "name": "Sandstone Keep",
+  "subtitle": "Stone stands, wood falls",
+  "hint": "Balls bounce off stone. Hit the wooden course under a roof and it drops.",
+  "projectiles": 4,
+  "par": 3,
+  "stars": {
+    "three": 3,
+    "two": 4
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      3.0,
+      -3.0
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "stone",
+      "position": [
+        -2.2,
+        2.26,
+        -3.0
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.2,
+        2.26,
+        -3.0
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.125,
+        0.4,
+        -3.0
+      ],
+      "size": [
+        1.31,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.125,
+        1.1,
+        -3.0
+      ],
+      "size": [
+        1.31,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.125,
+        0.4,
+        -3.0
+      ],
+      "size": [
+        1.31,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.125,
+        1.1,
+        -3.0
+      ],
+      "size": [
+        1.31,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        0.6,
+        -2.95
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        1.48,
+        -3.12
+      ],
+      "size": [
+        3.44,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        1.96,
+        -3.0
+      ],
+      "size": [
+        3.56,
+        0.8,
+        0.5
+      ],
+      "style": "wall:sand"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        2.66,
+        -3.0
+      ],
+      "size": [
+        3.56,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0.0,
+        3.315,
+        -2.87
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        3.04,
+        -3.12
+      ],
+      "size": [
+        3.44,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        3.36,
+        -4.9
+      ],
+      "size": [
+        1.4,
+        6.72,
+        1.4
+      ],
+      "isStatic": true,
+      "style": "tower:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.2,
+        4.27,
+        -2.23
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        6.47,
+        -3.83
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:sand"
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        0.0,
+        3.405,
+        -3.12
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        2.2,
+        4.81,
+        -2.23
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0,
+        7.01,
+        -3.83
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.0,
+  "ammo": [],
+  "enemyCannons": [],
+  "enemyShips": [],
+  "terrain": {
+    "biome": "coast",
+    "elevation": 0.0
+  }
+}

@@ -1,0 +1,914 @@
+{
+  "id": 20,
+  "name": "The Citadel",
+  "subtitle": "Everything you learned",
+  "hint": "Seven targets, two guns, boats and a boulder. Take your time.",
+  "projectiles": 9,
+  "par": 5,
+  "stars": {
+    "three": 5,
+    "two": 6
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      6.2,
+      -4.0
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "stone",
+      "position": [
+        0,
+        0.6,
+        -4.8
+      ],
+      "size": [
+        12.0,
+        1.2,
+        5.4
+      ],
+      "isStatic": true,
+      "style": "hill"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -4.2,
+        4.24,
+        -4.0
+      ],
+      "size": [
+        0.8,
+        6.08,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.4,
+        4.24,
+        -4.0
+      ],
+      "size": [
+        0.8,
+        6.08,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.4,
+        4.24,
+        -4.0
+      ],
+      "size": [
+        0.8,
+        6.08,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        4.2,
+        4.24,
+        -4.0
+      ],
+      "size": [
+        0.8,
+        6.08,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.8,
+        1.6,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        2.3,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        2.68,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.8,
+        3.16,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        3.86,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        4.24,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.8,
+        4.72,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        5.42,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        -2.8,
+        6.075,
+        -3.87
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -2.8,
+        5.8,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -0.725,
+        1.6,
+        -4.0
+      ],
+      "size": [
+        0.51,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -0.725,
+        2.3,
+        -4.0
+      ],
+      "size": [
+        0.51,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.725,
+        1.6,
+        -4.0
+      ],
+      "size": [
+        0.51,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.725,
+        2.3,
+        -4.0
+      ],
+      "size": [
+        0.51,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        1.8,
+        -3.95
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        2.68,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        3.16,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        3.86,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        4.24,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        4.72,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        5.42,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        0.0,
+        6.075,
+        -3.87
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.0,
+        5.8,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.8,
+        1.6,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        2.3,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        2.68,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.8,
+        3.16,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        3.86,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        4.24,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.8,
+        4.72,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        5.42,
+        -4.0
+      ],
+      "size": [
+        1.96,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        2.8,
+        6.075,
+        -3.87
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        2.8,
+        5.8,
+        -4.12
+      ],
+      "size": [
+        1.84,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        5.34,
+        -5.9
+      ],
+      "size": [
+        1.4,
+        8.28,
+        1.4
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "tnt",
+      "position": [
+        0.15,
+        1.5,
+        -4.6
+      ],
+      "size": [
+        0.6,
+        0.6,
+        0.6
+      ]
+    },
+    {
+      "material": "metal",
+      "position": [
+        -0.5,
+        6.375,
+        -4.12
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        0.5,
+        6.375,
+        -4.12
+      ],
+      "size": [
+        0.06,
+        1.0,
+        1.0
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        0.0,
+        6.375,
+        -4.62
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "metal",
+      "position": [
+        0.0,
+        6.375,
+        -3.62
+      ],
+      "size": [
+        1.0,
+        1.0,
+        0.06
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        2.505,
+        -3.38
+      ],
+      "size": [
+        0.9,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -4.2,
+        7.03,
+        -3.23
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        4.2,
+        7.03,
+        -3.23
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        9.23,
+        -4.83
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -4.5,
+        4.8,
+        -5.6
+      ],
+      "size": [
+        0.24,
+        7.2,
+        0.24
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        4.5,
+        4.8,
+        -5.6
+      ],
+      "size": [
+        0.24,
+        7.2,
+        0.24
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0,
+        8.48,
+        -5.6
+      ],
+      "size": [
+        9.6,
+        0.16,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        9.01,
+        -5.6
+      ],
+      "size": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "style": "boulder"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -4.2,
+        7.05,
+        -3.05
+      ],
+      "size": [
+        0.9,
+        0.5,
+        0.9
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        4.2,
+        7.05,
+        -3.05
+      ],
+      "size": [
+        0.9,
+        0.5,
+        0.9
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "metal",
+      "position": [
+        0,
+        2.1,
+        -0.6
+      ],
+      "size": [
+        1.8,
+        1.8,
+        0.15
+      ],
+      "isStatic": true,
+      "motion": {
+        "axis": [
+          0,
+          1,
+          0
+        ],
+        "amplitude": 1.2,
+        "period": 5.0
+      }
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        -2.8,
+        6.165,
+        -4.12
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0.0,
+        6.165,
+        -4.12
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        2.8,
+        6.165,
+        -4.12
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0.0,
+        3.045,
+        -3.38
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        -4.2,
+        7.57,
+        -3.23
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        4.2,
+        7.57,
+        -3.23
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0,
+        9.77,
+        -4.83
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.85,
+  "ammo": [
+    "iron",
+    "stone",
+    "wood",
+    "tnt",
+    "iron",
+    "tnt",
+    "stone",
+    "iron",
+    "tnt"
+  ],
+  "enemyCannons": [
+    {
+      "position": [
+        -4.2,
+        7.3,
+        -3.05
+      ],
+      "interval": 5.0,
+      "power": 0.6
+    },
+    {
+      "position": [
+        4.2,
+        7.3,
+        -3.05
+      ],
+      "interval": 6.5,
+      "power": 0.7
+    }
+  ],
+  "enemyShips": [
+    {
+      "position": [
+        -7.5,
+        0,
+        3.6
+      ],
+      "speed": 0.0,
+      "hitPoints": 2,
+      "hasCannon": true,
+      "interval": 8.0
+    },
+    {
+      "position": [
+        7.5,
+        0,
+        3.8
+      ],
+      "speed": 0.0,
+      "hitPoints": 2,
+      "hasCannon": true,
+      "interval": 9.0
+    }
+  ],
+  "terrain": {
+    "biome": "highlands",
+    "elevation": 1.2
+  }
+}

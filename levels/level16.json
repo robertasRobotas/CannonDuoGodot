@@ -1,0 +1,491 @@
+{
+  "id": 16,
+  "name": "Cliff Fortress",
+  "subtitle": "Far and high",
+  "hint": "Lob it far. The keep stands on the cliff and a sloop guards the bay.",
+  "projectiles": 6,
+  "par": 3,
+  "stars": {
+    "three": 3,
+    "two": 4
+  },
+  "camera": {
+    "position": [
+      0,
+      2.4,
+      9.0
+    ],
+    "lookAt": [
+      0,
+      8.0,
+      -7.5
+    ]
+  },
+  "cannon": [
+    0,
+    0.9,
+    7.0
+  ],
+  "blocks": [
+    {
+      "material": "metal",
+      "position": [
+        0,
+        1.1,
+        -4.0
+      ],
+      "size": [
+        3.0,
+        2.2,
+        0.15
+      ],
+      "isStatic": true
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        1.2,
+        -8.3
+      ],
+      "size": [
+        8.0,
+        2.4,
+        5.4
+      ],
+      "isStatic": true,
+      "style": "hill"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -2.5,
+        4.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        4.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        2.5,
+        4.66,
+        -7.5
+      ],
+      "size": [
+        0.8,
+        4.52,
+        0.8
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.25,
+        2.8,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.25,
+        3.5,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.25,
+        3.88,
+        -7.62
+      ],
+      "size": [
+        1.54,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        -1.25,
+        4.36,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.25,
+        5.06,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        -1.25,
+        5.715,
+        -7.37
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        -1.25,
+        5.44,
+        -7.62
+      ],
+      "size": [
+        1.54,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.6,
+        2.8,
+        -7.5
+      ],
+      "size": [
+        0.36,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        0.6,
+        3.5,
+        -7.5
+      ],
+      "size": [
+        0.36,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.9,
+        2.8,
+        -7.5
+      ],
+      "size": [
+        0.36,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.9,
+        3.5,
+        -7.5
+      ],
+      "size": [
+        0.36,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.25,
+        3.0,
+        -7.45
+      ],
+      "size": [
+        0.9,
+        1.2,
+        0.15
+      ],
+      "style": "gate"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.25,
+        3.88,
+        -7.62
+      ],
+      "size": [
+        1.54,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        1.25,
+        4.36,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.8,
+        0.5
+      ],
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.25,
+        5.06,
+        -7.5
+      ],
+      "size": [
+        1.66,
+        0.6,
+        0.5
+      ]
+    },
+    {
+      "material": "glass",
+      "position": [
+        1.25,
+        5.715,
+        -7.37
+      ],
+      "size": [
+        0.7,
+        0.4,
+        0.06
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        1.25,
+        5.44,
+        -7.62
+      ],
+      "size": [
+        1.54,
+        0.15,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        5.76,
+        -9.4
+      ],
+      "size": [
+        1.4,
+        6.72,
+        1.4
+      ],
+      "isStatic": true,
+      "style": "tower:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0.0,
+        6.67,
+        -6.73
+      ],
+      "size": [
+        0.7,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        8.87,
+        -8.33
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.7
+      ],
+      "isStatic": true,
+      "style": "wall:white"
+    },
+    {
+      "material": "wood",
+      "position": [
+        -3.0,
+        4.9,
+        -9.4
+      ],
+      "size": [
+        0.24,
+        5.0,
+        0.24
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        3.0,
+        4.9,
+        -9.4
+      ],
+      "size": [
+        0.24,
+        5.0,
+        0.24
+      ]
+    },
+    {
+      "material": "wood",
+      "position": [
+        0,
+        7.48,
+        -9.4
+      ],
+      "size": [
+        6.6,
+        0.16,
+        0.6
+      ]
+    },
+    {
+      "material": "stone",
+      "position": [
+        0,
+        7.96,
+        -9.4
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "style": "boulder"
+    }
+  ],
+  "targets": [
+    {
+      "position": [
+        -1.25,
+        5.805,
+        -7.62
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        1.25,
+        5.805,
+        -7.62
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0.0,
+        7.21,
+        -6.73
+      ],
+      "radius": 0.28
+    },
+    {
+      "position": [
+        0,
+        9.41,
+        -8.33
+      ],
+      "radius": 0.28
+    }
+  ],
+  "sea": 0.2,
+  "ammo": [
+    "stone",
+    "stone",
+    "stone",
+    "iron",
+    "tnt",
+    "iron"
+  ],
+  "enemyCannons": [],
+  "enemyShips": [
+    {
+      "position": [
+        -7.5,
+        0,
+        3.8
+      ],
+      "speed": 0.0,
+      "hitPoints": 2,
+      "hasCannon": true,
+      "interval": 7.0
+    }
+  ],
+  "terrain": {
+    "biome": "highlands",
+    "elevation": 2.4
+  }
+}
