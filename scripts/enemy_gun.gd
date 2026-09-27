@@ -14,6 +14,7 @@ var _pending_break := false
 func setup(iv: float, pw: float) -> void:
     interval = iv
     power = pw
+    next_fire = Tuning.ENEMY_FIRST_SHOT_DELAY + 1.5 + randf() * 4.0
     mass = 60.0
     var shape := CollisionShape3D.new()
     var b := BoxShape3D.new()
@@ -26,16 +27,12 @@ func setup(iv: float, pw: float) -> void:
     max_contacts_reported = 4
     add_to_group("dynamic")
     add_to_group("enemy_guns")
-    var model := Models.instance("res://assets/pirate/cannon.glb")
-    Models.fit(model, Vector3(0.6, 0.55, 0.9), true)
+    # The Poly Haven cannon, like the player's; it faces +z, the sea, as modelled.
+    var model := Models.instance("res://assets/hq/cannon/cannon_01_1k.gltf")
+    Models.fit(model, Vector3(0.6, 0.55, 0.95), true)
     model.position.y += 0.28
-    # Kenney's cannon points along -z; ours must face the sea at +z.
-    model.rotation.y = PI
+    Models.tint(model, Color(0.7, 0.65, 0.65))
     add_child(model)
-    var flag := Models.instance("res://assets/pirate/flag-pirate.glb")
-    Models.fit(flag, Vector3(0.5, 0.9, 0.1), true)
-    flag.position = Vector3(-0.35, 0.75, -0.2)
-    add_child(flag)
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
     if frozen:

@@ -12,7 +12,7 @@ func _init() -> void:
     for name in ["boulder_01", "wooden_crate_01", "wooden_barrels_01", "treasure_chest", "tree_stump_01", "dead_tree_trunk", "shrub_02", "fern_02", "barrel_03"]:
         _bake("res://assets/ph/%s/%s.gltf" % [name, name], name, TARGET_TRIS)
     # Cliffs and big rocks for rocky shores and headlands.
-    for name in ["namaqualand_cliff_01", "coastal_cliff_01", "namaqualand_boulder_02"]:
+    for name in ["namaqualand_cliff_01", "coastal_cliff_01", "namaqualand_boulder_02", "modular_wooden_pier", "wine_barrel_01"]:
         _bake("res://assets/ph/%s/%s.gltf" % [name, name], name, 12000)
     # The pinnace (enemy ships and boats moored off the beach) keeps more detail.
     _bake("res://assets/hq/pinnace/ship_pinnace_1k.gltf", "pinnace", 22000)

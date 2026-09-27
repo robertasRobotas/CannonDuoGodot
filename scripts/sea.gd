@@ -9,10 +9,11 @@ var amplitude: float = Tuning.CALM_AMPLITUDE
 var t: float = 0.0
 var _mat: ShaderMaterial
 
-func setup(storm: float, center: Vector3, is_open_sea: bool) -> void:
+## `swell` multiplies the wave height: above 1 for the huge-wave levels.
+func setup(storm: float, center: Vector3, is_open_sea: bool, swell: float = 1.0) -> void:
     storminess = clampf(storm, 0.0, 1.0)
     open_sea = is_open_sea
-    amplitude = Tuning.CALM_AMPLITUDE + Tuning.STORM_AMPLITUDE * storminess
+    amplitude = (Tuning.CALM_AMPLITUDE + Tuning.STORM_AMPLITUDE * storminess) * swell
     var plane := PlaneMesh.new()
     plane.size = Vector2(160, 160)
     plane.subdivide_width = 72
@@ -37,8 +38,17 @@ func setup(storm: float, center: Vector3, is_open_sea: bool) -> void:
     fp.size = Vector2(900, 900)
     far.mesh = fp
     far.material_override = Models.flat_material(Color(0.10, 0.32, 0.54) if storminess < 0.6 else Color(0.10, 0.22, 0.30), 0.25)
-    far.position = Vector3(0, -0.6, 0)   # below the deepest trough
+    far.position = Vector3(0, -0.6 - amplitude * 3.0, 0)   # below the deepest trough
     add_child(far)
+
+## Dark water under the moon.
+func set_night() -> void:
+    _mat.set_shader_parameter("deep_color", Color(0.02, 0.05, 0.10))
+    _mat.set_shader_parameter("shallow_color", Color(0.05, 0.12, 0.18))
+    _mat.set_shader_parameter("sky_color", Color(0.12, 0.16, 0.28))
+    for c in get_children():
+        if c is MeshInstance3D:
+            (c as MeshInstance3D).material_override = Models.flat_material(Color(0.02, 0.05, 0.10), 0.25)
 
 func _process(delta: float) -> void:
     t += delta

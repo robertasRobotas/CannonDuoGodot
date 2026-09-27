@@ -61,10 +61,10 @@ const ENEMY_BALL_SPEED := 13.0
 const ENEMY_HIT_RADIUS := 1.3
 const MAX_HULL_HITS := 3
 const ENEMY_FIRST_SHOT_DELAY := 2.5
-const ENEMY_AIM_ERROR := 0.9
+const ENEMY_AIM_ERROR := 2.4    # metres of scatter: most enemy shots land near, not on, the gun
 const ENEMY_CANNON_BREAK := 2.5
 const SHIP_RAM_DISTANCE := 3.2
-const SHIP_SINK_DURATION := 2.2
+const SHIP_SINK_DURATION := 3.6
 const THUNDER_MIN := 4.0
 const THUNDER_MAX := 10.0
 
@@ -77,9 +77,52 @@ const MATERIALS := {
     "tnt": {"density": 120.0, "friction": 0.6, "bounce": 0.2, "break": 0.8},
 }
 
+# Feel: combos, the action camera, near misses, loot.
+const COMBO_WINDOW := 1.4        # game seconds between blasts or pops that still chain
+const COMBO_POINTS := 250        # bonus per link, times the link number
+const CINE_DURATION := 1.6       # real seconds of slow motion on the first blast of a shot
+const CINE_SLOWMO := 0.5
+const FOLLOW_SLOWMO := 0.75      # time runs a little slow while the ball that may win it flies
+const NEAR_MISS := 1.1           # metres from a barrel or guard that counts as "so close"
+const COINS_PER_POP := 6
+const MAX_COINS := 140
+const KICK_ROLL := 0.07          # radians the ship heels when the cannon fires
+const BURN_TIME := 2.4           # a burning wood block breaks after this
+const BURN_SPREAD := 1.2         # metres a fire jumps to the next wood block
+const MAX_BURNING := 24
+
+## The cannon workshop: id -> name, what each level does, doubloon price per level, and stars
+## needed to unlock each level (replaying for stars opens the better parts).
+const SHOP := {
+    "barrel": {"name": "Long barrel", "icon": "▲", "desc": "Shots fly 7% harder per level.", "price": [120, 260, 480, 760, 1100], "stars": [0, 6, 15, 24, 36]},
+    "loader": {"name": "Quick loader", "icon": "⟳", "desc": "Reload faster. Level 3 adds a ball.", "price": [100, 220, 420, 680], "stars": [0, 5, 12, 22]},
+    "powder": {"name": "Black powder", "icon": "✸", "desc": "Powder barrels blast 12% wider per level.", "price": [150, 320, 560], "stars": [0, 8, 18]},
+    "hull": {"name": "Oak planking", "icon": "♥", "desc": "+1 heart against enemy fire per level.", "price": [180, 400, 700], "stars": [0, 10, 20]},
+    "chain": {"name": "Chain shot", "icon": "⚯", "desc": "Snaps any wooden post. +1 per level on every island.", "price": [250, 500, 800], "stars": [4, 12, 24]},
+    "fire": {"name": "Fire shot", "icon": "🔥", "desc": "Sets wood burning; fire spreads. +1 per level on every island.", "price": [300, 600, 900], "stars": [6, 14, 26]},
+    "shell": {"name": "Exploding shell", "icon": "✺", "desc": "Bursts on impact like a powder barrel. +1 per level on every island.", "price": [400, 800], "stars": [16, 30]},
+    "map": {"name": "Treasure map", "icon": "✦", "desc": "+15% doubloons per level.", "price": [90, 220, 400], "stars": [0, 4, 10]},
+}
+## Cannon ranks by the total of all upgrade levels, and the barrel's colour at each.
+const RANKS := [[0, "Rusty", Color(0.55, 0.38, 0.28)], [4, "Iron", Color(0.62, 0.64, 0.68)], [9, "Bronze", Color(0.85, 0.55, 0.3)],
+    [15, "Royal", Color(0.9, 0.9, 0.95)], [21, "Legendary", Color(1.0, 0.8, 0.3)]]
+
+static func rank(upgrades: Dictionary) -> Array:
+    var total := 0
+    for k in upgrades:
+        total += int(upgrades[k])
+    var out: Array = RANKS[0]
+    for r: Array in RANKS:
+        if total >= int(r[0]):
+            out = r
+    return out
+
 const AMMO := {
     "iron": {"radius": 0.16, "mass": 26.0, "bounce": 0.15, "speed": 1.0, "name": "Iron ball", "color": Color(0.16, 0.14, 0.22)},
     "stone": {"radius": 0.2, "mass": 40.0, "bounce": 0.05, "speed": 0.85, "name": "Stone ball", "color": Color(0.62, 0.60, 0.62)},
     "wood": {"radius": 0.18, "mass": 9.0, "bounce": 0.6, "speed": 1.25, "name": "Wood ball", "color": Color(0.76, 0.55, 0.34)},
     "tnt": {"radius": 0.17, "mass": 18.0, "bounce": 0.1, "speed": 1.0, "name": "TNT ball", "color": Color(0.98, 0.42, 0.40)},
+    "chain": {"radius": 0.2, "mass": 48.0, "bounce": 0.05, "speed": 0.95, "name": "Chain shot", "color": Color(0.28, 0.30, 0.34)},
+    "fire": {"radius": 0.17, "mass": 14.0, "bounce": 0.2, "speed": 1.05, "name": "Fire shot", "color": Color(1.0, 0.52, 0.12)},
+    "shell": {"radius": 0.17, "mass": 20.0, "bounce": 0.1, "speed": 1.0, "name": "Shell", "color": Color(0.15, 0.15, 0.18)},
 }

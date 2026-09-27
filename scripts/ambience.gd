@@ -15,6 +15,10 @@ var _thunder: Array[AudioStream] = []
 var _cracks: Array[AudioStream] = []
 var _cannon: Array[AudioStream] = []
 var _blast: AudioStream
+var _pops: Array[AudioStream] = []
+var _boing: AudioStream
+var _coins: Array[AudioStream] = []
+var _splashes: Array[AudioStream] = []
 var _cracks_playing := 0
 var _last_crack := -1.0
 
@@ -35,6 +39,10 @@ func setup(storminess: float, sound_on: bool) -> void:
     _cracks = [load(DIR + "wood1.mp3"), load(DIR + "wood2.mp3")]
     _cannon = [load(DIR + "cannon_weak.mp3"), load(DIR + "cannon.mp3"), load(DIR + "cannon_strong.mp3")]
     _blast = load(DIR + "blast.mp3")
+    _pops = [load(DIR + "pop1.mp3"), load(DIR + "pop2.mp3")]
+    _boing = load(DIR + "boing.mp3")
+    _coins = [load(DIR + "coins1.mp3"), load(DIR + "coins2.mp3"), load(DIR + "coins3.mp3")]
+    _splashes = [load(DIR + "splash1.mp3"), load(DIR + "splash2.mp3")]
 
 func _bed(file: String, volume: float) -> void:
     var p := AudioStreamPlayer.new()
@@ -67,6 +75,25 @@ func cannon(power: float) -> void:
 
 func blast() -> void:
     _one_shot(_blast, 2.0, randf_range(0.9, 1.05))
+
+## A guard pops: a plop and a boing as it flies off.
+func pop() -> void:
+    if _pops.is_empty():
+        return
+    _one_shot(_pops[randi() % _pops.size()], 0.0, randf_range(0.9, 1.15))
+    _one_shot(_boing, -6.0, randf_range(0.95, 1.25))
+
+## Coins land a moment after the pop.
+func coins() -> void:
+    if _coins.is_empty():
+        return
+    get_tree().create_timer(0.35).timeout.connect(func():
+        _one_shot(_coins[randi() % _coins.size()], -4.0, randf_range(0.95, 1.1)))
+
+func splash() -> void:
+    if _splashes.is_empty():
+        return
+    _one_shot(_splashes[randi() % _splashes.size()], -3.0, randf_range(0.85, 1.1))
 
 func crack() -> void:
     if _cracks.is_empty() or _cracks_playing >= MAX_CRACKS:

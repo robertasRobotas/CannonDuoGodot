@@ -3,13 +3,13 @@
 ## no two maps look alike; scattering is seeded by the level id.
 class_name Decor
 
-## Per level: shore ("sand", "rocks" or "cliffs") and sky ("noon", "sunset", "overcast";
+## Per level: shore ("sand", "rocks" or "cliffs") and sky ("noon", "sunset", "overcast", "night";
 ## storms override the sky). A level can set "terrain": {"shore": ..., "sky": ...} instead.
 const STYLES := [
     ["sand", "noon"], ["sand", "sunset"], ["rocks", "noon"], ["rocks", "noon"], ["cliffs", "noon"],
-    ["sand", "sunset"], ["cliffs", "noon"], ["rocks", "sunset"], ["cliffs", "noon"], ["sand", "overcast"],
-    ["sand", "noon"], ["cliffs", "sunset"], ["rocks", "overcast"], ["rocks", "sunset"], ["cliffs", "noon"],
-    ["sand", "noon"], ["rocks", "sunset"], ["cliffs", "noon"], ["sand", "overcast"], ["cliffs", "noon"],
+    ["sand", "sunset"], ["cliffs", "noon"], ["rocks", "night"], ["cliffs", "noon"], ["sand", "overcast"],
+    ["sand", "noon"], ["cliffs", "sunset"], ["rocks", "overcast"], ["rocks", "night"], ["cliffs", "noon"],
+    ["sand", "noon"], ["sand", "night"], ["cliffs", "noon"], ["sand", "overcast"], ["cliffs", "noon"],
 ]
 
 static func style(data: Dictionary, storm: bool) -> Dictionary:
@@ -21,14 +21,31 @@ static func style(data: Dictionary, storm: bool) -> Dictionary:
         sky = "storm"
     elif float(data.get("sea", 0.0)) >= 0.4 and sky == "noon":
         sky = "overcast"
-    return {"shore": terrain.get("shore", row[0]), "sky": sky}
+    return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2))}
 
-static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st: Dictionary, ship_z: float) -> void:
+## Areas nothing may be placed in (x, z rectangles): the castle and the view in front of it,
+## and the sea lane the ship sails in along, far out to the right where it comes from.
+static var _clear: Array[Rect2] = []
+
+static func _free(x: float, z: float, r: float = 0.0) -> bool:
+    for rect in _clear:
+        if rect.grow(r).has_point(Vector2(x, z)):
+            return false
+    return true
+
+## `castle` is the castle footprint in x/z (from its blocks); `ship_z` the ship's lane.
+static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st: Dictionary, ship_z: float, castle: Rect2 = Rect2()) -> void:
     var rng := RandomNumberGenerator.new()
     rng.seed = level_id * 7919 + 13
     var shore: String = st.get("shore", "sand")
+    _clear = [Rect2(-13.0, ship_z - 5.5, 90.0, 11.0)]
+    if castle.size.x > 0.0:
+        var c := castle.grow(2.0)
+        # The castle, and everything between it and the water.
+        _clear.append(Rect2(c.position.x, c.position.y, c.size.x, Tuning.SHORE_Z - c.position.y))
     if biome != "opensea":
-        _island(parent, biome, shore)
+        _island(parent, biome, shore, float(st.get("beach", 4.2)))
+    # One kind of island per biome: its own trees, hills and ground. Trees never mix.
     match biome:
         "opensea":
             # Distant rocky islets around the open water.
@@ -40,32 +57,45 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
                 m.rotation.y = rng.randf_range(0, TAU)
                 parent.add_child(m)
         "highlands":
+            # Cold north: snowy peaks and pine forest.
             _mountains(parent, rng, 7, 22.0, 34.0)
             _forest(parent, rng, ["pine"], 70, 4.0, 8.5)
             _trees(parent, rng, ["pine"], 24, 3.5, 7.0)
-            _props(parent, rng, [["boulder_01", 0.8, 2.2], ["namaqualand_boulder_02", 1.0, 2.0], ["fern_02", 1.4, 2.4], ["shrub_02", 0.6, 1.0], ["tree_stump_01", 0.8, 1.2]], 60)
+            _props(parent, rng, [["boulder_01", 0.8, 2.2], ["namaqualand_boulder_02", 1.0, 2.0], ["fern_02", 1.4, 2.4], ["tree_stump_01", 0.8, 1.2]], 60)
         "badlands":
-            _mountains(parent, rng, 6, 14.0, 24.0, true)
-            # Red mesas: rock outcrops standing out of the scrub.
-            for i in 6:
-                var m := Models.prop("namaqualand_cliff_01")
-                var k := rng.randf_range(1.6, 2.8)
-                m.scale = Vector3(k, k * rng.randf_range(0.9, 1.4), k)
-                m.position = Vector3(rng.randf_range(-32, 32), -0.2, rng.randf_range(-40, -16))
-                m.rotation.y = rng.randf_range(0, TAU)
-                parent.add_child(m)
+            # Dry red country: mesas instead of mountains, dead trees.
+            _mesas(parent, rng, 7, -70.0, -45.0, 5.0, 8.0)
+            _mesas(parent, rng, 6, -40.0, -16.0, 1.6, 2.8)
             _props(parent, rng, [["dead_tree_trunk", 3.0, 5.0], ["tree_stump_01", 1.0, 1.6], ["boulder_01", 1.0, 3.0], ["namaqualand_boulder_02", 1.0, 2.2]], 60)
+        "volcano":
+            # Black ground, dead trees, and the smoking mountain behind.
+            _volcano(parent)
+            _mesas(parent, rng, 5, -60.0, -40.0, 3.0, 5.0, Color(0.35, 0.3, 0.3))
+            _props(parent, rng, [["dead_tree_trunk", 3.0, 5.0], ["boulder_01", 1.0, 2.6], ["namaqualand_boulder_02", 1.0, 2.4]], 50)
+        "meadow", "harbor":
+            # Green farmland: rolling hills, oaks and maples, windmills turning.
+            _hills(parent, rng, Color(0.62, 0.8, 0.5))
+            _forest(parent, rng, ["oak_small", "oak_medium", "oak_large", "maple", "oak_medium"], 40 if biome == "meadow" else 18, 4.5, 8.0)
+            _trees(parent, rng, ["oak_small", "oak_medium", "oak_large", "maple"], 10 if biome == "meadow" else 4, 3.5, 6.5)
+            if biome == "meadow":
+                _windmills(parent, rng, 3)
+            _props(parent, rng, [["shrub_02", 0.7, 1.2], ["boulder_01", 0.6, 1.4], ["tree_stump_01", 0.8, 1.2]], 40)
+            if biome == "harbor":
+                _quay(parent, rng)
         _:
-            _mountains(parent, rng, 6, 20.0, 32.0)
-            _forest(parent, rng, ["oak_small", "oak_medium", "oak_large", "maple", "oak_medium"], 55, 4.5, 8.0)
-            _trees(parent, rng, ["oak_small", "oak_medium", "oak_large", "maple"], 14, 3.5, 6.5)
-            _props(parent, rng, [["shrub_02", 0.7, 1.2], ["fern_02", 1.5, 2.6], ["boulder_01", 0.6, 1.6], ["tree_stump_01", 0.8, 1.2]], 80)
+            # Tropic: palm forest and green hills, ferns and shrubs.
+            _hills(parent, rng, Color(0.5, 0.72, 0.42))
+            _forest(parent, rng, ["palm_coconut", "palm_coconut", "palm_plant"], 55, 5.0, 8.5)
+            _trees(parent, rng, ["palm_coconut", "palm_plant"], 14, 4.5, 7.5)
+            _props(parent, rng, [["shrub_02", 0.7, 1.2], ["fern_02", 1.5, 2.6], ["boulder_01", 0.6, 1.6]], 80)
+    if castle.size.x > 0.0 and biome != "opensea":
+        _yard(parent, castle, biome)
     if biome != "opensea":
         _shore(parent, rng, biome, shore, ship_z)
-    _clouds(parent, rng, storm)
+    _clouds(parent, rng, storm, st.get("sky", "") == "night")
 
 ## Painted cloud cards (2D Cloud Pack) spread across the sky behind the island.
-static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool) -> void:
+static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, night: bool = false) -> void:
     var src: Node3D = Models.instance("res://assets/hq/clouds/scene.gltf")
     var cards: Array = []
     for c in src.find_children("*", "MeshInstance3D", true, false):
@@ -79,7 +109,7 @@ static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool) -> 
             mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
             # Soft edges: blend the painted alpha instead of cutting it.
             mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-            mat.albedo_color = Color(0.55, 0.56, 0.62) if storm else Color(1.0, 0.97, 0.94)
+            mat.albedo_color = Color(0.12, 0.14, 0.22, 0.8) if night else (Color(0.55, 0.56, 0.62) if storm else Color(1.0, 0.97, 0.94))
             cards.append({"mesh": mi.mesh, "xf": Transform3D(Basis.IDENTITY, -a.get_center()) * rel, "mat": mat})
     src.free()
     if cards.is_empty():
@@ -98,7 +128,7 @@ static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool) -> 
         holder.position = Vector3(rng.randf_range(-55, 55), rng.randf_range(11, 24) if not storm else rng.randf_range(9, 16), rng.randf_range(-70, -42))
         parent.add_child(holder)
 
-static func _island(parent: Node3D, biome: String, shore: String) -> void:
+static func _island(parent: Node3D, biome: String, shore: String, beach_depth: float = 4.2) -> void:
     var extent := 90.0
     var depth := extent + Tuning.SHORE_Z
     var ground := StaticBody3D.new()
@@ -115,7 +145,9 @@ static func _island(parent: Node3D, biome: String, shore: String) -> void:
     mi.mesh = bm
     match biome:
         "badlands": mi.material_override = Models.tex_material("dry_ground_01", 0.3, Color(1.0, 0.72, 0.56))
+        "volcano": mi.material_override = Models.tex_material("dry_ground_01", 0.3, Color(0.42, 0.36, 0.34))
         "highlands": mi.material_override = Models.tex_material("forest_leaves_02", 0.35, Color(0.9, 0.95, 0.85))
+        "harbor": mi.material_override = Models.tex_material("cobblestone_floor_01", 0.35, Color(0.85, 0.82, 0.78))
         _: mi.material_override = Models.tex_material("leafy_grass", 0.3)
     ground.add_child(mi)
     ground.position = Vector3(0, -0.7, Tuning.SHORE_Z - depth / 2.0)
@@ -131,15 +163,15 @@ static func _island(parent: Node3D, biome: String, shore: String) -> void:
             beach_mat = Models.tex_material("coast_sand_rocks_02", 0.35)
             wet_mat = Models.tex_material("coast_sand_rocks_02", 0.35, Color(0.6, 0.6, 0.62), 0.4)
         _:
-            var tint := Color(1.0, 0.8, 0.66) if biome == "badlands" else Color.WHITE
+            var tint := Color(1.0, 0.8, 0.66) if biome == "badlands" else (Color(0.45, 0.42, 0.42) if biome == "volcano" else Color.WHITE)
             beach_mat = Models.tex_material("coast_sand_01", 0.4, tint)
             wet_mat = Models.tex_material("coast_sand_01", 0.4, Color(0.7, 0.62, 0.52) * tint, 0.4)
     var beach := MeshInstance3D.new()
     var beach_mesh := BoxMesh.new()
-    beach_mesh.size = Vector3(extent, 0.06, 4.2)
+    beach_mesh.size = Vector3(extent, 0.06, beach_depth)
     beach.mesh = beach_mesh
     beach.material_override = beach_mat
-    beach.position = Vector3(0, 0.03, Tuning.SHORE_Z - 2.1)
+    beach.position = Vector3(0, 0.03, Tuning.SHORE_Z - beach_depth / 2.0)
     parent.add_child(beach)
     var wet := MeshInstance3D.new()
     var wet_mesh := BoxMesh.new()
@@ -180,8 +212,7 @@ static func _forest(parent: Node3D, rng: RandomNumberGenerator, names: Array, co
     for i in count:
         var x := rng.randf_range(-30, 30)
         var z := rng.randf_range(-36, -8.5)
-        # Thin out right behind the castle so the figures stay readable.
-        if absf(x) < 4.5 and z > -12:
+        if not _free(x, z, 1.5):
             continue
         var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h) * (1.0 + (-z - 8.0) / 40.0))
         t.position = Vector3(x, 0, z)
@@ -194,25 +225,32 @@ static func _shore(parent: Node3D, rng: RandomNumberGenerator, biome: String, sh
     var sz := Tuning.SHORE_Z
     # Cargo on the shore: real bodies, so a stray ball knocks them about.
     for side: float in [-1.0, 1.0]:
-        _loose(parent, "wooden_barrels_01", Vector3(side * rng.randf_range(5.2, 7.0), 0.0, rng.randf_range(-1.4, 0.0)), 1.0, rng.randf_range(0, TAU), 120.0)
+        var bx := side * rng.randf_range(5.2, 7.0)
+        var bz := rng.randf_range(-1.4, 0.0)
+        if _free(bx, bz, 0.6):
+            _loose(parent, "wooden_barrels_01", Vector3(bx, 0.0, bz), 1.0, rng.randf_range(0, TAU), 120.0)
         for k in 3:
-            _loose(parent, "wooden_crate_01", Vector3(side * rng.randf_range(8.0, 10.5), 0.0, rng.randf_range(-1.4, 0.2)), rng.randf_range(1.2, 1.8), rng.randf_range(0, TAU), 30.0)
-        # A pinnace riding at anchor off each end of the shore.
+            var cx := side * rng.randf_range(8.0, 10.5)
+            var cz := rng.randf_range(-1.4, 0.2)
+            if _free(cx, cz, 0.5):
+                _loose(parent, "wooden_crate_01", Vector3(cx, 0.0, cz), rng.randf_range(1.2, 1.8), rng.randf_range(0, TAU), 30.0)
+    # Pirate pinnaces at anchor: one off the left end of the shore, one far out behind the
+    # ship's lane on the right, never where our ship sails in.
+    for spot: Vector3 in [Vector3(-rng.randf_range(22.0, 27.0), 0, sz + rng.randf_range(5.0, 9.0)), Vector3(rng.randf_range(14.0, 22.0), 0, ship_z + rng.randf_range(12.0, 16.0))]:
         var boat := Models.prop("pinnace")
         var k := 9.0 / 33.2
         boat.scale = Vector3(k, k, k)
-        boat.position = Vector3(side * rng.randf_range(21.0, 27.0), -10.3 * k * 0.28, sz + rng.randf_range(6.0, 12.0))
-        boat.rotation.y = rng.randf_range(-0.6, 0.6) + (PI if side > 0 else 0.0)
+        boat.position = Vector3(spot.x, -10.3 * k * 0.28, spot.z)
+        boat.rotation.y = rng.randf_range(-0.5, 0.5) + (PI if spot.x > 0 else 0.0)
         parent.add_child(boat)
-    _loose(parent, "treasure_chest", Vector3(-5.8, 0.0, -0.6), 1.0, 0.4, 60.0)
+    if _free(-5.8, -0.6, 0.6):
+        _loose(parent, "treasure_chest", Vector3(-5.8, 0.0, -0.6), 1.0, 0.4, 60.0)
     # Rocks in the surf, never in the lane the ship sails along.
     for i in (18 if shore != "sand" else 8):
         var x := rng.randf_range(-26.0, 26.0)
         var z := sz + rng.randf_range(0.4, 10.0)
-        if x > -13.0 and x < 15.0 and absf(z - ship_z) < 4.5:
-            continue
-        if absf(x) < 5.0:
-            continue   # the firing lane
+        if not _free(x, z, 2.0) or absf(x) < 5.0:
+            continue   # the ship's lane, the castle, the firing line
         _place(parent, "boulder_01" if i % 2 == 0 else "namaqualand_boulder_02", Vector3(x, -0.45, z), rng.randf_range(1.0, 2.6), rng.randf_range(0, TAU))
     match shore:
         "rocks":
@@ -220,27 +258,41 @@ static func _shore(parent: Node3D, rng: RandomNumberGenerator, biome: String, sh
             for i in 22:
                 var side := -1.0 if i % 2 == 0 else 1.0
                 var x := side * rng.randf_range(5.5, 30.0)
+                if not _free(x, sz, 1.5):
+                    continue
                 var r := "namaqualand_cliff_01" if i % 4 == 0 else ("namaqualand_boulder_02" if i % 2 == 0 else "boulder_01")
                 var k := rng.randf_range(0.35, 0.6) if r == "namaqualand_cliff_01" else rng.randf_range(1.2, 2.6)
                 _place(parent, r, Vector3(x, -0.3, sz + rng.randf_range(-1.5, 1.0)), k, rng.randf_range(0, TAU))
         "cliffs":
-            # Two headlands running out to sea make a bay around the landing.
+            # A headland running out to sea on the left, and on the right (where the ship comes
+            # from) the cliff runs along the shore instead, leaving the sea open.
             for side: float in [-1.0, 1.0]:
                 var c := Models.prop("coastal_cliff_01")
-                var k := rng.randf_range(0.5, 0.62)
+                var k := rng.randf_range(0.5, 0.6)
                 c.scale = Vector3(k, k * rng.randf_range(0.9, 1.25), k)
-                c.rotation.y = PI / 2.0 + rng.randf_range(-0.2, 0.2)
-                c.position = Vector3(side * rng.randf_range(17.0, 22.0), -1.2, sz + 4.0)
+                if side < 0.0:
+                    c.rotation.y = PI / 2.0 + rng.randf_range(-0.15, 0.15)
+                    c.position = Vector3(-rng.randf_range(19.0, 23.0), -1.2, sz + 4.0)
+                else:
+                    c.rotation.y = rng.randf_range(-0.08, 0.08)
+                    c.position = Vector3(rng.randf_range(36.0, 40.0), -1.2, sz - 3.5)
                 parent.add_child(c)
                 for j in 4:
-                    _place(parent, "namaqualand_cliff_01", Vector3(side * rng.randf_range(6.5, 14.0), -0.4, sz + rng.randf_range(-3.5, 0.5)), rng.randf_range(0.4, 0.7), rng.randf_range(0, TAU))
+                    var x := side * rng.randf_range(6.5, 14.0)
+                    var z := sz + rng.randf_range(-3.5, 0.5)
+                    if _free(x, z, 2.0):
+                        _place(parent, "namaqualand_cliff_01", Vector3(x, -0.4, z), rng.randf_range(0.4, 0.7), rng.randf_range(0, TAU))
         _:
-            if biome == "coast":
+            if biome == "tropic":
                 # Palms along both ends of the sandy beach.
                 for i in 16:
                     var side := -1.0 if i % 2 == 0 else 1.0
+                    var px := side * rng.randf_range(7.5, 26.0)
+                    var pz := rng.randf_range(-4.5, 1.2)
+                    if not _free(px, pz, 1.0):
+                        continue
                     var t := Models.tree("palm_coconut" if i % 3 != 0 else "palm_plant", rng.randf_range(5.0, 8.0))
-                    t.position = Vector3(side * rng.randf_range(7.5, 26.0), 0.0, rng.randf_range(-4.5, 1.2))
+                    t.position = Vector3(px, 0.0, pz)
                     t.rotation.y = rng.randf_range(0, TAU)
                     _sway(t, rng)
                     parent.add_child(t)
@@ -281,7 +333,7 @@ static func _props(parent: Node3D, rng: RandomNumberGenerator, entries: Array, c
     for i in count:
         var x := rng.randf_range(-24, 24)
         var z := rng.randf_range(-28, 0.5)
-        if abs(x) < 6.5 and z > -11:
+        if not _free(x, z, 1.0):
             continue
         var e: Array = entries[rng.randi_range(0, entries.size() - 1)]
         _place(parent, e[0], Vector3(x, 0, z), rng.randf_range(e[1], e[2]), rng.randf_range(0, TAU))
@@ -291,7 +343,7 @@ static func _trees(parent: Node3D, rng: RandomNumberGenerator, names: Array, cou
     for i in count:
         var x := rng.randf_range(-20, 20)
         var z := rng.randf_range(-26, 1)
-        if abs(x) < 5.8 and z > -10:
+        if not _free(x, z, 1.5):
             continue
         var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h))
         t.position = Vector3(x, 0, z)
@@ -305,3 +357,198 @@ static func _sway(t: Node3D, rng: RandomNumberGenerator) -> void:
     t.set_meta("phase", rng.randf_range(0.0, TAU))
     t.set_meta("yaw", t.rotation.y)
     t.set_meta("scale", t.scale.x)
+
+
+## Distant green hills: broad, low domes of grass (no snow on a warm island).
+static func _hills(parent: Node3D, rng: RandomNumberGenerator, tint: Color) -> void:
+    var mat := Models.tex_material("leafy_grass", 0.06, tint)
+    for i in 9:
+        var mi := MeshInstance3D.new()
+        var sm := SphereMesh.new()
+        var r := rng.randf_range(16.0, 30.0)
+        sm.radius = r
+        sm.height = r * 2.0
+        sm.radial_segments = 24
+        sm.rings = 12
+        mi.mesh = sm
+        mi.material_override = mat
+        mi.scale = Vector3(1.0, rng.randf_range(0.28, 0.5), 0.8)
+        mi.position = Vector3(-90.0 + i * 22.0 + rng.randf_range(-6, 6), -2.0, rng.randf_range(-78, -55))
+        mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        parent.add_child(mi)
+
+## Flat-topped rock outcrops (badlands, volcano).
+static func _mesas(parent: Node3D, rng: RandomNumberGenerator, count: int, z0: float, z1: float, k0: float, k1: float, tint: Color = Color(1, 1, 1)) -> void:
+    for i in count:
+        var m := Models.prop("namaqualand_cliff_01")
+        var k := rng.randf_range(k0, k1)
+        m.scale = Vector3(k, k * rng.randf_range(0.9, 1.4), k)
+        m.position = Vector3(rng.randf_range(-45, 45), -0.2, rng.randf_range(z0, z1))
+        if not _free(m.position.x, m.position.z, 7.0 * k / 2.0):
+            m.queue_free()
+            continue
+        m.rotation.y = rng.randf_range(0, TAU)
+        if tint != Color(1, 1, 1):
+            m.material_override = null
+            Models.tint(m, tint)
+        parent.add_child(m)
+
+## Fire Mountain: a dark cone with a glowing crater and a column of smoke.
+static func _volcano(parent: Node3D) -> void:
+    var cone := MeshInstance3D.new()
+    var cm := CylinderMesh.new()
+    cm.top_radius = 6.0
+    cm.bottom_radius = 42.0
+    cm.height = 34.0
+    cm.radial_segments = 28
+    cone.mesh = cm
+    cone.material_override = Models.tex_material("dry_ground_01", 0.08, Color(0.32, 0.26, 0.25))
+    cone.position = Vector3(8.0, 15.5, -62.0)
+    parent.add_child(cone)
+    var glow := MeshInstance3D.new()
+    var gm := CylinderMesh.new()
+    gm.top_radius = 5.5
+    gm.bottom_radius = 5.5
+    gm.height = 0.3
+    glow.mesh = gm
+    var lava := StandardMaterial3D.new()
+    lava.albedo_color = Color(0.3, 0.05, 0.02)
+    lava.emission_enabled = true
+    lava.emission = Color(1.0, 0.35, 0.05)
+    lava.emission_energy_multiplier = 4.0
+    glow.material_override = lava
+    glow.position = Vector3(8.0, 32.6, -62.0)
+    parent.add_child(glow)
+    var light := OmniLight3D.new()
+    light.light_color = Color(1.0, 0.4, 0.1)
+    light.light_energy = 6.0
+    light.omni_range = 40.0
+    light.position = Vector3(8.0, 36.0, -62.0)
+    parent.add_child(light)
+    var smoke := CPUParticles3D.new()
+    smoke.amount = 40
+    smoke.lifetime = 9.0
+    smoke.preprocess = 9.0
+    smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+    smoke.emission_sphere_radius = 3.0
+    smoke.direction = Vector3(0.25, 1, 0)
+    smoke.spread = 10.0
+    smoke.initial_velocity_min = 2.0
+    smoke.initial_velocity_max = 3.5
+    smoke.gravity = Vector3(0.4, 0.2, 0)
+    smoke.scale_amount_min = 7.0
+    smoke.scale_amount_max = 12.0
+    var ramp := Gradient.new()
+    ramp.set_color(0, Color(0.25, 0.2, 0.2, 0.7))
+    ramp.set_color(1, Color(0.45, 0.45, 0.48, 0.0))
+    smoke.color_ramp = ramp
+    smoke.mesh = QuadMesh.new()
+    var m := StandardMaterial3D.new()
+    m.albedo_texture = load("res://assets/particles/blackSmoke16.png")
+    m.vertex_color_use_as_albedo = true
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    smoke.material_override = m
+    smoke.position = Vector3(8.0, 34.0, -62.0)
+    parent.add_child(smoke)
+
+static var _mill_mat: Dictionary = {}
+
+## Windmills on the fields behind the castle: a white stone tower, a thatched cap and four
+## lattice sails turning in the wind.
+static func _windmills(parent: Node3D, rng: RandomNumberGenerator, count: int) -> void:
+    if _mill_mat.is_empty():
+        _mill_mat["wall"] = Models.tex_material("castle_brick_07", 0.6, Color(1.5, 1.45, 1.35))
+        _mill_mat["cap"] = Models.tex_material("clay_roof_tiles_02", 0.8, Color(0.75, 0.6, 0.45))
+        _mill_mat["wood"] = Models.tex_material("brown_planks_07", 1.2, Color(0.7, 0.55, 0.45))
+        _mill_mat["cloth"] = Models.flat_material(Color(0.95, 0.92, 0.84), 0.95)
+    var placed := 0
+    for attempt in 30:
+        if placed >= count:
+            break
+        var x := rng.randf_range(-26, 26)
+        var z := rng.randf_range(-30, -13)
+        if not _free(x, z, 4.0):
+            continue
+        var mill := Node3D.new()
+        mill.position = Vector3(x, 0, z)
+        var tower := MeshInstance3D.new()
+        var tm := CylinderMesh.new()
+        tm.top_radius = 1.3
+        tm.bottom_radius = 1.9
+        tm.height = 7.0
+        tm.radial_segments = 14
+        tower.mesh = tm
+        tower.material_override = _mill_mat.wall
+        tower.position.y = 3.5
+        mill.add_child(tower)
+        var cap := MeshInstance3D.new()
+        var cc := CylinderMesh.new()
+        cc.top_radius = 0.0
+        cc.bottom_radius = 1.6
+        cc.height = 2.0
+        cc.radial_segments = 14
+        cap.mesh = cc
+        cap.material_override = _mill_mat.cap
+        cap.position.y = 8.0
+        mill.add_child(cap)
+        var door := MeshInstance3D.new()
+        var dm := BoxMesh.new()
+        dm.size = Vector3(0.8, 1.5, 0.1)
+        door.mesh = dm
+        door.material_override = _mill_mat.wood
+        door.position = Vector3(0, 0.75, 1.85)
+        mill.add_child(door)
+        # Sails on a hub facing the sea.
+        var hub := Node3D.new()
+        hub.position = Vector3(0, 6.6, 1.6)
+        hub.add_to_group("mill_sails")
+        hub.set_meta("speed", rng.randf_range(0.5, 0.9))
+        mill.add_child(hub)
+        for k in 4:
+            var arm := Node3D.new()
+            arm.rotation.z = k * PI / 2.0
+            hub.add_child(arm)
+            var spar := MeshInstance3D.new()
+            var sm := BoxMesh.new()
+            sm.size = Vector3(0.14, 5.0, 0.1)
+            spar.mesh = sm
+            spar.material_override = _mill_mat.wood
+            spar.position.y = 2.5
+            arm.add_child(spar)
+            var cloth := MeshInstance3D.new()
+            var cm2 := BoxMesh.new()
+            cm2.size = Vector3(1.0, 3.6, 0.03)
+            cloth.mesh = cm2
+            cloth.material_override = _mill_mat.cloth
+            cloth.position = Vector3(0.58, 3.0, 0.02)
+            arm.add_child(cloth)
+        mill.rotation.y = rng.randf_range(-0.4, 0.4)
+        parent.add_child(mill)
+        placed += 1
+
+## Port Alder's waterfront: wooden piers into the sea on the left, a moored boat, crates.
+static func _quay(parent: Node3D, rng: RandomNumberGenerator) -> void:
+    for x: float in [-17.0, -24.0]:
+        var pier := Models.prop("modular_wooden_pier")
+        pier.position = Vector3(x, -4.9, Tuning.SHORE_Z + 8.5)
+        parent.add_child(pier)
+    for k in 5:
+        var x := rng.randf_range(-24, -14)
+        var z := rng.randf_range(-3.0, 0.5)
+        if _free(x, z, 0.8):
+            _place(parent, "wooden_crate_01" if k % 2 == 0 else "wooden_barrels_01", Vector3(x, 0, z), rng.randf_range(1.2, 1.8), rng.randf_range(0, TAU))
+
+## A cobbled yard under the castle so it stands on a proper floor.
+static func _yard(parent: Node3D, castle: Rect2, biome: String) -> void:
+    var r := castle.grow(1.2)
+    var mi := MeshInstance3D.new()
+    var bm := BoxMesh.new()
+    bm.size = Vector3(r.size.x, 0.06, r.size.y)
+    mi.mesh = bm
+    var tint := Color(0.85, 0.8, 0.72) if biome != "volcano" else Color(0.5, 0.46, 0.44)
+    mi.material_override = Models.tex_material("cobblestone_floor_01", 0.45, tint)
+    mi.position = Vector3(r.get_center().x, 0.01, r.get_center().y)
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    parent.add_child(mi)

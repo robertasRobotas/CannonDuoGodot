@@ -17,6 +17,10 @@ var spawn_time: float = 0.0
 var is_fragment: bool = false
 var frozen: bool = false
 var _pending_break: float = -1.0
+var cage_id := -1   # bars of a prisoner's cage: breaking one frees them
+var burning := false
+var burn_time := 0.0
+var _flames: CPUParticles3D
 
 func setup(mat: String, sz: Vector3, st: String, static_block: bool, mo: Dictionary, fragment: bool = false, visual: Node3D = null) -> void:
     material_name = mat
@@ -72,7 +76,53 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         if specific > break_threshold:
             _pending_break = specific
 
-func _physics_process(_delta: float) -> void:
+## Fire shot: wood smoulders, flames grow, and after BURN_TIME the piece gives way.
+func ignite() -> void:
+    if burning or material_name != "wood" or is_queued_for_deletion():
+        return
+    if get_tree().get_nodes_in_group("burning").size() >= Tuning.MAX_BURNING:
+        return
+    burning = true
+    burn_time = 0.0
+    add_to_group("burning")
+    if frozen:
+        set_frozen.call_deferred(false)
+    _flames = CPUParticles3D.new()
+    _flames.amount = 18
+    _flames.lifetime = 0.7
+    _flames.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    _flames.emission_box_extents = size * 0.45
+    _flames.direction = Vector3(0, 1, 0)
+    _flames.spread = 15.0
+    _flames.initial_velocity_min = 0.4
+    _flames.initial_velocity_max = 1.2
+    _flames.gravity = Vector3(0, 1.2, 0)
+    _flames.scale_amount_min = 0.35
+    _flames.scale_amount_max = 0.7
+    var ramp := Gradient.new()
+    ramp.set_color(0, Color(1.0, 0.7, 0.25, 0.95))
+    ramp.set_color(1, Color(0.3, 0.1, 0.05, 0.0))
+    _flames.color_ramp = ramp
+    _flames.mesh = QuadMesh.new()
+    var m := StandardMaterial3D.new()
+    m.albedo_texture = load("res://assets/particles/flash03.png")
+    m.vertex_color_use_as_albedo = true
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    _flames.material_override = m
+    add_child(_flames)
+
+func _physics_process(delta: float) -> void:
+    if burning:
+        burn_time += delta
+        if _flames:
+            _flames.scale_amount_max = 0.7 + burn_time * 0.25
+        if burn_time >= Tuning.BURN_TIME:
+            burning = false
+            break_now()
+            return
     if _pending_break > 0.0:
         _pending_break = -1.0
         break_now()

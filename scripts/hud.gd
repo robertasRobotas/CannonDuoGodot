@@ -6,6 +6,7 @@ extends CanvasLayer
 signal next_level
 signal replay
 signal quit
+signal paused(on: bool)
 
 var level: Level
 var _title: Label
@@ -28,6 +29,11 @@ var _track_fill: ColorRect
 var _last_interaction := 0.0
 var _gyro_btn: Button
 var _pause_menu: Control
+var _banner: Label
+var _banner_sub: Label
+var _bars: Array[ColorRect] = []
+var _specials: HBoxContainer
+var _gold: Label
 var _loading: LoadingScreen
 
 const FONT_SIZE := 30
@@ -74,15 +80,54 @@ func _build() -> void:
     top.mouse_filter = Control.MOUSE_FILTER_IGNORE
     var col := VBoxContainer.new()
     col.add_theme_constant_override("separation", 8)
-    _title = _label("%d. %s" % [int(level.data.id), level.data.name], 40, Color.WHITE, true)
+    _title = _label(level.data.name if int(level.data.id) >= 100 else "%d. %s" % [int(level.data.id), level.data.name], 40, Color.WHITE, true)
     col.add_child(_title)
     _ammo = HBoxContainer.new()
     _ammo.add_theme_constant_override("separation", 10)
     col.add_child(_ammo)
     _stats = _label("", FONT_SIZE)
     col.add_child(_stats)
+    _gold = _label("", FONT_SIZE, Color(1.0, 0.84, 0.36))
+    col.add_child(_gold)
     top.add_child(col)
     add_child(top)
+
+    # Letterbox bars for the action camera.
+    for i in 2:
+        var bar := ColorRect.new()
+        bar.color = Color(0, 0, 0, 0.92)
+        bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE if i == 0 else Control.PRESET_BOTTOM_WIDE)
+        bar.custom_minimum_size = Vector2(0, 0)
+        bar.size.y = 0
+        add_child(bar)
+        _bars.append(bar)
+
+    # Big centre banner: combos, multi pops, near misses.
+    _banner = _label("", 120, Color(1.0, 0.86, 0.3), true)
+    _banner.add_theme_constant_override("outline_size", 14)
+    _banner.add_theme_color_override("font_outline_color", Color(0.25, 0.1, 0.02, 0.9))
+    _banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _banner.position = Vector2(0, 620)
+    _banner.size = Vector2(1179, 170)
+    _banner.pivot_offset = Vector2(1179 / 2.0, 85)
+    _banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _banner.visible = false
+    add_child(_banner)
+    _banner_sub = _label("", 46, Color.WHITE, true)
+    _banner_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _banner_sub.position = Vector2(0, 790)
+    _banner_sub.size = Vector2(1179, 70)
+    _banner_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _banner_sub.visible = false
+    add_child(_banner_sub)
+
+    # Special balls from the harbour shop: tap to load one for the next shot.
+    _specials = HBoxContainer.new()
+    _specials.add_theme_constant_override("separation", 16)
+    _specials.position = Vector2(40, 2556 - 120 - 130)
+    add_child(_specials)
+    _build_specials()
 
     add_child(_icon_button("II", 130, _toggle_pause))
     _gyro_btn = _icon_button("GYRO", 260, func(): level.set_gyro(not level.gyro_enabled); _refresh_gyro())
@@ -254,6 +299,7 @@ func pause_for_background() -> void:
         return
     level.set_paused(true)
     _pause_menu.visible = true
+    paused.emit(true)
 
 func _toggle_pause() -> void:
     if level.phase == Level.Phase.FINISHED:
@@ -261,6 +307,7 @@ func _toggle_pause() -> void:
     var p := not level.is_paused
     level.set_paused(p)
     _pause_menu.visible = p
+    paused.emit(p)
 
 func _process(delta: float) -> void:
     _refresh()
@@ -285,8 +332,8 @@ func _refresh() -> void:
     parts.append(level.sea_description())
     if not level.data.get("enemyCannons", []).is_empty() or not level.data.get("enemyShips", []).is_empty():
         var hearts := ""
-        for i in Tuning.MAX_HULL_HITS:
-            hearts += "♥" if i < Tuning.MAX_HULL_HITS - level.hull_hits else "♡"
+        for i in level.max_hull:
+            hearts += "♥" if i < level.max_hull - level.hull_hits else "♡"
         parts.append(hearts)
     if not level.data.targets.is_empty():
         parts.append("☠ %d" % level.targets_remaining)
@@ -294,6 +341,7 @@ func _refresh() -> void:
         parts.append("⛵ %d" % level.ships_remaining)
     parts.append("◎ %d/%d" % [level.shots_used, int(level.data.par)])
     _stats.text = "   ".join(parts)
+    _gold.text = "● %d doubloons" % level.coins if level.coins > 0 else ""
     if level.shots_used != _ammo_shown:
         _ammo_shown = level.shots_used
         _build_ammo()
@@ -337,13 +385,91 @@ func _build_ammo() -> void:
     if level.shots_used < n:
         _ammo.add_child(_label(Tuning.AMMO[level.next_ammo()].name, 28))
 
+func _build_specials() -> void:
+    for c in _specials.get_children():
+        c.queue_free()
+    level.ui_blocks.clear()
+    var x := 40.0
+    for kind in ["chain", "fire", "shell"]:
+        var left := int(level.specials.get(kind, 0))
+        if left <= 0:
+            continue
+        var armed: bool = level.armed_special == kind
+        var b := Button.new()
+        b.text = "%s ×%d" % [Tuning.AMMO[kind].name, left]
+        b.add_theme_font_size_override("font_size", 30)
+        b.custom_minimum_size = Vector2(230, 100)
+        var sb := StyleBoxFlat.new()
+        sb.bg_color = Color(1.0, 0.58, 0.18) if armed else Color(0.12, 0.10, 0.14, 0.62)
+        sb.set_corner_radius_all(50)
+        sb.border_color = (Tuning.AMMO[kind].color as Color).lightened(0.3)
+        sb.set_border_width_all(4)
+        b.add_theme_stylebox_override("normal", sb)
+        b.add_theme_stylebox_override("hover", sb)
+        b.add_theme_stylebox_override("pressed", sb)
+        b.add_theme_color_override("font_color", Color.WHITE)
+        var k: String = kind
+        b.pressed.connect(func(): level.arm_special(k))
+        _specials.add_child(b)
+        level.ui_blocks.append(Rect2(Vector2(x, _specials.position.y), Vector2(230, 100)))
+        x += 246.0
+
+## Shows a big banner that punches in and fades, unscaled by slow motion.
+func _show_banner(text: String, sub: String, color: Color) -> void:
+    _banner.text = text
+    _banner.add_theme_color_override("font_color", color)
+    _banner.visible = true
+    _banner.modulate.a = 1.0
+    _banner.scale = Vector2(0.3, 0.3)
+    _banner_sub.text = sub
+    _banner_sub.visible = sub != ""
+    _banner_sub.modulate.a = 1.0
+    var tw := create_tween()
+    tw.set_ignore_time_scale(true)
+    tw.tween_property(_banner, "scale", Vector2(1.15, 1.15), 0.14).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+    tw.tween_property(_banner, "scale", Vector2.ONE, 0.1)
+    tw.tween_interval(0.9)
+    tw.tween_property(_banner, "modulate:a", 0.0, 0.35)
+    tw.parallel().tween_property(_banner_sub, "modulate:a", 0.0, 0.35)
+    tw.tween_callback(func(): _banner.visible = false; _banner_sub.visible = false)
+
+func _letterbox(on: bool) -> void:
+    for i in _bars.size():
+        var bar := _bars[i]
+        var tw := create_tween()
+        tw.set_ignore_time_scale(true)
+        var h := 190.0 if on else 0.0
+        tw.tween_property(bar, "size:y", h, 0.25)
+        if i == 1:
+            tw.parallel().tween_property(bar, "position:y", get_viewport().get_visible_rect().size.y - h, 0.25)
+
 func _on_event(name: String, d: Dictionary) -> void:
     match name:
+        "combo":
+            var n := int(d.count)
+            var words := ["", "", "CHAIN ×2!", "CHAIN ×3!", "MEGA CHAIN ×4!", "UNSTOPPABLE ×5!"]
+            _show_banner(words[mini(n, 5)] if n <= 5 else "LEGENDARY ×%d!" % n, "+%d" % int(d.points), Color(1.0, 0.86 - 0.08 * mini(n, 5), 0.3))
+        "multi":
+            var n := int(d.count)
+            _show_banner(["", "", "DOUBLE!", "TRIPLE!"][n] if n <= 3 else "MULTI ×%d!" % n, "", Color(0.6, 0.95, 1.0))
+        "near_miss":
+            _show_banner("So close!", "", Color(1, 1, 1))
+        "freed":
+            if bool(d.deserter):
+                _show_banner("He surrenders!", "+500", Color(0.85, 0.95, 1.0))
+            else:
+                _show_banner("Freed!", "+500", Color(0.6, 1.0, 0.6))
+        "cine":
+            _letterbox(bool(d.on))
+        "ammo":
+            _build_specials()
+            _ammo_shown = -1
         "power":
             if float(d.power) > 0.02:
                 _last_interaction = level.time
         "fired":
             _last_interaction = level.time
+            _build_specials()
         "blast":
             _flash.color.a = 0.6
         "thunder":
@@ -379,7 +505,7 @@ func _show_result(did_win: bool, shots: int, remaining: int) -> void:
     var stars := 0
     if did_win:
         stars = 3 if shots <= par else (2 if shots <= par + 1 else 1)
-    var head := _label("Castle looted!" if did_win else ("Hull breached" if level.hull_hits >= Tuning.MAX_HULL_HITS else "Out of cannonballs"), 64, Color.WHITE, true)
+    var head := _label("Island freed!" if did_win else ("Hull breached" if level.hull_hits >= level.max_hull else "Out of cannonballs"), 54, Color.WHITE, true)
     head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     v.add_child(head)
     var sub := _label(level.data.name, 32, Color(1, 1, 1, 0.6))
@@ -400,10 +526,34 @@ func _show_result(did_win: bool, shots: int, remaining: int) -> void:
             tw.tween_property(star, "scale", Vector2(1.25, 1.25), 0.22).set_ease(Tween.EASE_OUT)
             tw.tween_property(star, "scale", Vector2.ONE, 0.12)
     v.add_child(row)
-    var score: int = (level.data.targets.size() - level.targets_remaining) * 1000 + remaining * 250 + level.blocks_broken * 15
+    var score: int = (level.data.targets.size() - level.targets_remaining) * 1000 + remaining * 250 + level.blocks_broken * 15 + level.bonus
     var sc := _label("Score %d   ·   %d shots, par %d" % [score, shots, par], 30, Color(1, 1, 1, 0.75))
     sc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     v.add_child(sc)
+    # Loot: coins picked up plus a bonus per star.
+    var gold := level.coins + (stars * 20 if did_win else 0)
+    var loot := "● +%d doubloons" % gold
+    if level.best_combo >= 2:
+        loot += "   ·   best chain ×%d" % level.best_combo
+    var lt := _label(loot, 38, Color(1.0, 0.84, 0.36), true)
+    lt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    v.add_child(lt)
+    if level.captives_freed > 0:
+        var fr := _label("%d islander%s freed" % [level.captives_freed, "" if level.captives_freed == 1 else "s"], 32, Color(0.7, 1.0, 0.7))
+        fr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        v.add_child(fr)
+    # Pip has a word after a win (unless a story scene follows).
+    if did_win and Story.beat(int(level.data.id), "after").is_empty() and int(level.data.id) < 100:
+        var pip_row := HBoxContainer.new()
+        pip_row.add_theme_constant_override("separation", 18)
+        var pip := Portrait.new("mate", 120.0)
+        pip_row.add_child(pip)
+        var joke := _label(Story.joke(int(level.data.id)), 28, Color(1, 1, 1, 0.85))
+        joke.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        joke.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        joke.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        pip_row.add_child(joke)
+        v.add_child(pip_row)
     var gap := Control.new()
     gap.custom_minimum_size = Vector2(0, 10)
     v.add_child(gap)
@@ -416,4 +566,4 @@ func _show_result(did_win: bool, shots: int, remaining: int) -> void:
     _result.add_child(center)
     _result.visible = true
     _load_hint.visible = false
-    level.get_parent().call_deferred("record_result", int(level.data.id), did_win, stars, score)
+    level.get_parent().call_deferred("record_result", int(level.data.id), did_win, stars, score, gold, shots)

@@ -80,6 +80,40 @@ var _pinch_start := -1.0
 var zoom_out := 0.0
 var _zoom_target := 0.0
 
+# Feel: combos, loot, cameras, near misses, kick.
+var combo := 0
+var best_combo := 0
+var bonus := 0
+var _combo_last := -100.0
+var shot_pops := 0
+var coins := 0
+var _coin_nodes: Array[Node3D] = []
+var cine_until := -1.0          # real seconds (Time) until the action camera lets go
+var cine_pos := Vector3.ZERO
+var cine_look := Vector3.ZERO
+var _cine_used := false
+var follow := false
+var _follow_until := -1.0
+var _shot_min_dist := INF
+var _shot_start_breaks := 0
+var _shot_start_targets := 0
+var _shot_blasts := 0
+var kick := 0.0
+var _kick_vel := 0.0
+var specials: Dictionary = {}   # "chain"/"fire" -> balls left this level
+var armed_special := ""
+var regular_used := 0
+var _fire_tick := 0.0
+var powder_scale := 1.0
+var power_scale := 1.0
+var reload_time := Tuning.RELOAD_TIME
+var max_hull := Tuning.MAX_HULL_HITS
+var old_cannon := false
+var upgrades: Dictionary = {}
+var captives_freed := 0
+var lava_next := 6.0
+var ui_blocks: Array[Rect2] = []   # HUD buttons in the play area; touches there are not aim or load
+
 func level_time() -> float:
     return time
 
@@ -90,10 +124,23 @@ var auto_fire_pitch: float = 8.0
 var _auto_fired := false
 
 func next_ammo() -> String:
+    if armed_special != "" and int(specials.get(armed_special, 0)) > 0:
+        return armed_special
     var ammo: Array = data.get("ammo", [])
     if ammo.is_empty():
         return "iron"
-    return ammo[mini(shots_used, ammo.size() - 1)]
+    return ammo[mini(regular_used, ammo.size() - 1)]
+
+## Arms a special ball for the next shot (tap again to disarm).
+func arm_special(kind: String) -> void:
+    armed_special = "" if armed_special == kind or int(specials.get(kind, 0)) <= 0 else kind
+    event.emit("ammo", {})
+
+func specials_left() -> int:
+    var n := 0
+    for k in specials:
+        n += int(specials[k])
+    return n
 
 func ammo_for(i: int) -> String:
     var ammo: Array = data.get("ammo", [])
@@ -121,10 +168,21 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     data = level_data
     settings = user_settings
     gyro_enabled = bool(settings.get("gyro", true))
-    projectiles_remaining = int(data.projectiles)
+    upgrades = settings.get("upgrades", {})
+    old_cannon = bool(data.get("old_cannon", false))
+    var loader := int(upgrades.get("loader", 0))
+    reload_time = maxf(Tuning.RELOAD_TIME * (1.0 - 0.15 * loader), 0.25)
+    projectiles_remaining = int(data.projectiles) + (1 if loader >= 3 else 0)
+    if not old_cannon:
+        for kind in ["chain", "fire", "shell"]:
+            if int(upgrades.get(kind, 0)) > 0:
+                specials[kind] = int(upgrades[kind])
+    powder_scale = 1.0 + 0.12 * int(upgrades.get("powder", 0))
+    max_hull = Tuning.MAX_HULL_HITS + int(upgrades.get("hull", 0))
+    power_scale = 0.8 if old_cannon else 1.0 + 0.07 * int(upgrades.get("barrel", 0))
     targets_remaining = data.targets.size()
     ships_remaining = data.get("enemyShips", []).size()
-    open_sea = data.get("terrain", {}).get("biome", "coast") == "opensea"
+    open_sea = data.get("terrain", {}).get("biome", "tropic") == "opensea"
     var storm := is_storm()
 
     # Sky and light.
@@ -142,7 +200,13 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         sm = pano
     else:
         var ps := ProceduralSkyMaterial.new()
-        if sky_kind == "sunset":
+        if sky_kind == "night":
+            ps.sky_top_color = Color(0.01, 0.02, 0.06)
+            ps.sky_horizon_color = Color(0.06, 0.09, 0.18)
+            ps.ground_horizon_color = Color(0.06, 0.09, 0.18)
+            ps.sun_angle_max = 3.0
+            ps.sun_curve = 0.02
+        elif sky_kind == "sunset":
             ps.sky_top_color = Color(0.22, 0.28, 0.52)
             ps.sky_horizon_color = Color(0.98, 0.62, 0.40)
             ps.ground_horizon_color = Color(0.98, 0.62, 0.40)
@@ -160,12 +224,17 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     e.sky = sky
     e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
     e.ambient_light_energy = 0.9 if not storm else 0.6
+    if sky_kind == "night":
+        e.ambient_light_energy = 0.4
     e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     e.glow_enabled = false
     # Haze gives depth: the mountains and far trees fade into the air, thickly in a storm.
     e.fog_enabled = true
     e.fog_light_color = Color(0.46, 0.50, 0.56) if storm else (Color(0.92, 0.72, 0.62) if sky_kind == "sunset" else Color(0.72, 0.80, 0.88))
     e.fog_density = 0.008 if storm else (0.005 if is_windy() else 0.003)
+    if sky_kind == "night":
+        e.fog_light_color = Color(0.05, 0.07, 0.13)
+        e.fog_density = 0.006
     e.fog_sky_affect = 0.25
     env.environment = e
     add_child(env)
@@ -179,13 +248,19 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     elif sky_kind == "overcast":
         sun.light_energy = 0.8
         sun.light_color = Color(0.92, 0.94, 1.0)
+    elif sky_kind == "night":
+        # Moonlight: cold, dim, from high on the right.
+        sun.light_energy = 0.32
+        sun.light_color = Color(0.58, 0.68, 1.0)
     sun.shadow_enabled = true
     sun.directional_shadow_max_distance = 22.0
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-    sun.rotation_degrees = Vector3(-16, 70, 0) if sky_kind == "sunset" else Vector3(-52, 35, 0)
+    sun.rotation_degrees = Vector3(-16, 70, 0) if sky_kind == "sunset" else (Vector3(-38, -35, 0) if sky_kind == "night" else Vector3(-52, 35, 0))
     add_child(sun)
     var glint := DirectionalLight3D.new()
     glint.light_energy = 0.15 if not storm else 0.08
+    if sky_kind == "night":
+        glint.light_energy = 0.04
     glint.light_color = Color(1.0, 0.85, 0.7)
     glint.rotation_degrees = Vector3(-8, 190, 0)
     add_child(glint)
@@ -200,13 +275,15 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     ship_base_x = ship_pos.x
     sea = Sea.new()
     add_child(sea)
-    sea.setup(float(data.get("sea", 0.0)), ship_pos, open_sea)
+    sea.setup(float(data.get("sea", 0.0)), ship_pos, open_sea, float(data.get("swell", 1.0)))
+    if sky_kind == "night":
+        sea.set_night()
     add_child(ship)
     _build_cannon()
     ship.deck_found.connect(func(): cannon.position = ship.cannon_mount)
 
     # Island and scenery.
-    Decor.build(self, int(data.id), data.get("terrain", {}).get("biome", "coast"), storm, style, cannon_pos.z)
+    Decor.build(self, int(data.id), data.get("terrain", {}).get("biome", "tropic"), storm, style, cannon_pos.z, _castle_rect())
 
     # Castle, figures, guns, boats.
     for b in data.blocks:
@@ -215,11 +292,25 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     for t in data.targets:
         _spawn_target(t, i)
         i += 1
+    var ci := 0
+    for c in data.get("captives", []):
+        _spawn_captive(c, ci)
+        ci += 1
     for g in data.get("enemyCannons", []):
         _spawn_gun(g)
     for s in data.get("enemyShips", []):
         _spawn_enemy_ship(s)
     _freeze_all(true)
+
+    # Life: flags on the towers; at night torches, stars and a deck lantern; gulls by day.
+    Atmosphere.flags(self, 3, 1.0 + float(data.get("sea", 0.0)))
+    Atmosphere.ship_flag(ship, Vector3(5.9, 2.3, 0.0))
+    if sky_kind == "night":
+        Atmosphere.torches(self, 6)
+        Atmosphere.stars(self, 320)
+        Atmosphere.deck_lantern(ship, ship.cannon_mount)
+    elif not storm:
+        Atmosphere.gulls(self, 7, Vector3(camera_look_base_guess().x, 0, Tuning.SHORE_Z - 2.0))
 
     # Camera and the fly-in.
     camera = Camera3D.new()
@@ -266,6 +357,22 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     gyro_available = Input.get_gyroscope().length() > 0.0 or OS.has_feature("mobile")
     fx.prewarm(ship_pos + Vector3(0, 2, 0))
 
+## The castle's footprint in x/z, from its blocks (not counting rock or cliff bases' extra
+## width), so scenery keeps clear of it.
+func _castle_rect() -> Rect2:
+    var r := Rect2()
+    var first := true
+    for b in data.blocks:
+        var p := _v3(b.position)
+        var sz := _v3(b.size)
+        var box := Rect2(p.x - sz.x / 2.0, p.z - sz.z / 2.0, sz.x, sz.z)
+        r = box if first else r.merge(box)
+        first = false
+    return r
+
+func camera_look_base_guess() -> Vector3:
+    return _v3(data.camera.lookAt)
+
 func _v3(a: Array) -> Vector3:
     return Vector3(float(a[0]), float(a[1]), float(a[2]) + Z_OFF)
 
@@ -311,6 +418,14 @@ func _build_cannon() -> void:
             part.transform = t
             cannon_pivot.add_child(part)
     src.free()
+    if old_cannon:
+        # Old Tomas's cannon: smaller, rusty.
+        cannon.scale = Vector3(0.78, 0.78, 0.78)
+        Models.tint(cannon, Color(0.85, 0.62, 0.45))
+    else:
+        # The barrel takes on the colour of the cannon's rank.
+        var rank_color: Color = Tuning.rank(upgrades)[2]
+        Models.tint(cannon_barrel, Color.WHITE.lerp(rank_color * 1.4, 0.55))
 
 func _spawn_block(b: Dictionary) -> void:
     var blk := Block.new()
@@ -322,6 +437,7 @@ func _spawn_block(b: Dictionary) -> void:
         var r: Array = b.rotation
         blk.rotation_degrees = Vector3(float(r[0]), float(r[1]), float(r[2]))
     blk.base_position = blk.position
+    blk.cage_id = int(b.get("cage", -1))
     blk.broke.connect(_on_block_broke)
     add_child(blk)
 
@@ -338,7 +454,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
     var root := Node3D.new()
     match style:
         "tower":
-            # Round brick tower with a tiled cone roof and a pennant.
+            # Round brick tower with a tiled cone roof (Atmosphere puts cloth flags on top).
             var body := MeshInstance3D.new()
             var cm := CylinderMesh.new()
             cm.top_radius = size.x * 0.5
@@ -368,20 +484,48 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))
             roof.position.y = size.y / 2.0 + size.x * 0.65
             root.add_child(roof)
-            var flag := Models.instance("res://assets/pirate/flag-pennant.glb")
-            Models.fit(flag, Vector3(0.5, 1.0, 0.1), true)
-            flag.position = Vector3(0, size.y / 2.0 + size.x * 1.3 + 0.5, 0)
-            root.add_child(flag)
         "gate":
             var g := Models.instance("res://assets/castle/gate.glb")
             Models.fit(g, size)
             root.add_child(g)
+        "crate":
+            var c := Models.prop("wooden_crate_01")
+            var holder := Node3D.new()
+            holder.add_child(c)
+            Models.fit(holder, size)
+            root.add_child(holder)
+        "barrel":
+            var c := Models.prop("wine_barrel_01")
+            var holder := Node3D.new()
+            holder.add_child(c)
+            Models.fit(holder, size, true)
+            root.add_child(holder)
         "boulder", "rock":
             var r := Models.prop("boulder_01")
             var holder := Node3D.new()
             holder.add_child(r)
             Models.fit(holder, size, style == "boulder")
             root.add_child(holder)
+        "plateau", "cliff":
+            # A rock (or sea cliff) the castle stands on: rock faces fitted to the box, a grass
+            # top so the castle stands on turf.
+            var rock := Models.prop("namaqualand_cliff_01" if style == "cliff" else "boulder_01")
+            var holder := Node3D.new()
+            holder.add_child(rock)
+            Models.fit(holder, size * Vector3(1.04, 1.0, 1.08))
+            root.add_child(holder)
+            if style == "plateau":
+                # Two more boulders break up the outline.
+                for side: float in [-1.0, 1.0]:
+                    var r2 := Models.prop("namaqualand_boulder_02")
+                    var h2 := Node3D.new()
+                    h2.add_child(r2)
+                    Models.fit(h2, Vector3(size.x * 0.35, size.y * 0.9, size.z * 0.8))
+                    h2.position = Vector3(side * size.x * 0.36, 0, size.z * 0.12)
+                    root.add_child(h2)
+            var cap := _box(Vector3(size.x * 0.97, 0.14, size.z * 0.95), Models.tex_material("leafy_grass", 0.35, Color(0.9, 0.95, 0.85)))
+            cap.position.y = size.y / 2.0 - 0.05
+            root.add_child(cap)
         "hill":
             var mi := MeshInstance3D.new()
             var bm := BoxMesh.new()
@@ -430,9 +574,36 @@ func _box(size: Vector3, material: Material) -> MeshInstance3D:
     mi.material_override = material
     return mi
 
+func _spawn_captive(c: Dictionary, index: int) -> void:
+    var cap := Captive.new()
+    cap.deserter = bool(c.get("deserter", false))
+    cap.cage_id = int(c.get("cage", -1))
+    cap.setup(index)
+    cap.position = _v3(c.position)
+    cap.start = cap.position
+    cap.freed.connect(_on_captive_freed)
+    add_child(cap)
+
+func _on_captive_freed(cap: Captive) -> void:
+    if phase == Phase.FINISHED:
+        return
+    captives_freed += 1
+    bonus += 500
+    fx.confetti(cap.global_position + Vector3(0, 0.6, 0))
+    event.emit("freed", {"deserter": cap.deserter, "count": captives_freed})
+
+func _free_cage(id: int) -> void:
+    for n in get_tree().get_nodes_in_group("captives"):
+        var cap := n as Captive
+        if cap.cage_id == id and not cap.is_free:
+            cap.call_deferred("free_now")
+
 func _spawn_target(t: Dictionary, index: int) -> void:
     var e := Enemy.new()
+    e.armed = bool(t.get("armed", false))
+    e.boss = bool(t.get("boss", false))
     e.setup(float(t.get("radius", 0.28)), index, level_time)
+    e.fired.connect(_on_enemy_fired)
     e.position = _v3(t.position)
     e.base_position = e.position
     e.popped.connect(_on_enemy_popped)
@@ -449,7 +620,9 @@ func _spawn_gun(g: Dictionary) -> void:
 
 func _spawn_enemy_ship(s: Dictionary) -> void:
     var es := EnemyShip.new()
-    es.setup(float(s.get("speed", 0.0)), int(s.get("hitPoints", 2)), bool(s.get("hasCannon", true)), float(s.get("interval", 7.0)))
+    # Longboats rowing at you are small; gunships at anchor are bigger.
+    var length := 4.5 if float(s.get("speed", 0.0)) > 0.0 else 6.5
+    es.setup(float(s.get("speed", 0.0)), int(s.get("hitPoints", 2)), bool(s.get("hasCannon", true)), float(s.get("interval", 7.0)), length)
     es.position = _v3(s.position)
     es.fired.connect(_on_enemy_fired)
     es.sunk.connect(_on_ship_sunk)
@@ -468,6 +641,10 @@ func _freeze_all(value: bool) -> void:
             en.spawn_time = time
     for g in enemy_guns:
         g.set_frozen(value)
+    for n in get_tree().get_nodes_in_group("captives"):
+        var cap := n as Captive
+        if not cap.is_free:
+            cap.freeze = value
 
 # MARK: Loop
 
@@ -496,6 +673,8 @@ func _process(delta: float) -> void:
             d.visible = false
     _update_enemies(delta)
     _update_projectiles()
+    _update_fires(delta)
+    _track_near_miss()
     _update_camera(delta)
     _check_progress()
     if blast_slowmo_end >= 0.0 and time >= blast_slowmo_end:
@@ -508,6 +687,9 @@ func _process(delta: float) -> void:
 ## Trees lean and sway with the wind, harder in a storm, with slow gusts.
 func _sway_trees() -> void:
     var wind := Tuning.TREE_SWAY_CALM + Tuning.TREE_SWAY_STORM * float(data.get("sea", 0.0))
+    var dt := get_process_delta_time()
+    for n in get_tree().get_nodes_in_group("mill_sails"):
+        (n as Node3D).rotation.z -= dt * float(n.get_meta("speed")) * (1.0 + float(data.get("sea", 0.0)))
     for n in get_tree().get_nodes_in_group("sway"):
         var t := n as Node3D
         var ph: float = t.get_meta("phase")
@@ -526,9 +708,14 @@ func _rock_ship() -> void:
     var p := ship.position
     var s := sea.sample(p.x, p.z)
     ship.position.y = Tuning.SEA_LEVEL + s.x + Tuning.SHIP_FREEBOARD
-    var roll := atan(s.y) * Tuning.SHIP_ROLL_GAIN
-    var pitch := atan(s.z) * Tuning.SHIP_PITCH_GAIN
-    ship.rotation = Vector3(pitch, 0, -roll)
+    # A big ship rides the swell: it lifts and drops with the waves but heels only so far.
+    var roll := clampf(atan(s.y) * Tuning.SHIP_ROLL_GAIN, -0.16, 0.16)
+    var pitch := clampf(atan(s.z) * Tuning.SHIP_PITCH_GAIN, -0.1, 0.1)
+    # Recoil heel: a damped spring kicked by each shot.
+    var dt := get_process_delta_time()
+    _kick_vel += (-kick * 30.0 - _kick_vel * 5.0) * dt
+    kick += _kick_vel * dt
+    ship.rotation = Vector3(pitch - kick, 0, -roll)
     camera_up = Vector3(sin(-roll * 0.5), cos(-roll * 0.5), 0)
 
 func cannon_world() -> Vector3:
@@ -549,6 +736,9 @@ func aim_direction() -> Vector3:
     return (ship.global_transform.basis * local).normalized()
 
 func launch_speed(pw: float, type: String) -> float:
+    return _base_launch_speed(pw, type) * power_scale
+
+func _base_launch_speed(pw: float, type: String) -> float:
     return (Tuning.LAUNCH_SPEED_BASE + pw * Tuning.LAUNCH_SPEED_SCALE) * float(Tuning.AMMO[type].speed)
 
 ## The next ball can be loaded while the last one is still flying or the castle settling.
@@ -557,7 +747,7 @@ func can_load() -> bool:
         return false
     if phase == Phase.AIMING:
         return true
-    return (phase == Phase.IN_FLIGHT or phase == Phase.SETTLING) and time - last_shot_time >= Tuning.RELOAD_TIME
+    return (phase == Phase.IN_FLIGHT or phase == Phase.SETTLING) and time - last_shot_time >= reload_time
 
 func _update_trajectory() -> void:
     if not bool(settings.get("trajectory", true)):
@@ -594,6 +784,9 @@ func _input(ev: InputEvent) -> void:
         if t.pressed:
             if t.position.x > vp.x * 0.82 and t.position.y < vp.y * 0.22:
                 return   # HUD buttons
+            for r in ui_blocks:
+                if r.has_point(t.position):
+                    return
             _touches[t.index] = t.position
             if _touches.size() == 2:
                 # Second finger: pinch to zoom out and see the ship. Cancels any load in progress.
@@ -646,14 +839,14 @@ func set_power(v: float) -> void:
     var tick_before := int(power / 0.05)
     power = v
     if int(power / 0.05) > tick_before and power > 0.0:
-        Input.vibrate_handheld(int(8 + 26 * power))
+        Haptics.tick(power)
     event.emit("power", {"power": power})
 
 func _release_load() -> void:
     var released := power
     power = 0.0
     event.emit("power", {"power": 0.0})
-    if released >= Tuning.MIN_FIRE_POWER:
+    if released >= Tuning.MIN_FIRE_POWER and can_load():
         fire(released)
 
 func _update_gyro(delta: float) -> void:
@@ -708,6 +901,7 @@ func fire(pw: float) -> void:
     if frozen:
         _freeze_all(false)
     var type := next_ammo()
+    var special := type == armed_special and armed_special != ""
     var v := aim_direction() * launch_speed(pw, type)
     var origin := muzzle_world()
     var p := Projectile.new()
@@ -716,17 +910,40 @@ func fire(pw: float) -> void:
     p.setup(type, v)
     p.spawn_time = time
     p.exploded.connect(func(at): explode(at))
-    p.splashed.connect(func(at): fx.splash(at); event.emit("splash", {}))
+    p.splashed.connect(func(at): fx.splash(at); ambience.splash(); event.emit("splash", {}))
     active_projectile = p
-    projectiles_remaining -= 1
+    if special:
+        specials[type] = int(specials[type]) - 1
+        armed_special = ""
+    else:
+        projectiles_remaining -= 1
+        regular_used += 1
     shots_used += 1
     last_shot_time = time
+    # A fresh shot: new combo chances, one action cam, near miss tracking.
+    shot_pops = 0
+    _cine_used = false
+    _shot_min_dist = INF
+    _shot_start_breaks = blocks_broken
+    _shot_start_targets = targets_remaining
+    _shot_blasts = 0
+    p.hit.connect(func(_b): _end_follow())
+    # The shot that may win it: a touch of slow motion while it flies.
+    if targets_remaining + ships_remaining <= 1 or (projectiles_remaining == 0 and specials_left() == 0):
+        follow = true
+        _follow_until = _now() + 3.0
+        Engine.time_scale = Tuning.FOLLOW_SLOWMO
+    # Kick: the ship heels away from the shot and the carriage rolls back.
+    _kick_vel = Tuning.KICK_ROLL * 9.0
+    var roll_back := create_tween()
+    roll_back.tween_property(cannon_pivot, "position:z", 0.32, 0.08).set_ease(Tween.EASE_OUT)
+    roll_back.tween_property(cannon_pivot, "position:z", 0.0, 0.9).set_trans(Tween.TRANS_SINE)
     settle_start = -1.0
     phase = Phase.IN_FLIGHT
     recoil = 0.18
     fx.muzzle(origin)
     ambience.cannon(pw)
-    Input.vibrate_handheld(60)
+    Haptics.thump()
     event.emit("fired", {})
 
 # MARK: Breaking and blasts
@@ -734,6 +951,8 @@ func fire(pw: float) -> void:
 func _on_block_broke(blk: Block) -> void:
     var pos := blk.global_position
     var mat := blk.material_name
+    if blk.cage_id >= 0:
+        _free_cage(blk.cage_id)
     blocks_broken += 1
     if mat == "tnt":
         blk.queue_free()
@@ -749,6 +968,8 @@ func _on_block_broke(blk: Block) -> void:
     fx.dust(pos, mat)
     if mat == "wood":
         ambience.crack()
+        fx.splinters(pos, 10 if blk.is_fragment else 16)
+        Haptics.crack()
     event.emit("broke", {"material": mat})
 
 func _fragment(blk: Block) -> void:
@@ -776,7 +997,7 @@ func _fragment(blk: Block) -> void:
         bm.size = piece * 0.92
         mi.mesh = bm
         match blk.material_name:
-            "wood": mi.material_override = Models.wood_material()
+            "wood": mi.material_override = Models.tex_material("brown_planks_07", 0.9, Color(0.35, 0.28, 0.24)) if blk.burning or blk.burn_time > 0.0 else Models.wood_material()
             "stone": mi.material_override = Models.tex_material("castle_brick_07", 0.8)
             _: mi.material_override = Models.flat_material(color, 0.9)
         f.setup(blk.material_name, piece * 0.92, "", false, {}, true, mi)
@@ -793,12 +1014,17 @@ func _fragment(blk: Block) -> void:
 
 func explode(center: Vector3) -> void:
     blast_count += 1
-    blast_shake = 1.0
+    _shot_blasts += 1
+    _register_combo()
+    blast_shake = minf(1.0 + 0.25 * (combo - 1), 1.8)
     fx.blast(center)
+    fx.blast_light(center, 9.0 if style.get("sky", "") == "night" else 3.5)
+    fx.smoke_column(center + Vector3(0, 0.5, 0))
     ambience.blast()
+    _start_cine(center)
     event.emit("blast", {})
-    Input.vibrate_handheld(300)
-    if phase != Phase.SLOWMO and phase != Phase.FINISHED:
+    Haptics.rumble(combo)
+    if phase != Phase.SLOWMO and phase != Phase.FINISHED and cine_until < 0.0:
         Engine.time_scale = 0.35
         blast_slowmo_end = time + 0.45
     for n in get_tree().get_nodes_in_group("dynamic"):
@@ -807,9 +1033,10 @@ func explode(center: Vector3) -> void:
         var body := n as RigidBody3D
         var off := body.global_position - center
         var dist := off.length()
-        if dist >= Tuning.TNT_RADIUS:
+        var radius := Tuning.TNT_RADIUS * powder_scale
+        if dist >= radius:
             continue
-        var falloff := 1.0 - dist / Tuning.TNT_RADIUS
+        var falloff := 1.0 - dist / radius
         var dir := Vector3.UP if dist < 0.05 else (off + Vector3(0, 0.35, 0)).normalized()
         var dv := Tuning.TNT_BLAST_SPEED * falloff
         if body is Block and (body as Block).frozen:
@@ -838,11 +1065,18 @@ func explode(center: Vector3) -> void:
 
 func _on_enemy_popped(e: Enemy) -> void:
     var pos := e.global_position
-    # Burst at once: no swell (a tween would crawl through the slow motion).
+    # Burst at once and fly off tumbling; drop loot.
     fx.pop(pos, e.body_color)
+    _fly_off(e)
     e.queue_free()
     targets_remaining -= 1
-    Input.vibrate_handheld(120)
+    shot_pops += 1
+    _register_combo()
+    _drop_coins(pos)
+    ambience.pop()
+    Haptics.pop()
+    if shot_pops >= 2:
+        event.emit("multi", {"count": shot_pops})
     event.emit("target", {"remaining": targets_remaining})
     if targets_remaining == 0 and ships_remaining == 0:
         _begin_win(pos)
@@ -907,29 +1141,39 @@ func _on_ship_rammed(s: EnemyShip) -> void:
     ships_remaining -= 1
     fx.blast(p)
     _hull_hit()
-    if hull_hits < Tuning.MAX_HULL_HITS and ships_remaining == 0 and targets_remaining == 0:
+    if hull_hits < max_hull and ships_remaining == 0 and targets_remaining == 0:
         _begin_win(p)
 
 func damage_ship(s: EnemyShip, at: Vector3) -> void:
     fx.dust(at, "wood")
-    fx.pop(at, Color(1, 0.6, 0.2))
+    fx.splinters(at, 14)
+    ambience.crack()
     if s.damage():
         s.sinking_since = time
         ships_remaining -= 1
-        blast_shake = 0.5
+        blast_shake = 0.8
         fx.blast(at)
+        fx.blast_light(at, 5.0)
+        ambience.blast()
+        s.break_apart(sea, fx)
+        _register_combo()
+        _start_cine(at)
+        _drop_coins(at + Vector3(0, 0.5, 0))
+        Haptics.rumble(2)
         event.emit("blast", {})
         if ships_remaining == 0 and targets_remaining == 0:
             _begin_win(at)
     else:
+        s.hit(at)
+        Haptics.crack()
         event.emit("broke", {"material": "wood"})
 
 func _hull_hit() -> void:
     hull_hits += 1
     blast_shake = 0.8
-    Input.vibrate_handheld(400)
-    event.emit("hull", {"remaining": Tuning.MAX_HULL_HITS - hull_hits})
-    if hull_hits >= Tuning.MAX_HULL_HITS:
+    Haptics.hull()
+    event.emit("hull", {"remaining": max_hull - hull_hits})
+    if hull_hits >= max_hull:
         _finish(false)
 
 func _update_enemies(delta: float) -> void:
@@ -942,6 +1186,14 @@ func _update_enemies(delta: float) -> void:
     for s in enemy_ships.duplicate():
         if is_instance_valid(s):
             s.tick(delta, time, sea, ship.global_position)
+    if phase != Phase.SLOWMO:
+        for n in get_tree().get_nodes_in_group("enemies"):
+            (n as Enemy).tick_gun(delta, target)
+    if bool(data.get("volcano", false)) and phase != Phase.SLOWMO:
+        lava_next -= delta
+        if lava_next <= 0.0:
+            lava_next = randf_range(4.0, 7.0)
+            _lava_bomb()
     # Enemy balls: hull hits near the cannon, splashes, cleanup.
     for b in enemy_balls.duplicate():
         if not is_instance_valid(b):
@@ -975,6 +1227,176 @@ func _update_projectiles() -> void:
                         active_projectile = null
                     break
 
+## The volcano spits a burning rock onto the castle: it smashes what it lands on.
+func _lava_bomb() -> void:
+    var r := _castle_rect()
+    var land := Vector3(randf_range(r.position.x, r.end.x), 0.5, randf_range(r.position.y, r.end.y))
+    var from := Vector3(clampf(land.x * 1.5, -30, 30) + randf_range(-10, 10), 32.0, -48.0)
+    var rock := LavaBomb.new()
+    add_child(rock)
+    rock.global_position = from
+    rock.launch(from, land)
+    rock.landed.connect(func(at: Vector3): _lava_hit(at))
+
+func _lava_hit(at: Vector3) -> void:
+    fx.blast(at)
+    fx.blast_light(at, 6.0)
+    ambience.blast()
+    blast_shake = maxf(blast_shake, 0.4)
+    if frozen:
+        _freeze_all(false)
+    for n in get_tree().get_nodes_in_group("dynamic"):
+        if not (n is RigidBody3D):
+            continue
+        var body := n as RigidBody3D
+        var off := body.global_position - at
+        var dist := off.length()
+        if dist > 2.2:
+            continue
+        var dv := 6.0 * (1.0 - dist / 2.2)
+        body.apply_central_impulse((off + Vector3(0, 0.5, 0)).normalized() * dv * body.mass)
+        if body is Block and (body as Block).material_name == "wood":
+            (body as Block).call_deferred("ignite")
+
+# MARK: Feel
+
+func _now() -> float:
+    return Time.get_ticks_msec() / 1000.0
+
+## Blasts and pops close together chain into a combo: bigger bonus, bigger shake and buzz.
+func _register_combo() -> void:
+    if time - _combo_last <= Tuning.COMBO_WINDOW:
+        combo += 1
+    else:
+        combo = 1
+    _combo_last = time
+    best_combo = maxi(best_combo, combo)
+    if combo >= 2:
+        # Each link is worth more, up to x5, so a huge chain stays a bonus, not the whole score.
+        var pts := Tuning.COMBO_POINTS * mini(combo, 5)
+        bonus += pts
+        event.emit("combo", {"count": combo, "points": pts})
+
+## Big moments slow time for a beat; the camera stays behind the cannon throughout.
+func _start_cine(_at: Vector3) -> void:
+    if phase == Phase.FINISHED or phase == Phase.LOADING or phase == Phase.INTRO or phase == Phase.SLOWMO:
+        return
+    var now := _now()
+    if _cine_used:
+        # Later blasts in the chain stretch the slow motion a little.
+        cine_until = minf(cine_until + 0.4, now + Tuning.CINE_DURATION + 0.8)
+        return
+    _cine_used = true
+    follow = false
+    cine_until = now + Tuning.CINE_DURATION
+    Engine.time_scale = Tuning.CINE_SLOWMO
+
+func _end_follow() -> void:
+    if follow:
+        follow = false
+        if cine_until < 0.0 and phase != Phase.SLOWMO and phase != Phase.FINISHED:
+            Engine.time_scale = 1.0
+
+## Ends the slow motion when its time is up. The camera itself is never taken over.
+func _camera_override(_delta: float) -> bool:
+    var now := _now()
+    if cine_until > 0.0 and (now >= cine_until or phase == Phase.FINISHED):
+        cine_until = -1.0
+        if phase != Phase.SLOWMO and phase != Phase.FINISHED:
+            Engine.time_scale = 1.0
+    if follow and (not is_instance_valid(active_projectile) or now > _follow_until):
+        _end_follow()
+    return false
+
+## The popped guard's body tumbles off the castle instead of just vanishing.
+func _fly_off(e: Enemy) -> void:
+    var ghost := Node3D.new()
+    for c in e.get_children():
+        if c is MeshInstance3D:
+            ghost.add_child((c as MeshInstance3D).duplicate())
+    add_child(ghost)
+    ghost.global_transform = e.global_transform
+    var away := Vector3(randf_range(-2.5, 2.5), 3.2, randf_range(-1.5, -3.0))
+    var tw := create_tween()
+    tw.set_ignore_time_scale(true)
+    tw.set_parallel(true)
+    tw.tween_property(ghost, "position", ghost.position + away, 0.55).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+    tw.tween_property(ghost, "rotation", ghost.rotation + Vector3(randf_range(4, 8), randf_range(-6, 6), randf_range(4, 8)), 0.55)
+    tw.tween_property(ghost, "scale", Vector3(0.05, 0.05, 0.05), 0.55).set_ease(Tween.EASE_IN)
+    tw.chain().tween_callback(ghost.queue_free)
+
+static var _coin_mesh: CylinderMesh
+static var _coin_mat: StandardMaterial3D
+
+## Gold coins burst out of a popped guard, bounce and stay where they land: the loot.
+func _drop_coins(at: Vector3) -> void:
+    if _coin_mesh == null:
+        _coin_mesh = CylinderMesh.new()
+        _coin_mesh.top_radius = 0.07
+        _coin_mesh.bottom_radius = 0.07
+        _coin_mesh.height = 0.018
+        _coin_mesh.radial_segments = 12
+        _coin_mat = Models.flat_material(Color(1.0, 0.78, 0.25), 0.25, 1.0)
+    var n := Tuning.COINS_PER_POP
+    coins += n
+    event.emit("coins", {"count": coins})
+    ambience.coins()
+    for i in n:
+        if _coin_nodes.size() >= Tuning.MAX_COINS:
+            break
+        var body := RigidBody3D.new()
+        body.mass = 0.05
+        var shape := CollisionShape3D.new()
+        var cs := CylinderShape3D.new()
+        cs.radius = 0.07
+        cs.height = 0.02
+        shape.shape = cs
+        body.add_child(shape)
+        var mi := MeshInstance3D.new()
+        mi.mesh = _coin_mesh
+        mi.material_override = _coin_mat
+        body.add_child(mi)
+        body.collision_layer = 1 << 3   # coins land on the world but do not knock the castle
+        body.collision_mask = 1
+        add_child(body)
+        body.global_position = at + Vector3(randf_range(-0.2, 0.2), 0.2, randf_range(-0.2, 0.2))
+        body.linear_velocity = Vector3(randf_range(-2.5, 2.5), randf_range(3.0, 5.5), randf_range(-1.0, 2.0))
+        body.angular_velocity = Vector3(randf_range(-15, 15), randf_range(-15, 15), randf_range(-15, 15))
+        _coin_nodes.append(body)
+
+## How close the ball in flight comes to a powder barrel or a guard, for "So close!".
+func _track_near_miss() -> void:
+    if phase != Phase.IN_FLIGHT or not is_instance_valid(active_projectile):
+        return
+    var p := active_projectile.global_position
+    for n in get_tree().get_nodes_in_group("enemies"):
+        _shot_min_dist = minf(_shot_min_dist, p.distance_to((n as Node3D).global_position))
+    for n in get_tree().get_nodes_in_group("blocks"):
+        var b := n as Block
+        if b.material_name == "tnt":
+            _shot_min_dist = minf(_shot_min_dist, p.distance_to(b.global_position))
+
+## Fire spreads from burning wood to wood close by.
+func _update_fires(delta: float) -> void:
+    _fire_tick += delta
+    if _fire_tick < 0.45:
+        return
+    _fire_tick = 0.0
+    var burning := get_tree().get_nodes_in_group("burning")
+    if burning.is_empty():
+        return
+    for n in burning:
+        var src := n as Block
+        if not is_instance_valid(src) or src.burn_time < 0.9:
+            continue
+        for m in get_tree().get_nodes_in_group("blocks"):
+            var b := m as Block
+            if b.burning or b.material_name != "wood" or b.is_fragment:
+                continue
+            if b.global_position.distance_to(src.global_position) < Tuning.BURN_SPREAD + (b.size.length() + src.size.length()) * 0.25:
+                b.ignite()
+                break
+
 # MARK: Camera
 
 func _update_camera(delta: float) -> void:
@@ -1003,6 +1425,8 @@ func _update_camera(delta: float) -> void:
         camera_look = start_look.lerp(d[1], eased)
         camera.global_position = camera_pos
         camera.look_at(camera_look, Vector3.UP)
+        return
+    if _camera_override(delta):
         return
     if recoil > 0.0:
         recoil = maxf(0.0, recoil - delta * 0.9)
@@ -1053,8 +1477,6 @@ func _check_progress() -> void:
                 Engine.time_scale = 1.0
                 slowmo_end = -1.0
                 win_linger_start = time
-                # Back to the whole fort so the collapse stays in view.
-                focus_point = Vector3(camera_look_base.x, camera_look_base.y * 0.6, camera_look_base.z)
             if win_linger_start >= 0.0:
                 var waited := time - win_linger_start
                 if (waited >= Tuning.WIN_LINGER and _debris_resting()) or waited >= Tuning.WIN_LINGER_MAX:
@@ -1067,6 +1489,10 @@ func _check_progress() -> void:
             if flight_over and phase == Phase.IN_FLIGHT:
                 phase = Phase.SETTLING
                 settle_start = time
+                _end_follow()
+                var nothing := blocks_broken == _shot_start_breaks and targets_remaining == _shot_start_targets and _shot_blasts == 0
+                if nothing and _shot_min_dist < Tuning.NEAR_MISS:
+                    event.emit("near_miss", {})
             if phase == Phase.SETTLING:
                 var out_of_ammo := projectiles_remaining == 0 and (targets_remaining > 0 or ships_remaining > 0)
                 var timeout := Tuning.OUT_OF_AMMO_SETTLE if out_of_ammo else Tuning.SETTLE_TIMEOUT
@@ -1095,16 +1521,22 @@ func _begin_win(at: Vector3) -> void:
     if phase == Phase.SLOWMO or phase == Phase.FINISHED:
         return
     phase = Phase.SLOWMO
-    focus_point = at
     Engine.time_scale = 0.3
     slowmo_end = time + 0.5   # game time at 0.3 scale: about 1.5 real seconds
     fx.confetti(at + Vector3(0, 1.5, 0))
-    Input.vibrate_handheld(200)
+    Haptics.rumble(2)
     event.emit("win_start", {})
 
 func _finish(did_win: bool) -> void:
     if phase == Phase.FINISHED:
         return
+    if did_win:
+        # The pirates are gone: everyone still in a cage walks free.
+        for n in get_tree().get_nodes_in_group("captives"):
+            var cap := n as Captive
+            if not cap.is_free:
+                captives_freed += 1
+                cap.free_now()
     Engine.time_scale = 1.0
     phase = Phase.FINISHED
     won = did_win
@@ -1122,7 +1554,6 @@ func _update_weather() -> void:
         next_thunder = time + randf_range(Tuning.THUNDER_MIN, Tuning.THUNDER_MAX)
         thunder_count += 1
         weather.lightning()
-        Input.vibrate_handheld(150)
         event.emit("thunder", {})
 
 func _exit_tree() -> void:

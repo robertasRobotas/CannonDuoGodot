@@ -19,3 +19,9 @@ CC-BY-4.0 requires these credits to appear in the game or its store listing.
 - Ship Pinnace (enemy ships, moored boats) and Barrel 03 (powder barrels): Poly Haven, CC0
 - Cannon, wood, waves and creaking sounds: supplied by the author (creaking from the Freesound
   community); check each licence before release
+- Music "Pirates!" by Eric Matyas, soundimage.org, CC-BY 4.0 (credit required: "Pirates!" by Eric Matyas Soundimage.org)
+- Music "Pirate Game Tune" by Tozan (OpenGameArt), CC0
+- "Horde War Drums loop" by William Hector (OpenGameArt), CC0
+- Coin sounds by syncopika (OpenGameArt), CC0
+- Plop, spring and splash sounds from "100 CC0 SFX" by rubberduck (OpenGameArt), CC0
+- Modular Wooden Pier, Wine Barrel 01 (Poly Haven), CC0; cobblestone_floor_01 and snow_02 textures (Poly Haven), CC0

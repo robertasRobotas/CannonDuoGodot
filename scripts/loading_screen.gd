@@ -5,6 +5,8 @@ class_name LoadingScreen
 extends Control
 
 const TIPS := [
+    "Pirates took these islands from the Crown. Take them back.",
+    "Every pirate that falls drops his stolen doubloons.",
     "Red powder barrels go up in a chain. Find the first one.",
     "Pull down further for a stronger shot.",
     "Tilt the phone to aim. Tap the target button to recentre.",
@@ -19,7 +21,7 @@ var _bar_w := 560.0
 var _t := 0.0
 var _sky: Texture2D
 
-func build(id: int, name: String, subtitle: String, place: String, weather: String) -> void:
+func build(id: int, name: String, subtitle: String, place: String, weather: String, tip_text: String = "") -> void:
     set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     mouse_filter = Control.MOUSE_FILTER_STOP
     var g := Gradient.new()
@@ -83,13 +85,21 @@ func build(id: int, name: String, subtitle: String, place: String, weather: Stri
     col.add_child(bar_row)
     col.add_child(_label("Loading the castle…", 30, Color(1, 1, 1, 0.55)))
 
-    var tip := _label("Tip: " + TIPS[randi() % TIPS.size()], 34, Color(1, 1, 1, 0.8))
+    # Old Tomas's advice for this island, with his portrait.
+    var said: String = tip_text if tip_text != "" else TIPS[randi() % TIPS.size()]
+    var face := Portrait.new("fisher", 170.0)
+    face.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+    face.position = Vector2(70, 2556 - 470)
+    add_child(face)
+    var who := _label("Old Tomas", 32, Color(1.0, 0.84, 0.4))
+    who.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+    who.position = Vector2(270, 2556 - 470)
+    add_child(who)
+    var tip := _label("\"" + said + "\"", 36, Color(1, 1, 1, 0.9))
     tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    tip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-    tip.offset_top = -330
-    tip.offset_bottom = -230
-    tip.offset_left = 90
-    tip.offset_right = -90
+    tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+    tip.position = Vector2(270, 2556 - 425)
+    tip.size = Vector2(840, 160)
     add_child(tip)
 
 func _label(text: String, size: int, color: Color, outline: int = 0) -> Label:
