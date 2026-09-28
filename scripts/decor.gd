@@ -43,8 +43,12 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
         var c := castle.grow(2.0)
         # The castle, and everything between it and the water.
         _clear.append(Rect2(c.position.x, c.position.y, c.size.x, Tuning.SHORE_Z - c.position.y))
+    _terrain_on = false
+    _seed = float(level_id) * 1.37
+    _flat = castle.grow(3.0) if castle.size.x > 0.0 else Rect2()
     if biome != "opensea":
         _island(parent, biome, shore, float(st.get("beach", 4.2)))
+    var first_decor := parent.get_child_count()
     # One kind of island per biome: its own trees, hills and ground. Trees never mix.
     match biome:
         "opensea":
@@ -93,9 +97,20 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     if biome != "opensea":
         _shore(parent, rng, biome, shore, ship_z)
     _clouds(parent, rng, storm, st.get("sky", "") == "night")
+    # Everything placed above stands on the ground, not on a flat plane.
+    if _terrain_on:
+        for i in range(first_decor, parent.get_child_count()):
+            var n := parent.get_child(i)
+            if n is Node3D and not (n is CPUParticles3D):
+                var p := (n as Node3D).position
+                if absf(p.z) < 115.0:
+                    (n as Node3D).position.y += height(p.x, p.z)
 
 ## Painted cloud cards (2D Cloud Pack) spread across the sky behind the island.
 static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, night: bool = false) -> void:
+    if storm:
+        _scud(parent)
+        return
     var src: Node3D = Models.instance("res://assets/hq/clouds/scene.gltf")
     var cards: Array = []
     for c in src.find_children("*", "MeshInstance3D", true, false):
@@ -128,66 +143,115 @@ static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, nig
         holder.position = Vector3(rng.randf_range(-55, 55), rng.randf_range(11, 24) if not storm else rng.randf_range(9, 16), rng.randf_range(-70, -42))
         parent.add_child(holder)
 
-static func _island(parent: Node3D, biome: String, shore: String, beach_depth: float = 4.2) -> void:
-    var extent := 90.0
-    var depth := extent + Tuning.SHORE_Z
+# MARK: Terrain
+
+## The island as real ground: a shoreline that curves into bays and out into points, a beach
+## sloping into the sea, dunes and hills rising inland, and a level yard where the castle
+## stands. `height(x, z)` gives the ground height anywhere, for placing things on it.
+static var _seed := 0.0
+static var _flat := Rect2()
+static var _terrain_on := false
+
+static func shore_z(x: float) -> float:
+    var p := _seed
+    var wobble := 3.0 * sin(x * 0.07 + p) + 1.7 * sin(x * 0.19 + p * 2.3) + 0.8 * sin(x * 0.41 + p * 0.7)
+    # Near the firing line the shore stays close to its designed place.
+    wobble *= lerpf(0.55, 1.0, smoothstep(6.0, 20.0, absf(x)))
+    # A point of land reaching out to sea on the left; the right stays open for the ship.
+    var point := maxf(0.0, -x - 26.0) * 0.5
+    return Tuning.SHORE_Z + wobble + point
+
+static func height(x: float, z: float) -> float:
+    if not _terrain_on:
+        return 0.0
+    var d := shore_z(x) - z                       # metres inland from the waterline
+    var h: float
+    if d < 0.0:
+        h = maxf(d * 0.28, -1.6)                   # sand slope under the water
+    else:
+        h = 0.05 + minf(d, 6.0) * 0.07             # the beach rising gently
+        var p := _seed
+        var dunes := (sin(x * 0.23 + p) * sin(z * 0.19 - p) * 0.5 + 0.5) * 1.1
+        var hills := (sin(x * 0.061 + p * 1.7) + sin(z * 0.045 + x * 0.02 + p)) * 0.5 + 1.0
+        h += dunes * smoothstep(5.0, 12.0, d) + hills * 2.6 * smoothstep(14.0, 45.0, d)
+    # The castle yard is level ground.
+    if _flat.size.x > 0.0:
+        var dx := maxf(maxf(_flat.position.x - x, x - _flat.end.x), 0.0)
+        var dz := maxf(maxf(_flat.position.y - z, z - _flat.end.y), 0.0)
+        var k := smoothstep(0.0, 5.0, sqrt(dx * dx + dz * dz))
+        h = lerpf(0.0, h, k)
+    return h
+
+static func _island(parent: Node3D, biome: String, shore: String, _beach_depth: float = 4.2) -> void:
+    _terrain_on = true
+    var step := 1.3
+    var x0 := -110.0
+    var x1 := 110.0
+    var z0 := -120.0
+    var z1 := Tuning.SHORE_Z + 22.0
+    var nx := int((x1 - x0) / step) + 1
+    var nz := int((z1 - z0) / step) + 1
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    for iz in nz:
+        for ix in nx:
+            var x := x0 + ix * step
+            var z := z0 + iz * step
+            var h := height(x, z)
+            var d := shore_z(x) - z
+            var sand := 1.0 - smoothstep(4.0, 10.0, d) if biome != "harbor" else 1.0 - smoothstep(3.0, 6.0, d)
+            var wet := 1.0 - smoothstep(-0.2, 1.4, d)
+            st.set_color(Color(sand, wet, 0.0))
+            st.add_vertex(Vector3(x, h, z))
+    for iz in nz - 1:
+        for ix in nx - 1:
+            var a := iz * nx + ix
+            st.add_index(a)
+            st.add_index(a + 1)
+            st.add_index(a + nx)
+            st.add_index(a + 1)
+            st.add_index(a + nx + 1)
+            st.add_index(a + nx)
+    st.generate_normals()
+    var mesh := st.commit()
     var ground := StaticBody3D.new()
     ground.name = "Ground"
     ground.add_to_group("ground")
-    var shape := CollisionShape3D.new()
-    var box := BoxShape3D.new()
-    box.size = Vector3(extent, 1.4, depth)
-    shape.shape = box
-    ground.add_child(shape)
     var mi := MeshInstance3D.new()
-    var bm := BoxMesh.new()
-    bm.size = box.size
-    mi.mesh = bm
-    match biome:
-        "badlands": mi.material_override = Models.tex_material("dry_ground_01", 0.3, Color(1.0, 0.72, 0.56))
-        "volcano": mi.material_override = Models.tex_material("dry_ground_01", 0.3, Color(0.42, 0.36, 0.34))
-        "highlands": mi.material_override = Models.tex_material("forest_leaves_02", 0.35, Color(0.9, 0.95, 0.85))
-        "harbor": mi.material_override = Models.tex_material("cobblestone_floor_01", 0.35, Color(0.85, 0.82, 0.78))
-        _: mi.material_override = Models.tex_material("leafy_grass", 0.3)
-    ground.add_child(mi)
-    ground.position = Vector3(0, -0.7, Tuning.SHORE_Z - depth / 2.0)
-    parent.add_child(ground)
-    # The strip along the water: sand, pebbles or rock shelf.
-    var beach_mat: Material
-    var wet_mat: Material
+    mi.mesh = mesh
+    var mat := ShaderMaterial.new()
+    mat.shader = load("res://shaders/terrain.gdshader")
+    var sand_name := "coast_sand_01"
+    var sand_tint := Color.WHITE
     match shore:
         "rocks":
-            beach_mat = Models.tex_material("gravelly_sand", 0.45, Color(0.85, 0.85, 0.85))
-            wet_mat = Models.tex_material("gravelly_sand", 0.45, Color(0.55, 0.55, 0.58), 0.4)
+            sand_name = "gravelly_sand"
         "cliffs":
-            beach_mat = Models.tex_material("coast_sand_rocks_02", 0.35)
-            wet_mat = Models.tex_material("coast_sand_rocks_02", 0.35, Color(0.6, 0.6, 0.62), 0.4)
-        _:
-            var tint := Color(1.0, 0.8, 0.66) if biome == "badlands" else (Color(0.45, 0.42, 0.42) if biome == "volcano" else Color.WHITE)
-            beach_mat = Models.tex_material("coast_sand_01", 0.4, tint)
-            wet_mat = Models.tex_material("coast_sand_01", 0.4, Color(0.7, 0.62, 0.52) * tint, 0.4)
-    var beach := MeshInstance3D.new()
-    var beach_mesh := BoxMesh.new()
-    beach_mesh.size = Vector3(extent, 0.06, beach_depth)
-    beach.mesh = beach_mesh
-    beach.material_override = beach_mat
-    beach.position = Vector3(0, 0.03, Tuning.SHORE_Z - beach_depth / 2.0)
-    parent.add_child(beach)
-    var wet := MeshInstance3D.new()
-    var wet_mesh := BoxMesh.new()
-    wet_mesh.size = Vector3(extent, 0.07, 0.7)
-    wet.mesh = wet_mesh
-    wet.material_override = wet_mat
-    wet.position = Vector3(0, 0.035, Tuning.SHORE_Z - 0.35)
-    parent.add_child(wet)
-    # A worn path from the shore to the castle.
-    var path := MeshInstance3D.new()
-    var path_mesh := BoxMesh.new()
-    path_mesh.size = Vector3(1.4, 0.05, 6.0)
-    path.mesh = path_mesh
-    path.material_override = Models.tex_material("coast_sand_01", 0.5, Color(0.9, 0.82, 0.7))
-    path.position = Vector3(0, 0.025, Tuning.SHORE_Z - 3.0 - 2.5)
-    parent.add_child(path)
+            sand_name = "coast_sand_rocks_02"
+    var land_name := "leafy_grass"
+    var land_tint := Color.WHITE
+    match biome:
+        "badlands":
+            land_name = "dry_ground_01"
+            land_tint = Color(1.0, 0.72, 0.56)
+            sand_tint = Color(1.0, 0.82, 0.68)
+        "volcano":
+            land_name = "dry_ground_01"
+            land_tint = Color(0.42, 0.36, 0.34)
+            sand_tint = Color(0.45, 0.42, 0.42)
+        "highlands":
+            land_name = "forest_leaves_02"
+            land_tint = Color(0.9, 0.95, 0.85)
+    mat.set_shader_parameter("sand_tex", load("res://assets/ph/tex/%s.jpg" % sand_name))
+    mat.set_shader_parameter("land_tex", load("res://assets/ph/tex/%s.jpg" % land_name))
+    mat.set_shader_parameter("sand_tint", sand_tint)
+    mat.set_shader_parameter("land_tint", land_tint)
+    mi.material_override = mat
+    ground.add_child(mi)
+    var shape := CollisionShape3D.new()
+    shape.shape = mesh.create_trimesh_shape()
+    ground.add_child(shape)
+    parent.add_child(ground)
 
 ## A mountain range along the horizon: overlapping peaks, the tallest behind the castle.
 static func _mountains(parent: Node3D, rng: RandomNumberGenerator, count: int, min_h: float, max_h: float, crags: bool = false) -> void:
@@ -234,9 +298,9 @@ static func _shore(parent: Node3D, rng: RandomNumberGenerator, biome: String, sh
             var cz := rng.randf_range(-1.4, 0.2)
             if _free(cx, cz, 0.5):
                 _loose(parent, "wooden_crate_01", Vector3(cx, 0.0, cz), rng.randf_range(1.2, 1.8), rng.randf_range(0, TAU), 30.0)
-    # Pirate pinnaces at anchor: one off the left end of the shore, one far out behind the
-    # ship's lane on the right, never where our ship sails in.
-    for spot: Vector3 in [Vector3(-rng.randf_range(22.0, 27.0), 0, sz + rng.randf_range(5.0, 9.0)), Vector3(rng.randf_range(14.0, 22.0), 0, ship_z + rng.randf_range(12.0, 16.0))]:
+    # Fishing boats moored in a harbour only; elsewhere an anchored ship raises questions.
+    var moorings: Array = []
+    for spot: Vector3 in moorings:
         var boat := Models.prop("pinnace")
         var k := 9.0 / 33.2
         boat.scale = Vector3(k, k, k)
@@ -252,6 +316,13 @@ static func _shore(parent: Node3D, rng: RandomNumberGenerator, biome: String, sh
         if not _free(x, z, 2.0) or absf(x) < 5.0:
             continue   # the ship's lane, the castle, the firing line
         _place(parent, "boulder_01" if i % 2 == 0 else "namaqualand_boulder_02", Vector3(x, -0.45, z), rng.randf_range(1.0, 2.6), rng.randf_range(0, TAU))
+    # A broken waterline everywhere: rocks and pebbles half in the surf.
+    for i in 26:
+        var x := rng.randf_range(-40.0, 40.0)
+        var z := sz + rng.randf_range(-0.8, 1.6)
+        if not _free(x, z, 1.0) or absf(x) < 4.0:
+            continue
+        _place(parent, "namaqualand_boulder_02" if i % 3 else "boulder_01", Vector3(x, -0.25, z), rng.randf_range(0.5, 1.4), rng.randf_range(0, TAU))
     match shore:
         "rocks":
             # A broken line of big rocks along the waterline either side of the landing.
@@ -359,23 +430,18 @@ static func _sway(t: Node3D, rng: RandomNumberGenerator) -> void:
     t.set_meta("scale", t.scale.x)
 
 
-## Distant green hills: broad, low domes of grass (no snow on a warm island).
+## Distant ridges: big rock outcrops far behind the island, softened by the haze. `tint`
+## greens them for jungle islands.
 static func _hills(parent: Node3D, rng: RandomNumberGenerator, tint: Color) -> void:
-    var mat := Models.tex_material("leafy_grass", 0.06, tint)
-    for i in 9:
-        var mi := MeshInstance3D.new()
-        var sm := SphereMesh.new()
-        var r := rng.randf_range(16.0, 30.0)
-        sm.radius = r
-        sm.height = r * 2.0
-        sm.radial_segments = 24
-        sm.rings = 12
-        mi.mesh = sm
-        mi.material_override = mat
-        mi.scale = Vector3(1.0, rng.randf_range(0.28, 0.5), 0.8)
-        mi.position = Vector3(-90.0 + i * 22.0 + rng.randf_range(-6, 6), -2.0, rng.randf_range(-78, -55))
-        mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        parent.add_child(mi)
+    for i in 8:
+        var m := Models.prop("namaqualand_cliff_01")
+        var k := rng.randf_range(4.0, 6.5)
+        m.scale = Vector3(k, k * rng.randf_range(0.8, 1.2), k)
+        m.position = Vector3(-90.0 + i * 25.0 + rng.randf_range(-6, 6), -2.0, rng.randf_range(-105, -85))
+        m.rotation.y = rng.randf_range(0, TAU)
+        Models.tint(m, Color(0.7, 0.78, 0.62).lerp(tint, 0.3))
+        m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        parent.add_child(m)
 
 ## Flat-topped rock outcrops (badlands, volcano).
 static func _mesas(parent: Node3D, rng: RandomNumberGenerator, count: int, z0: float, z1: float, k0: float, k1: float, tint: Color = Color(1, 1, 1)) -> void:
@@ -552,3 +618,41 @@ static func _yard(parent: Node3D, castle: Rect2, biome: String) -> void:
     mi.position = Vector3(r.get_center().x, 0.01, r.get_center().y)
     mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     parent.add_child(mi)
+
+## A storm sky: low, torn rain clouds racing across under the overcast, in several layers.
+static func _scud(parent: Node3D) -> void:
+    for layer in 3:
+        var p := CPUParticles3D.new()
+        p.amount = 34
+        p.lifetime = 26.0
+        p.preprocess = 26.0
+        p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+        p.emission_box_extents = Vector3(10, 3 + layer * 2, 26)
+        p.direction = Vector3(1, 0, 0.1)
+        p.spread = 6.0
+        p.initial_velocity_min = 3.5 + layer
+        p.initial_velocity_max = 5.5 + layer
+        p.gravity = Vector3.ZERO
+        p.angle_min = 0.0
+        p.angle_max = 360.0
+        p.scale_amount_min = 22.0 + layer * 8
+        p.scale_amount_max = 38.0 + layer * 10
+        var ramp := Gradient.new()
+        var shade := 0.2 + layer * 0.06
+        ramp.set_color(0, Color(shade, shade, shade + 0.03, 0.0))
+        ramp.add_point(0.15, Color(shade, shade, shade + 0.03, 0.55 - layer * 0.1))
+        ramp.add_point(0.85, Color(shade, shade, shade + 0.03, 0.55 - layer * 0.1))
+        ramp.set_color(ramp.get_point_count() - 1, Color(shade, shade, shade + 0.03, 0.0))
+        p.color_ramp = ramp
+        p.mesh = QuadMesh.new()
+        var m := StandardMaterial3D.new()
+        m.albedo_texture = load("res://assets/particles/smoke_04.png" if layer != 1 else "res://assets/particles/smoke_07.png")
+        m.vertex_color_use_as_albedo = true
+        m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+        m.disable_fog = true
+        p.material_override = m
+        p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        p.position = Vector3(-75.0, 22.0 + layer * 7.0, -38.0 - layer * 14.0)
+        parent.add_child(p)

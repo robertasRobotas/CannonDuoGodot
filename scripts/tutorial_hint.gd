@@ -11,6 +11,16 @@ var step := Step.AIM
 var _t := 0.0
 var _alpha := 0.0
 var _aimed := 0.0   # degrees the player has turned so far
+var touch_mode := false
+var allowed := false   # set by the HUD: only while the player is aiming
+var _nudge_until := 0.0
+
+func set_touch_mode(on: bool) -> void:
+    touch_mode = on
+
+## The player tried to aim with a finger in gyro mode: show the phone hint again for a moment.
+func nudge() -> void:
+    _nudge_until = _t + 3.0
 
 const GOLD := Color(1.0, 0.8, 0.35)
 const WHITE := Color(1, 1, 1)
@@ -32,47 +42,61 @@ func observe(aim_change: float, power: float, fired: bool) -> void:
 func _process(delta: float) -> void:
     _t += delta
     var want := 0.0 if step == Step.DONE else 1.0
+    if _t < _nudge_until:
+        want = 1.0
     _alpha = move_toward(_alpha, want, delta * 2.0)
-    visible = _alpha > 0.01
+    visible = allowed and _alpha > 0.01
     queue_redraw()
 
 func _draw() -> void:
-    if step == Step.AIM or (step == Step.LOAD and _t < 0.5 and _alpha < 1.0):
+    if step == Step.AIM or _t < _nudge_until:
         _draw_aim(Vector2(size.x / 2.0, size.y * 0.62))
-    if step == Step.LOAD:
+    if step == Step.LOAD and _t >= _nudge_until:
         _draw_load(Vector2(size.x * 0.68, size.y * 0.5))
 
 func _c(col: Color, a: float = 1.0) -> Color:
     return Color(col.r, col.g, col.b, col.a * a * _alpha)
 
-## A phone rocking side to side with a curved double arrow above it.
+## Point the phone: an upright phone held in front of you swings left and right like a camera
+## panning, with a beam from its top showing where it looks, and straight arrows either side.
+## In touch mode: a finger swiping sideways instead.
 func _draw_aim(c: Vector2) -> void:
-    var tilt := sin(_t * 2.2) * 0.35
-    # Glow disc behind.
-    draw_circle(c, 210, _c(Color(0, 0, 0), 0.28))
-    draw_arc(c, 210, 0, TAU, 64, _c(GOLD, 0.35), 3.0)
-    # Curved arrow over the top, both ways.
-    var r := 170.0
-    var a0 := PI + 0.55
-    var a1 := TAU - 0.55
-    draw_arc(c + Vector2(0, 40), r, a0, a1, 40, _c(GOLD, 0.95), 10.0, true)
-    for end: float in [a0, a1]:
-        var tip := c + Vector2(0, 40) + Vector2(cos(end), sin(end)) * r
-        var tangent := Vector2(-sin(end), cos(end)) * (1.0 if end == a1 else -1.0)
-        var n := Vector2(tangent.y, -tangent.x)
-        draw_colored_polygon(PackedVector2Array([tip + tangent * 34, tip - n * 22, tip + n * 22]), _c(GOLD, 0.95))
-    # The phone.
-    var w := 110.0
-    var h := 200.0
-    var xf := Transform2D(tilt, c + Vector2(0, 50))
-    draw_set_transform_matrix(xf)
+    var swing := sin(_t * 1.8)
+    draw_circle(c, 230, _c(Color(0, 0, 0), 0.3))
+    draw_arc(c, 230, 0, TAU, 64, _c(GOLD, 0.35), 3.0)
+    # Straight arrows left and right.
+    for side: float in [-1.0, 1.0]:
+        var tip := c + Vector2(side * 200, 40)
+        draw_line(c + Vector2(side * 120, 40), tip - Vector2(side * 20, 0), _c(GOLD, 0.95), 10.0)
+        draw_colored_polygon(PackedVector2Array([tip + Vector2(side * 14, 0), tip - Vector2(side * 22, 24), tip - Vector2(side * 22, -24)]), _c(GOLD, 0.95))
+    if touch_mode:
+        # A finger swiping sideways across a dotted line.
+        for k in 9:
+            draw_circle(c + Vector2(-160 + k * 40, 120), 5, _c(WHITE, 0.35))
+        var fp := c + Vector2(swing * 140, 90)
+        _round_rect(Rect2(fp.x - 22, fp.y - 10, 44, 120), 22, _c(WHITE, 0.95))
+        _round_rect(Rect2(fp.x - 22, fp.y + 60, 110, 150), 40, _c(WHITE, 0.95))
+        draw_arc(fp + Vector2(0, 4), 30, 0, TAU, 32, _c(WHITE, 0.5), 3.0)
+        return
+    # The phone slides and turns a little, as if pointed at different parts of the fort.
+    var w := 100.0
+    var h := 180.0
+    var pos := c + Vector2(swing * 70, 70)
+    var ang := swing * 0.18
+    # View beam from the top of the phone to a target mark above.
+    var look := c + Vector2(swing * 170, -150)
+    var top := pos + Vector2(0, -h / 2).rotated(ang)
+    draw_colored_polygon(PackedVector2Array([top, look + Vector2(-46, 0), look + Vector2(46, 0)]), _c(GOLD, 0.22))
+    draw_arc(look, 26, 0, TAU, 32, _c(GOLD, 0.95), 5.0)
+    draw_circle(look, 6, _c(GOLD))
+    draw_set_transform_matrix(Transform2D(ang, pos))
     _round_rect(Rect2(-w / 2 - 8, -h / 2 - 8, w + 16, h + 16), 26, _c(WHITE, 0.95))
     _round_rect(Rect2(-w / 2, -h / 2, w, h), 20, _c(Color(0.15, 0.25, 0.4), 0.95))
-    # A little cannon on the screen that turns with the phone.
-    draw_circle(Vector2(0, 40), 18, _c(GOLD))
-    draw_line(Vector2(0, 40), Vector2(0, 40) + Vector2(0, -56).rotated(-tilt * 1.6), _c(GOLD), 14.0)
-    draw_circle(Vector2(0, -h / 2 + 14), 5, _c(WHITE, 0.6))
+    draw_circle(Vector2(0, h / 2 - 16), 7, _c(WHITE, 0.5))
     draw_set_transform_matrix(Transform2D.IDENTITY)
+    # Two hands holding it.
+    for side: float in [-1.0, 1.0]:
+        _round_rect(Rect2(pos.x + side * (w / 2 + 6) - 18, pos.y - 10, 36, 110), 18, _c(Color(0.95, 0.8, 0.7), 0.9))
 
 ## A finger that presses, pulls down and lifts, with a power bar filling beside it.
 func _draw_load(at: Vector2) -> void:

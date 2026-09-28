@@ -75,6 +75,8 @@ var _yaw_raw := 0.0
 var _pitch_ref := 0.0
 var _yaw_offset := 0.0
 var _aim_touch := -1
+var _pending_touch := -1
+var _touch_start := Vector2.ZERO
 var _load_touch := -1
 var _aim_last := Vector2.ZERO
 var _load_start_y := 0.0
@@ -328,8 +330,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         Atmosphere.torches(self, 6)
         Atmosphere.stars(self, 320)
         Atmosphere.deck_lantern(ship, ship.cannon_mount)
-    elif not storm:
-        Atmosphere.gulls(self, 7, Vector3(camera_look_base_guess().x, 0, Tuning.SHORE_Z - 2.0))
+
 
     # Camera and the fly-in.
     camera = Camera3D.new()
@@ -745,6 +746,17 @@ func _physics_process(delta: float) -> void:
         var drift := Vector3(sea.sample(p.x, p.z).y * -1.0, 0.0, 0.0)
         b.linear_velocity = Vector3(lerpf(v.x, drift.x, minf(delta * 2.0, 1.0)), v.y, lerpf(v.z, 0.0, minf(delta * 2.0, 1.0)))
         b.angular_velocity = b.angular_velocity.lerp(Vector3.ZERO, minf(delta * 2.5, 1.0))
+        # Floating wood turns to lie flat on the water: its thinnest side ends up facing up.
+        var basis := b.global_transform.basis
+        var thin := 0
+        for k in 3:
+            if b.size[k] < b.size[thin]:
+                thin = k
+        var axis := basis[thin].normalized()
+        if axis.dot(Vector3.UP) < 0.0:
+            axis = -axis
+        var turn := axis.cross(Vector3.UP)
+        b.angular_velocity += turn * delta * 6.0 * submerged
         # Anything that drifts in close to our ship slips under, so it never blocks the view.
         if p.z > ship.global_position.z - 7.0:
             b.set_meta("sinking", true)
@@ -881,17 +893,17 @@ func _input(ev: InputEvent) -> void:
                     event.emit("power", {"power": 0.0})
                 _aim_touch = -1
                 return
-            if drag_aim and t.position.x < vp.x * 0.45 and _aim_touch < 0:
-                _aim_touch = t.index
-                _aim_last = t.position
-            elif _load_touch < 0 and can_load():
-                _load_touch = t.index
-                _load_start_y = t.position.y
+            # Undecided until the finger moves: sideways or up aims (touch mode), down loads.
+            if _aim_touch < 0 and _load_touch < 0:
+                _pending_touch = t.index
+                _touch_start = t.position
         else:
             _touches.erase(t.index)
             if _touches.size() < 2:
                 _pinch_start = -1.0
                 _zoom_target = 0.0
+            if t.index == _pending_touch:
+                _pending_touch = -1
             if t.index == _aim_touch:
                 _aim_touch = -1
             elif t.index == _load_touch:
@@ -906,6 +918,20 @@ func _input(ev: InputEvent) -> void:
             var dist := (pts[0] as Vector2).distance_to(pts[1] as Vector2)
             _zoom_target = clampf((_pinch_start - dist) / (vp.x * 0.45), 0.0, 1.0)
             return
+        if d.index == _pending_touch:
+            var mv := d.position - _touch_start
+            if mv.length() > 24.0:
+                _pending_touch = -1
+                if mv.y > absf(mv.x) * 0.8:
+                    if can_load():
+                        _load_touch = d.index
+                        _load_start_y = _touch_start.y
+                elif drag_aim:
+                    _aim_touch = d.index
+                    _aim_last = _touch_start
+                else:
+                    # Gyro mode but the finger tries to aim: show how to aim with the phone.
+                    event.emit("touch_aim_tried", {})
         if d.index == _aim_touch:
             var delta := d.position - _aim_last
             _aim_last = d.position
@@ -1017,6 +1043,7 @@ func fire(pw: float) -> void:
     _shot_start_breaks = blocks_broken
     _shot_start_targets = targets_remaining
     _shot_blasts = 0
+    p.smashed.connect(_smash_around)
     p.hit.connect(func(_b):
         _end_follow()
         _spark_near(p))
@@ -1319,7 +1346,7 @@ func _update_projectiles() -> void:
     if frozen:
         for n in get_tree().get_nodes_in_group("projectile"):
             var bp := (n as Node3D).global_position
-            if _castle_zone.grow(1.5).has_point(Vector2(bp.x, bp.z)) and bp.y < _castle_top + 1.5:
+            if _castle_zone.grow(6.0).has_point(Vector2(bp.x, bp.z)) and bp.y < _castle_top + 4.0:
                 _freeze_all(false)
                 break
     for n in get_tree().get_nodes_in_group("projectile"):
@@ -1334,6 +1361,19 @@ func _update_projectiles() -> void:
                     if active_projectile == p:
                         active_projectile = null
                     break
+
+## A ball tearing through wood splinters the pieces right around the impact too.
+func _smash_around(at: Vector3) -> void:
+    var n := 0
+    for node in get_tree().get_nodes_in_group("blocks"):
+        var b := node as Block
+        if b.material_name != "wood" or b.is_fragment or b.frozen or b.is_queued_for_deletion():
+            continue
+        if b.global_position.distance_to(at) < 1.3 + b.size.length() * 0.25:
+            b.call_deferred("break_now")
+            n += 1
+            if n >= 4:
+                return
 
 ## A ball striking right next to powder sets it off (sparks, splinters), even if it does not
 ## touch the barrel itself; hits further away leave the powder alone.

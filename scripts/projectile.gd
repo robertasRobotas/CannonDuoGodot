@@ -6,6 +6,7 @@ extends RigidBody3D
 signal exploded(position: Vector3)
 signal splashed(position: Vector3)
 signal hit(body: Node)
+signal smashed(position: Vector3)
 
 var type: String = "iron"
 var spawn_time: float = 0.0
@@ -113,7 +114,11 @@ func _on_body_entered(body: Node) -> void:
     hit.emit(body)
     if body is Block:
         var b := body as Block
-        if type == "chain" and b.material_name == "wood" and not b.is_fragment:
+        # A heavy ball at speed smashes through wood, whatever its size.
+        if b.material_name == "wood" and not b.is_fragment and not b.frozen and linear_velocity.length() > 8.0 and type != "wood":
+            b.call_deferred("break_now")
+            smashed.emit(global_position)
+        elif type == "chain" and b.material_name == "wood" and not b.is_fragment:
             b.call_deferred("break_now")
         elif type == "fire" and b.material_name == "wood":
             b.call_deferred("ignite")

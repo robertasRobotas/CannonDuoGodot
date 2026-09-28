@@ -21,6 +21,7 @@ var base := 0.0
 var rng := RandomNumberGenerator.new()
 var _tops: Array = []   # [x, z, width] of each tower, for guns and cages
 var captives: Array = []
+var no_tnt := false
 var _cage_n := 0
 
 ## kind: small, medium, large, huge, boss, mega, harbor, battery, or daily (random).
@@ -29,6 +30,7 @@ var _cage_n := 0
 static func generate(seed_value: int, kind: String, site: String = "sand", z: float = -9.5, opts: Dictionary = {}) -> Dictionary:
     var f := Fortress.new()
     f.rng.seed = seed_value
+    f.no_tnt = bool(opts.get("no_tnt", false))
     if kind == "daily":
         kind = ["small", "medium", "large", "large"][f.rng.randi_range(0, 3)]
         site = ["sand", "rock", "cliff", "far"][f.rng.randi_range(0, 3)]
@@ -193,6 +195,10 @@ func _barrel_stack(x: float, z: float) -> void:
 # MARK: Parts
 
 func _blk(mat: String, pos: Vector3, size: Vector3, extra: Dictionary = {}) -> void:
+    if no_tnt and mat == "tnt":
+        # A castle without powder: the barrel spots hold plain cargo crates.
+        mat = "wood"
+        extra = {"style": "crate"}
     var b := {"material": mat, "position": [pos.x, pos.y, pos.z], "size": [size.x, size.y, size.z]}
     b.merge(extra)
     blocks.append(b)
@@ -288,17 +294,20 @@ func _curtain(z: float, half: float) -> void:
 ## Islanders locked in wooden cages in front of the towers (inner towers first; guns take the
 ## outer ones). Each cage is four bars and a lid; breaking any of them frees the prisoner.
 func _place_cages(count: int, deserters: int) -> void:
-    if count + deserters <= 0 or _tops.is_empty():
-        return
-    var picks := _tops.duplicate()
-    picks.sort_custom(func(p, q): return absf(p[0]) < absf(q[0]))
     var n := count + deserters
+    if n <= 0 or blocks.is_empty():
+        return
+    # Beyond both ends of the fort, a little in front: prisoners kept apart from the pirates.
+    var reach := 0.0
+    var front := -100.0
+    for b in blocks:
+        reach = maxf(reach, absf(float(b.position[0])) + float(b.size[0]) / 2.0)
+        front = maxf(front, float(b.position[2]))
     for i in n:
-        var t: Array = picks[i % picks.size()]
-        var round_n: int = i / picks.size()
-        var side := -1.0 if round_n % 2 == 0 else 1.0
-        var x: float = float(t[0]) + side * maxf(float(t[2]) * 0.3, 0.7)
-        var cz: float = float(t[1]) + float(t[2]) * 0.5 + 0.8 + round_n * 1.2
+        var side := -1.0 if i % 2 == 0 else 1.0
+        var row: int = i / 2
+        var x := side * (reach + 2.0 + row * 1.6)
+        var cz := front - 0.5 - row * 0.4
         _cage_n += 1
         for dx: float in [-0.45, 0.45]:
             for dz: float in [-0.45, 0.45]:

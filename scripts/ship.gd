@@ -5,11 +5,11 @@ class_name Ship
 extends Node3D
 
 ## Bow to stern along x; long and wide enough that the deck fills the lower screen.
-const LENGTH := 13.0
+const LENGTH := 8.5
 ## Cannon distance in from the starboard rail, and along the deck from midships toward the stern:
 ## between the mainmast (x 1.0) and the raised quarterdeck (x 3.9), on flat deck.
-const CANNON_FROM_RAIL := 1.25
-const CANNON_AFT := 3.0
+const CANNON_FROM_RAIL := 1.25 * LENGTH / 13.0
+const CANNON_AFT := 3.0 * LENGTH / 13.0
 ## The gun stands on a plank platform so the barrel clears the bulwark.
 const PLATFORM_HEIGHT := 0.5
 
@@ -32,7 +32,7 @@ func setup() -> void:
     model.scale = Vector3(s, s, s)
     a = Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), Vector3.ZERO) * a
     # Sink the keel so the deck rides about a metre above the water line.
-    model.position = Vector3(-a.get_center().x, -a.position.y - 1.3, -a.get_center().z)
+    model.position = Vector3(-a.get_center().x, -a.position.y - 1.3 * LENGTH / 13.0, -a.get_center().z)
     cannon_mount = Vector3(CANNON_AFT, 1.0, -a.size.z / 2.0 + CANNON_FROM_RAIL)
     # Concave collider so enemy balls and our own dropped balls hit the hull and deck.
     _add_collision(model)

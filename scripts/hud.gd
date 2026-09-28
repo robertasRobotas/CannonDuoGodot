@@ -133,7 +133,11 @@ func _build() -> void:
     _build_specials()
 
     add_child(_icon_button("II", 130, _toggle_pause))
-    _gyro_btn = _icon_button("GYRO", 260, func(): level.set_gyro(not level.gyro_enabled); _refresh_gyro())
+    _gyro_btn = _icon_button("GYRO", 260, func():
+        level.set_gyro(not level.gyro_enabled)
+        _refresh_gyro()
+        if _tutorial:
+            _tutorial.set_touch_mode(not level.gyro_enabled))
     _gyro_btn.add_theme_font_size_override("font_size", 24)
     add_child(_gyro_btn)
     add_child(_icon_button("⌖", 390, level.recenter))
@@ -192,6 +196,7 @@ func _build() -> void:
     add_child(_load_hint)
     if int(level.data.id) == 1:
         _tutorial = TutorialHint.new()
+        _tutorial.touch_mode = not level.gyro_enabled
         add_child(_tutorial)
 
     _pop = _label("", 90, Color(1.0, 0.85, 0.2), true)
@@ -296,7 +301,8 @@ func _icon_button(text: String, y: float, cb: Callable) -> Button:
     return b
 
 func _refresh_gyro() -> void:
-    _gyro_btn.text = "GYRO" if level.gyro_enabled else "DRAG"
+    _gyro_btn.text = "📱" if level.gyro_enabled else "☝"
+    _gyro_btn.add_theme_font_size_override("font_size", 44)
     _gyro_btn.visible = level.gyro_available
 
 ## The app went to the background: pause behind the menu so Resume is one tap away.
@@ -329,11 +335,9 @@ func _process(delta: float) -> void:
     # Wordless tutorial on level 1, until the first shot.
     if _tutorial:
         var aiming := level.phase == Level.Phase.AIMING
-        _tutorial.visible = aiming or _tutorial.step == TutorialHint.Step.DONE
+        _tutorial.allowed = aiming
         if aiming or level.shots_used > 0:
             _tutorial.observe(level.aim_yaw - _last_yaw + level.aim_pitch - _last_pitch, level.power, level.shots_used > 0)
-        if not aiming and level.shots_used == 0:
-            _tutorial.visible = false
     _last_yaw = level.aim_yaw
     _last_pitch = level.aim_pitch
 
@@ -469,6 +473,9 @@ func _on_event(name: String, d: Dictionary) -> void:
                 _show_banner("He surrenders!", "+500", Color(0.85, 0.95, 1.0))
             else:
                 _show_banner("Freed!", "+500", Color(0.6, 1.0, 0.6))
+        "touch_aim_tried":
+            if _tutorial:
+                _tutorial.nudge()
         "cine":
             _letterbox(bool(d.on))
         "ammo":
@@ -497,7 +504,17 @@ func _on_event(name: String, d: Dictionary) -> void:
             tw.tween_property(_pop, "modulate:a", 0.0, 0.3)
             tw.tween_callback(func(): _pop.visible = false)
         "finished":
-            _show_result(bool(d.won), int(d.shots), int(d.remaining))
+            if bool(d.won) and int(level.data.id) == 1:
+                # The first battle ends in the fog with the game's title.
+                var card := TitleCard.new()
+                add_child(card)
+                card.done.connect(func():
+                    _show_result(true, int(d.shots), int(d.remaining))
+                    var tw := card.create_tween()
+                    tw.tween_property(card, "modulate:a", 0.0, 0.8)
+                    tw.tween_callback(card.queue_free))
+            else:
+                _show_result(bool(d.won), int(d.shots), int(d.remaining))
 
 func _show_result(did_win: bool, shots: int, remaining: int) -> void:
     for c in _result.get_children():

@@ -104,8 +104,8 @@ for x in (-2.25, 2.25, -5.3, 5.3):
     blk("tnt", (x, 0.35, Z + 2.1), (0.55, 0.7, 0.55))
 
 # Islanders in two cages on the beach side of the fort: break a bar to free them.
-for n, x in enumerate((-2.3, 2.3), start=1):
-    cz = Z + 3.3
+for n, x in enumerate((-9.2, 9.2), start=1):   # beyond the watch posts, away from the pirates
+    cz = Z + 2.2
     for dx in (-0.45, 0.45):
         for dz in (-0.45, 0.45):
             blk("wood", (x + dx, 0.62, cz + dz), (0.1, 1.24, 0.1), cage=n)
