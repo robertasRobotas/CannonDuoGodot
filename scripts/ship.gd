@@ -11,7 +11,7 @@ const LENGTH := 8.5
 const CANNON_FROM_RAIL := 1.25 * LENGTH / 13.0
 const CANNON_AFT := 3.0 * LENGTH / 13.0
 ## The gun stands on a plank platform so the barrel clears the bulwark.
-const PLATFORM_HEIGHT := 0.5
+const PLATFORM_HEIGHT := 0.3
 
 var cannon_mount: Vector3 = Vector3(0, 1.0, 0)
 var model: Node3D
@@ -107,7 +107,7 @@ func _find_deck() -> void:
 func _add_platform(deck_y: float) -> void:
     var mi := MeshInstance3D.new()
     var bm := BoxMesh.new()
-    bm.size = Vector3(1.5, PLATFORM_HEIGHT, 1.9)
+    bm.size = Vector3(1.0, PLATFORM_HEIGHT, 1.3)
     mi.mesh = bm
     mi.material_override = Models.tex_material("brown_planks_07", 1.2, Color(0.9, 0.7, 0.55))
     mi.position = Vector3(cannon_mount.x, deck_y + PLATFORM_HEIGHT / 2.0, cannon_mount.z)

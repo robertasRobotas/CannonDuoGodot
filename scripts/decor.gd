@@ -102,7 +102,7 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
         _yard(parent, castle, biome)
     if biome != "opensea":
         _shore(parent, rng, biome, shore, ship_z)
-    _clouds(parent, rng, storm, st.get("sky", "") == "night")
+    _clouds(parent, rng, storm, st.get("sky", "") == "night", st.get("sky", "") == "sunset")
     # Everything placed above stands on the ground, not on a flat plane.
     if _terrain_on:
         for i in range(first_decor, parent.get_child_count()):
@@ -113,41 +113,55 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
                     (n as Node3D).position.y += height(p.x, p.z)
 
 ## Painted cloud cards (2D Cloud Pack) spread across the sky behind the island.
-static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, night: bool = false) -> void:
+static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, night: bool = false, sunset: bool = false) -> void:
     if storm:
         _scud(parent)
-        return
-    var src: Node3D = Models.instance("res://assets/hq/clouds/scene.gltf")
-    var cards: Array = []
-    for c in src.find_children("*", "MeshInstance3D", true, false):
-        var mi := c as MeshInstance3D
-        var rel := Models._relative_transform(src, mi)
-        var a := rel * mi.mesh.get_aabb()
-        # Upright cards facing the camera; skip the flat and sideways ones.
-        if a.size.y > 2.0 and a.size.x > a.size.z * 4.0:
-            var mat: BaseMaterial3D = mi.get_active_material(0).duplicate()
-            mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-            mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-            # Soft edges: blend the painted alpha instead of cutting it.
-            mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-            mat.albedo_color = Color(0.12, 0.14, 0.22, 0.8) if night else (Color(0.3, 0.31, 0.35) if storm else Color(1.0, 0.97, 0.94))
-            cards.append({"mesh": mi.mesh, "xf": Transform3D(Basis.IDENTITY, -a.get_center()) * rel, "mat": mat})
-    src.free()
-    if cards.is_empty():
-        return
-    for i in (11 if storm else 8):
-        var card: Dictionary = cards[rng.randi_range(0, cards.size() - 1)]
-        var part := MeshInstance3D.new()
-        part.mesh = card.mesh
-        part.transform = card.xf
-        part.material_override = card.mat
-        part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        var holder := Node3D.new()
-        holder.add_child(part)
-        var k := rng.randf_range(1.3, 2.6)
-        holder.scale = Vector3(k * (1.0 if rng.randf() < 0.5 else -1.0), k, k)
-        holder.position = Vector3(rng.randf_range(-55, 55), rng.randf_range(11, 24) if not storm else rng.randf_range(9, 16), rng.randf_range(-70, -42))
-        parent.add_child(holder)
+    # Every other sky is a photograph with its own clouds; no cloud objects needed.
+    return
+    # Volumetric-looking clouds: each one a cluster of soft camera-facing puffs packed into a
+    # flattened dome, sunlit on top and grey-blue underneath, so it stays round and solid from
+    # every angle, including from above. High and far, above the fly-in.
+    var top := Color(0.2, 0.22, 0.3, 0.55) if night else Color(1.0, 0.99, 0.97, 0.75)
+    var belly := Color(0.1, 0.11, 0.16, 0.6) if night else Color(0.72, 0.76, 0.86, 0.7)
+    if sunset:
+        top = Color(1.0, 0.86, 0.72, 0.75)
+        belly = Color(0.62, 0.5, 0.58, 0.7)
+    var mm := MultiMesh.new()
+    mm.transform_format = MultiMesh.TRANSFORM_3D
+    mm.use_colors = true
+    var q := QuadMesh.new()
+    q.size = Vector2(1, 1)
+    mm.mesh = q
+    var puffs: Array = []
+    for c in 9:
+        var centre := Vector3(rng.randf_range(-110, 110), rng.randf_range(38, 55), rng.randf_range(-150, -70))
+        var span := Vector3(rng.randf_range(14, 26), rng.randf_range(4, 7), rng.randf_range(8, 14))
+        for k in 26:
+            var u := Vector3(rng.randfn(0, 0.45), absf(rng.randfn(0, 0.5)), rng.randfn(0, 0.45))
+            var pos := centre + u * span
+            var shade := clampf(u.y / 0.8, 0.0, 1.0)
+            var size := rng.randf_range(12.0, 22.0) * (1.0 - 0.3 * shade)
+            puffs.append([pos, size, belly.lerp(top, shade)])
+    mm.instance_count = puffs.size()
+    for i in puffs.size():
+        var pf: Array = puffs[i]
+        var sz: float = pf[1]
+        mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3(sz, sz, sz)), pf[0]))
+        mm.set_instance_color(i, pf[2])
+    var mi := MultiMeshInstance3D.new()
+    mi.multimesh = mm
+    var m := StandardMaterial3D.new()
+    m.albedo_texture = load("res://assets/particles/whitePuff12.png")
+    m.vertex_color_use_as_albedo = true
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    m.billboard_keep_scale = true
+    m.disable_fog = true
+    m.cull_mode = BaseMaterial3D.CULL_DISABLED
+    mi.material_override = m
+    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    parent.add_child(mi)
 
 # MARK: Terrain
 

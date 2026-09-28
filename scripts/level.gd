@@ -9,6 +9,7 @@ enum Phase { LOADING, INTRO, AIMING, IN_FLIGHT, SETTLING, SLOWMO, FINISHED }
 ## Fly-in start points relative to the ship: far out, so the camera sweeps in over the water.
 const INTRO_STARTS := [Vector3(-26, 12.0, 26), Vector3(24, 10.0, 24), Vector3(-4, 18.0, 32), Vector3(12, 8.0, 34)]
 const Z_OFF := 0.0
+const SKY_TURN := {"noon": 0.0, "sunset": 0.95, "night": 0.0}
 
 var data: Dictionary
 var settings: Dictionary
@@ -217,6 +218,14 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         if tempest:
             pano.energy_multiplier = 0.2
         sm = pano
+    elif sky_kind in ["noon", "sunset"]:
+        # A real photographed sky (Poly Haven), clouds and all: cheap, and never flat.
+        var photo := PanoramaSkyMaterial.new()
+        photo.panorama = load("res://assets/sky/sky_%s.jpg" % sky_kind)
+        photo.energy_multiplier = {"noon": 1.0, "sunset": 1.1, "night": 0.32}[sky_kind]
+        sm = photo
+        # Turn the photo so the best of it (the sunset glow) sits behind the fort.
+        e.sky_rotation = Vector3(0, SKY_TURN.get(sky_kind, 0.0), 0)
     else:
         var ps := ProceduralSkyMaterial.new()
         if sky_kind == "night":
@@ -746,7 +755,7 @@ func _process(delta: float) -> void:
     # Turning the cannon clicks under the hand, a notch every degree and a half (aim view only).
     if phase == Phase.AIMING and zoom_out < 0.15:
         _turn_accum += absf(aim_yaw - _prev_yaw) + absf(aim_pitch - _prev_pitch)
-        if _turn_accum > 4.0:
+        if _turn_accum > 8.0:
             _turn_accum = 0.0
             Haptics.detent()
     _prev_yaw = aim_yaw
