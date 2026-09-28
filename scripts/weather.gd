@@ -44,7 +44,7 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
     if storminess >= 0.6:
         # Rain: streak cards falling at a slant, dense near the camera.
         var rain := _particles("res://assets/particles/trace_01.png", Color(0.85, 0.9, 1.0, 0.5), Vector2(0.05, 0.9), true)
-        rain.amount = 900
+        rain.amount = int(900 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0))
         rain.lifetime = 1.3
         rain.preprocess = 1.3
         rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX

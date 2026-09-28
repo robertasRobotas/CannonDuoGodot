@@ -86,9 +86,13 @@ func _burst(at: Vector3, color: Color, count: int, speed: float, size: float, li
 func prewarm(at: Vector3) -> void:
     _burst(at, Color(1, 1, 1, 0.01), 2, 0.1, 0.01, 0.2)
 
+## Blasts grow with the distance to the castle, so a far fort still shows a big fireball.
+var blast_scale := 1.0
+
 func muzzle(at: Vector3) -> void:
-    _sprites(at, "res://assets/particles/flash03.png", Color(1, 0.9, 0.7, 1), 2, 0.2, 1.3, 0.14, 0.0, 1.5)
-    _sprites(at, "res://assets/particles/whitePuff05.png", Color(0.92, 0.92, 0.9, 0.55), 7, 1.4, 0.55, 1.3, 0.4, 2.2, 50.0)
+    _sprites(at, "res://assets/particles/flash03.png", Color(1, 0.9, 0.7, 1), 2, 0.2, 1.1, 0.12, 0.0, 1.5)
+    # A small puff that drifts away from the lens; a big one whites out the view.
+    _sprites(at, "res://assets/particles/whitePuff05.png", Color(0.92, 0.92, 0.9, 0.3), 5, 1.2, 0.35, 1.0, 0.4, 1.8, 40.0)
 
 func dust(at: Vector3, material: String) -> void:
     var c: Color
@@ -106,10 +110,11 @@ func pop(at: Vector3, color: Color) -> void:
     _burst(at, Color(1, 0.96, 0.88), 14, 1.5, 0.14, 0.6)
 
 func blast(at: Vector3) -> void:
-    _sprites(at, "res://assets/particles/explosion02.png", Color(1, 0.95, 0.85, 1), 5, 2.5, 3.2, 0.55, 0.0, 2.2)
-    _sprites(at, "res://assets/particles/explosion05.png", Color(1, 0.9, 0.8, 1), 5, 4.0, 2.6, 0.7, 0.0, 2.0)
-    _sprites(at + Vector3(0, 0.5, 0), "res://assets/particles/blackSmoke08.png", Color(0.3, 0.28, 0.27, 0.8), 14, 2.2, 3.0, 3.2, 1.2, 2.2, 70.0)
-    _sprites(at, "res://assets/particles/spark_05.png", Color(1, 0.8, 0.4, 1), 30, 9.0, 0.35, 0.8, -8.0, 1.0)
+    var k := blast_scale
+    _sprites(at, "res://assets/particles/explosion02.png", Color(1, 0.9, 0.7, 1), 6, 2.5 * k, 3.2 * k, 0.8, 0.0, 2.2)
+    _sprites(at, "res://assets/particles/explosion05.png", Color(1, 0.75, 0.45, 1), 6, 4.0 * k, 2.6 * k, 1.0, 0.0, 2.0)
+    _sprites(at + Vector3(0, 0.5, 0), "res://assets/particles/blackSmoke08.png", Color(0.25, 0.23, 0.22, 0.85), 14, 2.2 * k, 3.0 * k, 3.2, 1.2, 2.2, 70.0)
+    _sprites(at, "res://assets/particles/spark_05.png", Color(1, 0.8, 0.4, 1), 34, 9.0 * k, 0.35 * k, 0.9, -8.0, 1.0)
     _burst(at, Color(1, 0.62, 0.2), 40, 5.5, 0.16, 0.9)
     # Shock ring: a flat expanding disc.
     var ring := MeshInstance3D.new()

@@ -11,23 +11,34 @@ uniform vec3 deep_color : source_color = vec3(0.08, 0.30, 0.52);
 uniform vec3 shallow_color : source_color = vec3(0.22, 0.62, 0.74);
 uniform vec3 sky_color : source_color = vec3(0.42, 0.60, 0.90);
 uniform vec3 foam_color : source_color = vec3(0.98, 0.98, 0.96);
+// Longer waves for big swells, so a ship can ride them instead of cutting through.
+uniform float wave_len = 1.0;
+// The player's hull footprint (x, z centre, half length, half width) and its waterline: the
+// water surface is kept below the deck there, so the sea never shows inside the ship.
+uniform vec4 hull = vec4(0.0, 0.0, 0.0, 0.0);
+uniform float hull_floor = -100.0;
 
 varying float crest;
 varying vec3 world_pos;
 
-float wave_height(vec2 p, float t) {
+float wave_height(vec2 q, float t) {
+    vec2 p = q / wave_len;
     float w1 = sin(p.x * 0.35 + t * 1.1);
     float w2 = sin((p.x + p.y) * 0.21 - t * 0.8) * 0.6;
     float w3 = sin(p.y * 0.5 + t * 1.6) * 0.35;
     float w4 = sin((p.x * 0.6 - p.y * 0.4) + t * 1.9) * 0.25;
     float chop = storm > 0.4 ? sin(p.x * 1.3 - t * 3.2) * 0.12 * storm : 0.0;
-    float fade = open_sea ? 1.0 : smoothstep(shore_z + 0.5, shore_z + 4.0, p.y);
+    float fade = open_sea ? 1.0 : smoothstep(shore_z + 0.5, shore_z + 4.0, q.y);
     return amplitude * fade * (w1 + w2 + w3 + w4 + chop);
 }
 
 void vertex() {
     vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float h = wave_height(wp.xz, sea_time);
+    vec2 d = abs(wp.xz - hull.xy);
+    if (d.x < hull.z && d.y < hull.w) {
+        h = min(h, hull_floor - wp.y);
+    }
     VERTEX.y += h;
     float e = 0.4;
     float hx = wave_height(wp.xz + vec2(e, 0.0), sea_time) - wave_height(wp.xz - vec2(e, 0.0), sea_time);

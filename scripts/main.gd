@@ -161,6 +161,7 @@ func _clear() -> void:
         _level = null
     Engine.time_scale = 1.0
     get_tree().paused = false
+    Haptics.muted = false
 
 func _label(text: String, size: int, color: Color = Color.WHITE) -> Label:
     var l := Label.new()

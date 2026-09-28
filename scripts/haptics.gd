@@ -3,6 +3,9 @@
 class_name Haptics
 
 static var enabled := true
+## Off while a result panel or menu is up.
+static var muted := false
+static var _busy_until := 0.0
 
 static func tick(power: float) -> void:
     _buzz(8 + int(10 * power), 0.25 + 0.35 * power)
@@ -23,6 +26,14 @@ static func rumble(combo: int = 1) -> void:
 static func hull() -> void:
     _buzz(400, 1.0)
 
+## One buzz at a time: a collapse breaks hundreds of pieces, and queuing a buzz for each kept
+## the phone vibrating long after (into the result panel). New buzzes wait for the last one.
 static func _buzz(ms: int, amplitude: float) -> void:
-    if enabled:
-        Input.vibrate_handheld(ms, amplitude)
+    if not enabled or muted:
+        return
+    var now := Time.get_ticks_msec() / 1000.0
+    if now < _busy_until:
+        return
+    var d := mini(ms, 350)
+    _busy_until = now + d / 1000.0 + 0.06
+    Input.vibrate_handheld(d, amplitude)

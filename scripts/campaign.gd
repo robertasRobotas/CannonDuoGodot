@@ -19,7 +19,9 @@ const CHAPTERS := [
 ##   height multiplier), fort [kind, site, z, opts], ships [[x, z, speed, hp, cannon], ...],
 ##   ammo, old (the old small cannon), offshore, look (camera aim for sea levels).
 const LEVELS := {
-    1: {"json": true, "name": "Storm Landing", "sub": "The first fort", "biome": "tropic", "tip": "Hit the red powder barrels. The whole fort comes down."},
+    1: {"json": true, "name": "Storm Landing", "sub": "The first fort", "biome": "tropic", "sea": 1.0, "swell": 2.3, "offshore": 24.0, "intro_hold": 3.5, "fov": 74.0,
+        "intro_from": [-30.0, 15.0, 40.0], "sail_in": 11.0, "sail_after": 0.8,
+        "tip": "Hit the red powder barrels. The whole fort comes down.", },
     2: {"name": "Gull Rock", "sub": "A pirate lookout", "biome": "tropic", "sky": "noon", "sea": 0.1,
         "fort": ["small", "sand", -8.5, {"captives": 1}], "tip": "Break the cage bars and the prisoner runs free."},
     3: {"name": "Rock Perch", "sub": "Pirates on a rock", "biome": "tropic", "sky": "sunset", "sea": 0.2,
@@ -97,6 +99,13 @@ static func level(id: int, json: Dictionary) -> Dictionary:
     d["terrain"] = terrain
     if r.has("sea"):
         d["sea"] = r.sea
+    if r.has("offshore"):
+        d["offshore"] = r.offshore
+    if r.has("intro_hold"):
+        d["intro_hold"] = r.intro_hold
+    for key in ["fov", "intro_from", "sail_in", "sail_after"]:
+        if r.has(key):
+            d[key] = r[key]
     if bool(r.get("json", false)):
         return d
     # Castle.

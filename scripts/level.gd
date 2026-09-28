@@ -25,6 +25,14 @@ var blast_count := 0
 var thunder_count := 0
 var sea: Sea
 var ship_base_x := 0.0
+var intro_hold := Tuning.INTRO_HOLD
+var _castle_zone := Rect2()
+var _castle_top := 0.0
+var _intro_look := Vector2.ZERO   # degrees of look-around from the phone during the fly-in
+var sail_in := Tuning.SAIL_IN
+var sail_after := Tuning.SAIL_IN_AFTER
+var _trim := 0.0
+var _heel := 0.0
 var style: Dictionary
 var ship: Ship
 var cannon: Node3D
@@ -165,6 +173,7 @@ func sea_description() -> String:
 # MARK: Build
 
 func build(level_data: Dictionary, user_settings: Dictionary) -> void:
+    Haptics.muted = false
     data = level_data
     settings = user_settings
     gyro_enabled = bool(settings.get("gyro", true))
@@ -192,11 +201,15 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     var sm: Material
     style = Decor.style(data, storm)
     var sky_kind: String = style.sky
+    # The worst storms (level 1): the rain blacks out the sky.
+    var tempest := float(data.get("sea", 0.0)) >= 0.95
     if sky_kind == "overcast" or sky_kind == "storm":
         # Real overcast sky (Poly Haven HDR), darker for storms.
         var pano := PanoramaSkyMaterial.new()
         pano.panorama = load("res://assets/sky/overcast.hdr")
         pano.energy_multiplier = 0.45 if sky_kind == "storm" else 0.8
+        if tempest:
+            pano.energy_multiplier = 0.2
         sm = pano
     else:
         var ps := ProceduralSkyMaterial.new()
@@ -223,7 +236,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     e.background_mode = Environment.BG_SKY
     e.sky = sky
     e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    e.ambient_light_energy = 0.9 if not storm else 0.6
+    e.ambient_light_energy = 0.9 if not storm else (0.32 if tempest else 0.6)
     if sky_kind == "night":
         e.ambient_light_energy = 0.4
     e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
@@ -232,6 +245,9 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     e.fog_enabled = true
     e.fog_light_color = Color(0.46, 0.50, 0.56) if storm else (Color(0.92, 0.72, 0.62) if sky_kind == "sunset" else Color(0.72, 0.80, 0.88))
     e.fog_density = 0.008 if storm else (0.005 if is_windy() else 0.003)
+    if tempest:
+        e.fog_light_color = Color(0.2, 0.22, 0.26)
+        e.fog_density = 0.0055
     if sky_kind == "night":
         e.fog_light_color = Color(0.05, 0.07, 0.13)
         e.fog_density = 0.006
@@ -239,7 +255,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     env.environment = e
     add_child(env)
     sun = DirectionalLight3D.new()
-    sun.light_energy = 1.1 if not storm else 0.55
+    sun.light_energy = 1.1 if not storm else (0.3 if tempest else 0.55)
     sun.light_color = Color(1.0, 0.93, 0.85) if not storm else Color(0.75, 0.8, 0.95)
     if sky_kind == "sunset":
         # Low warm sun from the left, long shadows.
@@ -301,6 +317,9 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     for s in data.get("enemyShips", []):
         _spawn_enemy_ship(s)
     _freeze_all(true)
+    _castle_zone = _castle_rect()
+    for b in data.blocks:
+        _castle_top = maxf(_castle_top, float(b.position[1]) + float(b.size[1]) / 2.0)
 
     # Life: flags on the towers; at night torches, stars and a deck lantern; gulls by day.
     Atmosphere.flags(self, 3, 1.0 + float(data.get("sea", 0.0)))
@@ -314,7 +333,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 
     # Camera and the fly-in.
     camera = Camera3D.new()
-    camera.fov = Tuning.CAMERA_FOV
+    # A wider view on levels with a big fort far away (level 1).
+    camera.fov = float(data.get("fov", Tuning.CAMERA_FOV))
     camera.cull_mask = 0xFFFFF
     camera.near = 0.05
     camera.far = 400.0
@@ -322,8 +342,13 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     camera.make_current()
     camera_look_base = _v3(data.camera.lookAt)
     intro_start = INTRO_STARTS[(int(data.id) - 1) % INTRO_STARTS.size()]
+    if data.has("intro_from"):
+        intro_start = _v3(data.intro_from)
+    sail_in = float(data.get("sail_in", Tuning.SAIL_IN))
+    sail_after = float(data.get("sail_after", Tuning.SAIL_IN_AFTER))
     loading_end = Tuning.LOADING_DURATION
-    intro_end = loading_end + Tuning.INTRO_DURATION + Tuning.INTRO_HOLD
+    intro_hold = float(data.get("intro_hold", Tuning.INTRO_HOLD))
+    intro_end = loading_end + Tuning.INTRO_DURATION + intro_hold
     camera_pos = ship_pos + intro_start
     camera_look = ship_pos + Vector3(0, 1.5, 0)
 
@@ -345,6 +370,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 
     fx = Fx.new()
     add_child(fx)
+    fx.blast_scale = clampf(cannon_pos.distance_to(camera_look_base) / 13.0, 1.0, 2.2)
     weather = Weather.new()
     add_child(weather)
     weather.setup(self, float(data.get("sea", 0.0)), ship_pos)
@@ -658,11 +684,13 @@ func _process(delta: float) -> void:
     if phase == Phase.INTRO and time >= intro_end:
         phase = Phase.AIMING
         event.emit("phase", {})
-    if auto_fire >= 0.0 and not _auto_fired and phase == Phase.AIMING and time >= intro_end + Tuning.SAIL_IN_AFTER:
+    if auto_fire >= 0.0 and not _auto_fired and phase == Phase.AIMING and time >= intro_end + sail_after:
         _auto_fired = true
         set_aim(auto_fire_yaw, auto_fire_pitch)
         fire(auto_fire)
-    _update_gyro(delta)
+    # Aim and camera follow the phone in real time, even while slow motion runs.
+    var real_delta := delta / maxf(Engine.time_scale, 0.05)
+    _update_gyro(real_delta)
     _rock_ship()
     _sway_trees()
     _apply_aim()
@@ -675,7 +703,7 @@ func _process(delta: float) -> void:
     _update_projectiles()
     _update_fires(delta)
     _track_near_miss()
-    _update_camera(delta)
+    _update_camera(real_delta)
     _check_progress()
     if blast_slowmo_end >= 0.0 and time >= blast_slowmo_end:
         blast_slowmo_end = -1.0
@@ -683,6 +711,48 @@ func _process(delta: float) -> void:
             Engine.time_scale = 1.0
     if is_storm():
         _update_weather()
+
+## Wood that lands in the sea floats: it splashes in, sinks a little, is pushed back up by
+## the water it displaces, bobs with the waves and slowly drifts. Stone and iron sink.
+func _physics_process(delta: float) -> void:
+    if sea == null or frozen:
+        return
+    for n in get_tree().get_nodes_in_group("blocks"):
+        var b := n as Block
+        if b.freeze or b.material_name != "wood":
+            continue
+        var p := b.global_position
+        if not open_sea and p.z < Tuning.SHORE_Z + 0.5:
+            continue
+        var water := Tuning.SEA_LEVEL + sea.height(p.x, p.z)
+        var half := minf(b.size.x, minf(b.size.y, b.size.z)) * 0.5
+        var depth := water - (p.y - half)
+        if depth <= 0.0:
+            b.set_meta("wet", false)
+            continue
+        if not b.get_meta("wet", false):
+            b.set_meta("wet", true)
+            if b.linear_velocity.y < -2.0:
+                fx.splash(Vector3(p.x, water, p.z))
+        # Wood is about half as dense as water. It hits the surface, is slowed hard by it,
+        # and settles half under with no spring: strong damping on vertical motion so it
+        # never bobs out. Rocking comes from the waves it rides.
+        var submerged := clampf(depth / (half * 2.0), 0.0, 1.0)
+        var target := water + half * 0.1 - p.y              # float line
+        var v := b.linear_velocity
+        var up := target * 14.0 - v.y * 7.0                 # stiff, critically damped
+        b.apply_central_force(Vector3(0, (9.8 + up) * b.mass * minf(submerged * 3.0, 1.0), 0))
+        var drift := Vector3(sea.sample(p.x, p.z).y * -1.0, 0.0, 0.0)
+        b.linear_velocity = Vector3(lerpf(v.x, drift.x, minf(delta * 2.0, 1.0)), v.y, lerpf(v.z, 0.0, minf(delta * 2.0, 1.0)))
+        b.angular_velocity = b.angular_velocity.lerp(Vector3.ZERO, minf(delta * 2.5, 1.0))
+        # Anything that drifts in close to our ship slips under, so it never blocks the view.
+        if p.z > ship.global_position.z - 7.0:
+            b.set_meta("sinking", true)
+        if b.get_meta("sinking", false):
+            b.apply_central_force(Vector3(0, -9.8 * b.mass * 3.0, 0))
+            if p.y < water - 3.0:
+                b.queue_free()
+        b.angular_velocity = b.angular_velocity.lerp(Vector3.ZERO, minf(delta * 1.5 * submerged, 1.0))
 
 ## Trees lean and sway with the wind, harder in a storm, with slow gusts.
 func _sway_trees() -> void:
@@ -701,22 +771,35 @@ func _sway_trees() -> void:
 
 func _rock_ship() -> void:
     # Sail in from the right (bow first, to the left) and ease to a stop as aiming starts.
-    var span := intro_end - loading_end + Tuning.SAIL_IN_AFTER
+    var span := intro_end - loading_end + sail_after
     var k := clampf((time - loading_end) / span, 0.0, 1.0)
     var eased := sin(k * PI / 2.0)
-    ship.position.x = ship_base_x + Tuning.SAIL_IN * (1.0 - eased)
+    ship.position.x = ship_base_x + sail_in * (1.0 - eased)
     var p := ship.position
-    var s := sea.sample(p.x, p.z)
-    ship.position.y = Tuning.SEA_LEVEL + s.x + Tuning.SHIP_FREEBOARD
-    # A big ship rides the swell: it lifts and drops with the waves but heels only so far.
-    var roll := clampf(atan(s.y) * Tuning.SHIP_ROLL_GAIN, -0.16, 0.16)
-    var pitch := clampf(atan(s.z) * Tuning.SHIP_PITCH_GAIN, -0.1, 0.1)
-    # Recoil heel: a damped spring kicked by each shot.
     var dt := get_process_delta_time()
+    # The hull floats on the water under its whole length: bow, stern and both sides. It
+    # heaves with their average, pitches with bow against stern and rolls with side against
+    # side, and being heavy it follows the sea a little behind, never jerking.
+    var half_l := Ship.LENGTH * 0.45
+    var half_w := 1.2
+    var bow := sea.height(p.x - half_l, p.z)
+    var stern := sea.height(p.x + half_l, p.z)
+    var port := sea.height(p.x, p.z - half_w)
+    var starboard := sea.height(p.x, p.z + half_w)
+    var mid := sea.height(p.x, p.z)
+    var level_y := Tuning.SEA_LEVEL + (bow + stern + port + starboard + mid * 2.0) / 6.0 + Tuning.SHIP_FREEBOARD
+    var trim := clampf(atan2(stern - bow, half_l * 2.0), -0.22, 0.22)      # fore and aft
+    var heel := clampf(atan2(starboard - port, half_w * 2.0) * 0.55, -0.2, 0.2)   # side to side
+    var follow := minf(dt * 3.5, 1.0)
+    ship.position.y = lerpf(ship.position.y, level_y, follow) if time > 0.1 else level_y
+    _trim = lerpf(_trim, trim, follow)
+    _heel = lerpf(_heel, heel, follow)
+    # Recoil heel: a damped spring kicked by each shot.
     _kick_vel += (-kick * 30.0 - _kick_vel * 5.0) * dt
     kick += _kick_vel * dt
-    ship.rotation = Vector3(pitch - kick, 0, -roll)
-    camera_up = Vector3(sin(-roll * 0.5), cos(-roll * 0.5), 0)
+    ship.rotation = Vector3(-_heel - kick, 0, _trim)
+    camera_up = Vector3(sin(_trim * 0.4), cos(_trim * 0.4), 0)
+    sea.set_hull(ship.position, Ship.LENGTH * 0.47, 1.35, ship.position.y - 0.45)
 
 func cannon_world() -> Vector3:
     return ship.to_global(ship.cannon_mount)
@@ -852,9 +935,18 @@ func _release_load() -> void:
 func _update_gyro(delta: float) -> void:
     if not (gyro_enabled and gyro_available):
         return
-    if phase != Phase.AIMING and phase != Phase.IN_FLIGHT and phase != Phase.SETTLING:
-        return
     var g := Input.get_gyroscope()
+    if phase == Phase.LOADING or phase == Phase.INTRO:
+        # During the fly-in the phone looks around a little, then the view settles back.
+        var rate := Vector2(-g.y, g.x)
+        if rate.length() < Tuning.GYRO_DEADZONE:
+            rate = Vector2.ZERO
+        _intro_look += rate * rad_to_deg(1.0) * delta * 0.8
+        _intro_look = _intro_look.clamp(Vector2(-18, -10), Vector2(18, 10))
+        return
+    _intro_look = _intro_look.lerp(Vector2.ZERO, minf(delta * 3.0, 1.0))
+    if phase == Phase.FINISHED:
+        return
     # Yaw from the gyro about the phone's vertical axis, with the reference sliding along past
     # the limit so turning back moves the aim at once. Gain and deadzone keep it calm.
     var rate := -g.y
@@ -898,8 +990,6 @@ func set_gyro(enabled: bool) -> void:
 func fire(pw: float) -> void:
     if not can_load():
         return
-    if frozen:
-        _freeze_all(false)
     var type := next_ammo()
     var special := type == armed_special and armed_special != ""
     var v := aim_direction() * launch_speed(pw, type)
@@ -927,7 +1017,9 @@ func fire(pw: float) -> void:
     _shot_start_breaks = blocks_broken
     _shot_start_targets = targets_remaining
     _shot_blasts = 0
-    p.hit.connect(func(_b): _end_follow())
+    p.hit.connect(func(_b):
+        _end_follow()
+        _spark_near(p))
     # The shot that may win it: a touch of slow motion while it flies.
     if targets_remaining + ships_remaining <= 1 or (projectiles_remaining == 0 and specials_left() == 0):
         follow = true
@@ -976,7 +1068,8 @@ func _fragment(blk: Block) -> void:
     if fragments_alive >= Tuning.MAX_FRAGMENTS:
         return
     var size := blk.size
-    var n := Tuning.FRAGMENT_COUNT
+    var blasted := blk.has_meta("blast_v")
+    var n := Tuning.FRAGMENT_COUNT + (2 if blasted else 0)
     var axis := 0
     if size.y > size.x and size.y > size.z:
         axis = 1
@@ -1005,8 +1098,10 @@ func _fragment(blk: Block) -> void:
         local[axis] = (float(i) + 0.5) * piece[axis] - size[axis] / 2.0
         f.position = blk.to_global(local)
         f.rotation = blk.global_rotation
-        f.linear_velocity = blk.linear_velocity + Vector3(randf_range(-1, 1), randf_range(0, 1), randf_range(-1, 1)) * 1.2
-        f.angular_velocity = Vector3(randf_range(-3, 3), randf_range(-3, 3), randf_range(-3, 3))
+        var push: Vector3 = blk.get_meta("blast_v", Vector3.ZERO)
+        var spread := 3.0 if blasted else 1.2
+        f.linear_velocity = blk.linear_velocity + push + Vector3(randf_range(-1, 1), randf_range(0, 1), randf_range(-1, 1)) * spread
+        f.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-6, 6), randf_range(-6, 6))
         f.spawn_time = time
         add_child(f)
         fragments_alive += 1
@@ -1033,19 +1128,24 @@ func explode(center: Vector3) -> void:
         var body := n as RigidBody3D
         var off := body.global_position - center
         var dist := off.length()
-        var radius := Tuning.TNT_RADIUS * powder_scale
-        if dist >= radius:
+        var radius := Tuning.TNT_RADIUS * powder_scale * float(data.get("blast_radius", 1.0))
+        # Powder catches from further away than a blast can break wood: chains carry on.
+        var catches := body is Block and (body as Block).material_name == "tnt" and not (body as Block).is_fragment
+        if dist >= radius * (1.5 if catches else 1.0):
             continue
         var falloff := 1.0 - dist / radius
-        var dir := Vector3.UP if dist < 0.05 else (off + Vector3(0, 0.35, 0)).normalized()
-        var dv := Tuning.TNT_BLAST_SPEED * falloff
+        # Thrown out in every direction and up, with a random twist so pieces scatter wide.
+        var dir := Vector3.UP if dist < 0.05 else (off.normalized() + Vector3(randf_range(-0.35, 0.35), 0.55, randf_range(-0.35, 0.35))).normalized()
+        var dv := Tuning.TNT_BLAST_SPEED * (0.35 + 0.65 * falloff)
         if body is Block and (body as Block).frozen:
             (body as Block).set_frozen(false)
         if body is Enemy and (body as Enemy).frozen:
             (body as Enemy).set_frozen(false)
         body.apply_central_impulse(dir * dv * body.mass)
+        body.apply_torque_impulse(Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * dv * body.mass * 0.3)
         if body is Block:
             var b := body as Block
+            b.set_meta("blast_v", dir * dv)
             if b.material_name == "tnt" and not b.is_fragment:
                 # Chain reaction: the next crate goes a beat later, so the fort goes up in a
                 # rolling cascade instead of one flash.
@@ -1214,6 +1314,14 @@ func _update_enemies(delta: float) -> void:
 
 func _update_projectiles() -> void:
     var cp := cannon_world()
+    # The castle stays locked until a ball actually comes to it: a shot into the sea or the
+    # beach leaves it standing.
+    if frozen:
+        for n in get_tree().get_nodes_in_group("projectile"):
+            var bp := (n as Node3D).global_position
+            if _castle_zone.grow(1.5).has_point(Vector2(bp.x, bp.z)) and bp.y < _castle_top + 1.5:
+                _freeze_all(false)
+                break
     for n in get_tree().get_nodes_in_group("projectile"):
         var p := n as Projectile
         if p:
@@ -1226,6 +1334,19 @@ func _update_projectiles() -> void:
                     if active_projectile == p:
                         active_projectile = null
                     break
+
+## A ball striking right next to powder sets it off (sparks, splinters), even if it does not
+## touch the barrel itself; hits further away leave the powder alone.
+func _spark_near(ball: Projectile) -> void:
+    if not is_instance_valid(ball):
+        return
+    var at := ball.global_position
+    var reach := 2.2 * (1.3 if float(data.get("blast_radius", 1.0)) > 1.0 else 1.0)
+    for n in get_tree().get_nodes_in_group("blocks"):
+        var b := n as Block
+        if b.material_name == "tnt" and not b.is_fragment and b.global_position.distance_to(at) < reach:
+            b.call_deferred("break_now")
+            return
 
 ## The volcano spits a burning rock onto the castle: it smashes what it lands on.
 func _lava_bomb() -> void:
@@ -1399,6 +1520,12 @@ func _update_fires(delta: float) -> void:
 
 # MARK: Camera
 
+## Turns the camera by the phone's small look-around during the fly-in.
+func _apply_intro_look() -> void:
+    if _intro_look.length() > 0.01:
+        camera.rotate_object_local(Vector3.UP, deg_to_rad(_intro_look.x))
+        camera.rotate_object_local(Vector3.RIGHT, deg_to_rad(_intro_look.y))
+
 func _update_camera(delta: float) -> void:
     var ship_pos := ship.global_position
     if phase == Phase.LOADING:
@@ -1416,8 +1543,9 @@ func _update_camera(delta: float) -> void:
     camera.cull_mask = 0xFFFFF
     if phase == Phase.INTRO:
         var duration := Tuning.INTRO_DURATION
-        var t: float = clampf((time - loading_end - Tuning.INTRO_HOLD) / duration, 0.0, 1.0)
-        var eased := t * t * (3.0 - 2.0 * t)
+        var t: float = clampf((time - loading_end - intro_hold) / duration, 0.0, 1.0)
+        # Level 1 drifts slowly at first, then swoops down fast; others ease in and out.
+        var eased := pow(t, 2.6) if data.has("intro_from") else t * t * (3.0 - 2.0 * t)
         var start := ship_pos + intro_start
         var start_look := ship_pos + Vector3(0, 1.5, 0)
         var d := _desired_camera()
@@ -1425,6 +1553,7 @@ func _update_camera(delta: float) -> void:
         camera_look = start_look.lerp(d[1], eased)
         camera.global_position = camera_pos
         camera.look_at(camera_look, Vector3.UP)
+        _apply_intro_look()
         return
     if _camera_override(delta):
         return
@@ -1449,6 +1578,7 @@ func _update_camera(delta: float) -> void:
     camera_pos = camera_pos.lerp(zoomed, minf(4.0 * delta, 1.0))
     camera.global_position = camera_pos + jitter * 0.5
     camera.look_at(camera_look + jitter, camera_up)
+    _apply_intro_look()
 
 ## Orbit around the cannon: the cannon stays on screen whatever the aim.
 func _desired_camera() -> Array:
@@ -1530,6 +1660,7 @@ func _begin_win(at: Vector3) -> void:
 func _finish(did_win: bool) -> void:
     if phase == Phase.FINISHED:
         return
+    Haptics.muted = true
     if did_win:
         # The pirates are gone: everyone still in a cage walks free.
         for n in get_tree().get_nodes_in_group("captives"):
@@ -1551,7 +1682,8 @@ func set_paused(p: bool) -> void:
 
 func _update_weather() -> void:
     if time >= next_thunder:
-        next_thunder = time + randf_range(Tuning.THUNDER_MIN, Tuning.THUNDER_MAX)
+        var fury := clampf((float(data.get("sea", 0.0)) - 0.8) * 5.0, 0.0, 1.0)
+        next_thunder = time + randf_range(Tuning.THUNDER_MIN, Tuning.THUNDER_MAX) * (1.0 - 0.55 * fury)
         thunder_count += 1
         weather.lightning()
         event.emit("thunder", {})

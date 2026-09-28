@@ -24,6 +24,9 @@ var _result: Control
 var _flash: ColorRect
 var _pop: Label
 var _load_hint: Control
+var _tutorial: TutorialHint
+var _last_yaw := 0.0
+var _last_pitch := 0.0
 var _knob: Control
 var _track_fill: ColorRect
 var _last_interaction := 0.0
@@ -187,6 +190,9 @@ func _build() -> void:
     _knob.position = Vector2(-21, -10)
     _load_hint.add_child(_knob)
     add_child(_load_hint)
+    if int(level.data.id) == 1:
+        _tutorial = TutorialHint.new()
+        add_child(_tutorial)
 
     _pop = _label("", 90, Color(1.0, 0.85, 0.2), true)
     _pop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -316,16 +322,20 @@ func _process(delta: float) -> void:
         _loading.progress = 0.3 + 0.7 * clampf(level.time / Tuning.LOADING_DURATION, 0.0, 1.0)
     _intro.visible = level.phase == Level.Phase.INTRO
     if _flash.color.a > 0.0:
-        _flash.color.a = maxf(0.0, _flash.color.a - delta * 1.6)
-    # Load hint on level 1 after idle seconds.
-    var idle := level.time - _last_interaction > 3.0
-    var want := int(level.data.id) == 1 and level.shots_used == 0 and level.phase == Level.Phase.AIMING and level.power < 0.02 and idle
-    _load_hint.visible = want
-    if want:
-        var t := (sin(level.time * 3.0) + 1.0) * 0.5
-        var e := t * t * (3.0 - 2.0 * t)
-        _knob.position.y = -10 + 330 * e
-        _track_fill.size.y = 20 + 330 * e
+        # Real time, not game time: slow motion must not hold the flash on screen.
+        var real := delta / maxf(Engine.time_scale, 0.05)
+        _flash.color.a = maxf(0.0, _flash.color.a - real * 2.5)
+    _load_hint.visible = false
+    # Wordless tutorial on level 1, until the first shot.
+    if _tutorial:
+        var aiming := level.phase == Level.Phase.AIMING
+        _tutorial.visible = aiming or _tutorial.step == TutorialHint.Step.DONE
+        if aiming or level.shots_used > 0:
+            _tutorial.observe(level.aim_yaw - _last_yaw + level.aim_pitch - _last_pitch, level.power, level.shots_used > 0)
+        if not aiming and level.shots_used == 0:
+            _tutorial.visible = false
+    _last_yaw = level.aim_yaw
+    _last_pitch = level.aim_pitch
 
 func _refresh() -> void:
     var parts: Array[String] = []
@@ -351,7 +361,7 @@ func _refresh() -> void:
     var hint := ""
     if level.shots_used == 0 and level.phase == Level.Phase.AIMING:
         hint = str(level.data.get("hint", ""))
-    _hint.text = hint
+    _hint.text = "" if _tutorial else hint
 
 ## Cannonballs left: round balls with a highlight, the next one larger, spent ones faded.
 func _build_ammo() -> void:
@@ -471,9 +481,11 @@ func _on_event(name: String, d: Dictionary) -> void:
             _last_interaction = level.time
             _build_specials()
         "blast":
-            _flash.color.a = 0.6
+            # A light blink on the first blast only; a chain must stay clearly visible.
+            if level.combo <= 1:
+                _flash.color.a = maxf(_flash.color.a, 0.12)
         "thunder":
-            _flash.color.a = 0.4
+            _flash.color.a = maxf(_flash.color.a, 0.25)
         "target":
             _pop.text = "+1000"
             _pop.visible = true

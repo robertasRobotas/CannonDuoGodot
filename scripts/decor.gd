@@ -109,7 +109,7 @@ static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, nig
             mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
             # Soft edges: blend the painted alpha instead of cutting it.
             mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-            mat.albedo_color = Color(0.12, 0.14, 0.22, 0.8) if night else (Color(0.55, 0.56, 0.62) if storm else Color(1.0, 0.97, 0.94))
+            mat.albedo_color = Color(0.12, 0.14, 0.22, 0.8) if night else (Color(0.3, 0.31, 0.35) if storm else Color(1.0, 0.97, 0.94))
             cards.append({"mesh": mi.mesh, "xf": Transform3D(Basis.IDENTITY, -a.get_center()) * rel, "mat": mat})
     src.free()
     if cards.is_empty():

@@ -209,7 +209,7 @@ func _process(delta: float) -> void:
 
 ## Armed pirates fire a blunderbuss ball at the ship every so often.
 func tick_gun(delta: float, target: Vector3) -> void:
-    if not armed or frozen or is_queued_for_deletion():
+    if not armed or is_queued_for_deletion():
         return
     next_fire -= delta
     if next_fire > 0.0:

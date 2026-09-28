@@ -17,6 +17,7 @@ var spawn_time: float = 0.0
 var is_fragment: bool = false
 var frozen: bool = false
 var _pending_break: float = -1.0
+var _settle_until := 0.0
 var cage_id := -1   # bars of a prisoner's cage: breaking one frees them
 var burning := false
 var burn_time := 0.0
@@ -67,13 +68,24 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
     if break_threshold < 0.0 or frozen or is_fragment:
         return
     var strongest := 0.0
+    var ball := false
+    var settling := Time.get_ticks_msec() / 1000.0 < _settle_until
     for i in state.get_contact_count():
         var imp: float = state.get_contact_impulse(i).length()
         if imp > strongest:
             strongest = imp
+        var other := state.get_contact_collider_object(i)
+        if other is Node and (other as Node).is_in_group("projectile"):
+            ball = true
     if strongest > 0.0:
         var specific := strongest / maxf(mass, 0.1)
-        if specific > break_threshold:
+        # Powder goes up when a cannonball hits it (or a blast reaches it, see Level.explode);
+        # a knock from a falling plank or a shaken floor is not enough.
+        var needed := break_threshold if (material_name != "tnt" or ball) else Tuning.TNT_KNOCK_BREAK
+        # Just woken: pieces press into place against each other; only a ball breaks them yet.
+        if settling and not ball:
+            return
+        if specific > needed:
             _pending_break = specific
 
 ## Fire shot: wood smoulders, flames grow, and after BURN_TIME the piece gives way.
@@ -139,3 +151,5 @@ func set_frozen(value: bool) -> void:
     frozen = value
     freeze = value
     freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+    if not value:
+        _settle_until = Time.get_ticks_msec() / 1000.0 + Tuning.SETTLE_GRACE
