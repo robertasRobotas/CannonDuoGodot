@@ -6,6 +6,7 @@ extends Node3D
 signal thunder(delay: float)
 
 var _flash: OmniLight3D
+var _near_rain: CPUParticles3D
 var _level: Level
 var _bolts: Array[Mesh] = []
 var _bolt_mat: StandardMaterial3D
@@ -56,6 +57,21 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
         rain.gravity = Vector3(0, -6, 0)
         rain.position = Vector3(ship_pos.x, 16, ship_pos.z - 4)
         add_child(rain)
+        # Close rain: long bright streaks falling right in front of the camera, so the storm
+        # is felt, not just seen far off.
+        _near_rain = _particles("res://assets/particles/trace_01.png", Color(0.82, 0.86, 0.95, 0.42), Vector2(0.035, 1.4), true)
+        _near_rain.amount = int(700 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0))
+        _near_rain.lifetime = 0.55
+        _near_rain.preprocess = 0.6
+        _near_rain.local_coords = false
+        _near_rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+        _near_rain.emission_box_extents = Vector3(7, 0.5, 7)
+        _near_rain.direction = Vector3(0.18, -1, 0.05)
+        _near_rain.spread = 3.0
+        _near_rain.initial_velocity_min = 16
+        _near_rain.initial_velocity_max = 20
+        _near_rain.gravity = Vector3(0, -8, 0)
+        add_child(_near_rain)
         _flash = OmniLight3D.new()
         _flash.light_energy = 0.0
         _flash.omni_range = 120.0
@@ -118,3 +134,8 @@ func lightning() -> void:
         bt.tween_callback(bolt.queue_free)
     # Sound travels slower than light: the farther the strike, the later the thunder.
     thunder.emit(clampf(at.length() / 120.0, 0.2, 1.4))
+
+func _process(_delta: float) -> void:
+    if _near_rain and _level and _level.camera:
+        var cam := _level.camera
+        _near_rain.global_position = cam.global_position - cam.global_transform.basis.z * 5.0 + Vector3(0, 6.0, 0)

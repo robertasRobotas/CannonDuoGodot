@@ -36,7 +36,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         site = ["sand", "rock", "cliff", "far"][f.rng.randi_range(0, 3)]
         z = -16.0 if site == "far" else -10.5
     var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "huge": 18.0, "boss": 18.0,
-        "mega": 21.0, "harbor": 17.0, "battery": 5.0}.get(kind, 10.0) as float
+        "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0}.get(kind, 10.0) as float
     f._site(site, width, z)
     match kind:
         "small": f._small(z)
@@ -47,6 +47,8 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "mega": f._mega(z)
         "harbor": f._harbor(z)
         "battery": f._battery(z)
+        "stockade": f._stockade(z)
+        "coastal": f._coastal_battery(z)
     f._place_guns(int(opts.get("guns", 0)))
     f._place_cages(int(opts.get("captives", 0)), int(opts.get("deserters", 0)))
     f._arm_pirates(int(opts.get("armed", 0)))
@@ -66,7 +68,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "pitch": -5.5 if site == "cliff" else (-7.0 if top > 10.0 else -9.0),
         "shore": {"far": "sand", "sand": "sand", "rock": "rocks", "cliff": "cliffs"}.get(site, "sand"),
         "beach": 12.0 if site == "far" else 4.2,
-        "offshore": 3.0 if site == "far" else 4.5,
+        "offshore": 3.0 if site == "far" else 8.0,
     }
 
 # MARK: Sites
@@ -156,6 +158,102 @@ func _harbor(z: float) -> void:
         _crane(side * 4.4, z + 0.4)
         _crate_stack(side * 7.8, z + 0.6)
         _barrel_stack(side * 2.6, z + 2.6)
+
+## A frontier stockade: a front wall of sharpened logs with a gate, a blockhouse at each corner
+## (a log ground floor and a wider upper floor overhanging it, as on real frontier forts),
+## firing steps behind the wall, and a raised lookout in the middle.
+func _stockade(z: float) -> void:
+    var front := z + 2.6
+    # Log wall with a gap for the gate.
+    for i in 22:
+        var x := -6.3 + i * 0.6
+        if absf(x) < 0.9:
+            continue
+        var h := 2.6 + (0.25 if i % 2 == 0 else 0.0)
+        _part("wood", Vector3(x, h / 2.0, front), Vector3(0.52, h, 0.5), {"style": "log"})
+    # Gate: two leaves and a lintel beam.
+    for side: float in [-1.0, 1.0]:
+        _part("wood", Vector3(side * 0.42, 1.2, front + 0.1), Vector3(0.78, 2.4, 0.18))
+    _part("wood", Vector3(0, 2.75, front), Vector3(2.4, 0.3, 0.6))
+    # Firing step behind the wall with pirates on it.
+    for side: float in [-1.0, 1.0]:
+        _part("wood", Vector3(side * 3.3, 1.55, front - 0.7), Vector3(4.4, 0.18, 0.9))
+        _part("wood", Vector3(side * 3.3, 0.72, front - 0.9), Vector3(0.24, 1.45, 0.24))
+        _guard(Vector3(side * 3.3, 1.64, front - 0.7))
+        _blockhouse(side * 6.3, front - 0.6)
+    # Lookout tower in the yard.
+    var y := _storey(0.0, z - 0.5, 2.0, 2.0, 0.0, 0.22, false, true)
+    y = _storey(0.0, z - 0.5, 2.0, 2.0, y, 0.2, true, false)
+    _guard(Vector3(0.0, y, z - 0.5))
+    _part("tnt", Vector3(0.0, 0.35, z - 0.5), Vector3(0.6, 0.7, 0.6))
+    _tops.append([0.0, z - 0.5, 2.0])
+
+## Two-storey log blockhouse, the upper floor wider than the lower, a pyramid roof.
+func _blockhouse(x: float, z: float) -> void:
+    var w := 2.2
+    for k in 5:
+        var y := 0.25 + k * 0.5
+        _part("wood", Vector3(x, y, z - w / 2.0), Vector3(w, 0.46, 0.34), {"style": "log"})
+        _part("wood", Vector3(x, y, z + w / 2.0), Vector3(w, 0.46, 0.34), {"style": "log"})
+        _part("wood", Vector3(x - w / 2.0, y, z), Vector3(0.34, 0.46, w - 0.3), {"style": "log"})
+        _part("wood", Vector3(x + w / 2.0, y, z), Vector3(0.34, 0.46, w - 0.3), {"style": "log"})
+    var y0 := 2.5
+    _part("wood", Vector3(x, y0 + 0.1, z), Vector3(w + 0.9, 0.2, w + 0.9))
+    var u := w + 0.8
+    for k in 3:
+        var y := y0 + 0.45 + k * 0.5
+        _part("wood", Vector3(x, y, z - u / 2.0), Vector3(u, 0.46, 0.3), {"style": "log"})
+        _part("wood", Vector3(x - u / 2.0, y, z), Vector3(0.3, 0.46, u - 0.3), {"style": "log"})
+        _part("wood", Vector3(x + u / 2.0, y, z), Vector3(0.3, 0.46, u - 0.3), {"style": "log"})
+    var top := y0 + 1.7
+    _part("wood", Vector3(x, top + 0.1, z), Vector3(u + 0.3, 0.2, u + 0.3))
+    _part("wood", Vector3(x - u * 0.26, top + 0.7, z), Vector3(u * 0.62, 0.16, u + 0.4), {"rotation": [0, 0, 36]})
+    _part("wood", Vector3(x + u * 0.26, top + 0.7, z), Vector3(u * 0.62, 0.16, u + 0.4), {"rotation": [0, 0, -36]})
+    _guard(Vector3(x, y0 + 0.2, z + 0.4))
+    _part("tnt", Vector3(x, 0.35, z), Vector3(0.6, 0.7, 0.6))
+    _tops.append([x, z, w])
+
+## A Spanish-style coastal battery: a low curtain of coral stone with gun embrasures between
+## merlons, angled bastions at both ends each with a round sentry box on its point, a stone
+## powder magazine with a tiled roof behind the wall, and pirates on the ramparts.
+func _coastal_battery(z: float) -> void:
+    var front := z + 2.4
+    var wall_h := 1.6
+    # Curtain wall of stacked blocks.
+    for row in 2:
+        for i in 12:
+            var x := -5.5 + i + (0.5 if row == 1 else 0.0)
+            if x > 5.6:
+                continue
+            _part("stone", Vector3(x, 0.4 + row * 0.8, front), Vector3(0.98, 0.78, 1.1), {"style": ":sand"})
+    # Merlons and embrasures along the top.
+    for i in 6:
+        var x := -5.0 + i * 2.0
+        _part("stone", Vector3(x, wall_h + 0.45, front), Vector3(1.1, 0.9, 1.0), {"style": ":sand"})
+        _guard(Vector3(x + 1.0, wall_h, front - 0.2))
+    # Bastions: angled walls at each end, pointing out toward the sea.
+    for side: float in [-1.0, 1.0]:
+        var bx := side * 7.4
+        for row in 3:
+            _part("stone", Vector3(bx - side * 0.6, 0.4 + row * 0.8, front + 0.7), Vector3(2.4, 0.78, 1.0), {"style": ":sand", "rotation": [0, side * 35.0, 0]})
+            _part("stone", Vector3(bx + side * 0.6, 0.4 + row * 0.8, front - 0.7), Vector3(2.4, 0.78, 1.0), {"style": ":sand", "rotation": [0, side * -35.0, 0]})
+        # Garita: a round sentry box on the point.
+        _part("stone", Vector3(bx + side * 0.9, 2.4 + 0.9, front + 0.1), Vector3(1.0, 1.8, 1.0), {"style": "tower:sand"})
+        _guard(Vector3(bx - side * 0.2, 2.4, front))
+        _tops.append([bx, front - 1.4, 1.2])
+    # The powder magazine behind the wall: thick stone walls, a pitched tile roof, powder inside.
+    var mz := z - 1.2
+    for side: float in [-1.0, 1.0]:
+        _part("stone", Vector3(side * 1.45, 1.1, mz), Vector3(0.5, 2.2, 2.6), {"style": ":sand"})
+    _part("stone", Vector3(0, 1.1, mz - 1.1), Vector3(2.4, 2.2, 0.4), {"style": ":sand"})
+    for i in 3:
+        _part("tnt", Vector3(-0.7 + i * 0.7, 0.4, mz), Vector3(0.6, 0.8, 0.6))
+    _part("tnt", Vector3(0, 1.2, mz), Vector3(0.55, 0.7, 0.55))
+    _part("wood", Vector3(0, 2.3, mz), Vector3(3.6, 0.2, 3.0))
+    _part("wood", Vector3(-0.95, 2.85, mz), Vector3(2.1, 0.16, 3.2), {"rotation": [0, 0, 30], "style": "roof"})
+    _part("wood", Vector3(0.95, 2.85, mz), Vector3(2.1, 0.16, 3.2), {"rotation": [0, 0, -30], "style": "roof"})
+    _guard(Vector3(0, 3.35, mz))
+    _tops.append([0.0, mz, 2.4])
 
 ## A small gun battery: a squat tower with a gun either side.
 func _battery(z: float) -> void:

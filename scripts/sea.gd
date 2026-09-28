@@ -8,6 +8,13 @@ var open_sea: bool = false
 var amplitude: float = Tuning.CALM_AMPLITUDE
 var t: float = 0.0
 var wave_len := 1.0
+var _curved := false
+
+## Waves calm along the island's real (curved) shoreline.
+func set_shore(seed_value: float) -> void:
+    _curved = true
+    _mat.set_shader_parameter("shore_seed", seed_value)
+    _mat.set_shader_parameter("curved_shore", true)
 var _mat: ShaderMaterial
 
 ## `swell` multiplies the wave height: above 1 for the huge-wave levels.
@@ -74,7 +81,8 @@ func height(qx: float, qz: float) -> float:
     var w3 := sin(z * 0.5 + t * 1.6) * 0.35
     var w4 := sin((x * 0.6 - z * 0.4) + t * 1.9) * 0.25
     var chop := (sin(x * 1.3 - t * 3.2) * 0.12 * storminess) if storminess > 0.4 else 0.0
-    var fade := 1.0 if open_sea else smoothstep(Tuning.SHORE_Z + 0.5, Tuning.SHORE_Z + 4.0, qz)
+    var s := Decor.shore_z(qx) if _curved else Tuning.SHORE_Z
+    var fade := 1.0 if open_sea else smoothstep(s + 0.5, s + 5.0 + amplitude * 6.0, qz)
     return amplitude * fade * (w1 + w2 + w3 + w4 + chop)
 
 ## Height plus slopes, for hull roll and pitch.

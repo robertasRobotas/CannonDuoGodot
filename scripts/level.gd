@@ -26,6 +26,10 @@ var thunder_count := 0
 var sea: Sea
 var ship_base_x := 0.0
 var intro_hold := Tuning.INTRO_HOLD
+var _turn_accum := 0.0
+var _bark: StandardMaterial3D
+var _prev_yaw := 0.0
+var _prev_pitch := 0.0
 var _castle_zone := Rect2()
 var _castle_top := 0.0
 var _intro_look := Vector2.ZERO   # degrees of look-around from the phone during the fly-in
@@ -302,6 +306,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 
     # Island and scenery.
     Decor.build(self, int(data.id), data.get("terrain", {}).get("biome", "tropic"), storm, style, cannon_pos.z, _castle_rect())
+    if not open_sea:
+        sea.set_shore(Decor._seed)
 
     # Castle, figures, guns, boats.
     for b in data.blocks:
@@ -404,7 +410,7 @@ func _v3(a: Array) -> Vector3:
     return Vector3(float(a[0]), float(a[1]), float(a[2]) + Z_OFF)
 
 ## Poly Haven cannon: the carriage turns with the aim, the barrel tilts on its trunnions.
-const CANNON_LENGTH := 1.5
+const CANNON_LENGTH := 1.25
 const CANNON_SRC := "res://assets/hq/cannon/cannon_01_1k.gltf"
 
 func _build_cannon() -> void:
@@ -515,6 +521,47 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             var g := Models.instance("res://assets/castle/gate.glb")
             Models.fit(g, size)
             root.add_child(g)
+        "log":
+            # A round log along its longest side, bark on; upright ones end in a sharpened point.
+            var axis := 1
+            if size.x >= size.y and size.x >= size.z:
+                axis = 0
+            elif size.z >= size.y and size.z >= size.x:
+                axis = 2
+            var length: float = size[axis]
+            var r := minf(size[(axis + 1) % 3], size[(axis + 2) % 3]) * 0.5
+            var log := MeshInstance3D.new()
+            var cm := CylinderMesh.new()
+            cm.top_radius = r
+            cm.bottom_radius = r
+            cm.height = length - (r * 1.4 if axis == 1 else 0.0)
+            cm.radial_segments = 10
+            log.mesh = cm
+            if _bark == null:
+                _bark = StandardMaterial3D.new()
+                _bark.albedo_texture = load("res://assets/hq/oak_trees/textures/bark1_baseColor.png")
+                _bark.uv1_scale = Vector3(1.0, 2.0, 1.0)
+                _bark.roughness = 0.95
+            log.material_override = _bark
+            if axis == 0:
+                log.rotation.z = PI / 2.0
+            elif axis == 2:
+                log.rotation.x = PI / 2.0
+            else:
+                log.position.y = -r * 0.7
+                var tip := MeshInstance3D.new()
+                var tm := CylinderMesh.new()
+                tm.top_radius = 0.0
+                tm.bottom_radius = r
+                tm.height = r * 1.4
+                tm.radial_segments = 10
+                tip.mesh = tm
+                tip.material_override = _bark
+                tip.position.y = length / 2.0 - r * 0.7
+                root.add_child(tip)
+            root.add_child(log)
+        "roof":
+            root.add_child(_box(size, Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))))
         "crate":
             var c := Models.prop("wooden_crate_01")
             var holder := Node3D.new()
@@ -570,7 +617,11 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
         _:
             match mat:
                 "stone":
-                    root.add_child(_box(size, Models.tex_material("castle_brick_07", 0.8, tint_color)))
+                    # Sand-coloured walls are dressed coral stone blocks; the rest brick.
+                    if tint == "sand":
+                        root.add_child(_box(size, Models.tex_material("large_sandstone_blocks", 0.45)))
+                    else:
+                        root.add_child(_box(size, Models.tex_material("castle_brick_07", 0.8, tint_color)))
                 "wood":
                     root.add_child(_box(size, Models.wood_material()))
                 "tnt":
@@ -692,6 +743,14 @@ func _process(delta: float) -> void:
     # Aim and camera follow the phone in real time, even while slow motion runs.
     var real_delta := delta / maxf(Engine.time_scale, 0.05)
     _update_gyro(real_delta)
+    # Turning the cannon clicks under the hand, a notch every degree and a half (aim view only).
+    if phase == Phase.AIMING and zoom_out < 0.15:
+        _turn_accum += absf(aim_yaw - _prev_yaw) + absf(aim_pitch - _prev_pitch)
+        if _turn_accum > 4.0:
+            _turn_accum = 0.0
+            Haptics.detent()
+    _prev_yaw = aim_yaw
+    _prev_pitch = aim_pitch
     _rock_ship()
     _sway_trees()
     _apply_aim()
@@ -1295,8 +1354,9 @@ func damage_ship(s: EnemyShip, at: Vector3) -> void:
         Haptics.crack()
         event.emit("broke", {"material": "wood"})
 
-func _hull_hit() -> void:
+func _hull_hit(at: Vector3 = Vector3.INF) -> void:
     hull_hits += 1
+    _ship_damage(at)
     blast_shake = 0.8
     Haptics.hull()
     event.emit("hull", {"remaining": max_hull - hull_hits})
@@ -1332,7 +1392,7 @@ func _update_enemies(delta: float) -> void:
             b.queue_free()
             fx.dust(p, "wood")
             fx.pop(p, Color(1, 0.6, 0.2))
-            _hull_hit()
+            _hull_hit(p)
         elif p.y < Tuning.SEA_LEVEL + 0.1 or time - float(b.get_meta("spawn")) > 9.0:
             if open_sea or p.z > Tuning.SHORE_Z:
                 fx.splash(Vector3(p.x, Tuning.SEA_LEVEL, p.z))
@@ -1418,6 +1478,69 @@ func _lava_hit(at: Vector3) -> void:
         body.apply_central_impulse((off + Vector3(0, 0.5, 0)).normalized() * dv * body.mass)
         if body is Block and (body as Block).material_name == "wood":
             (body as Block).call_deferred("ignite")
+
+## A hit on our ship leaves its mark: splinters and a blast where it struck, a charred hole in
+## the deck or rail that stays, and a fire that keeps burning there. Each hit adds one, so a
+## battered ship smokes from several places.
+func _ship_damage(at: Vector3) -> void:
+    if at == Vector3.INF:
+        at = cannon_world() + Vector3(randf_range(-2.0, 2.0), 0.3, randf_range(-0.6, 0.6))
+    fx.blast(at)
+    fx.splinters(at, 26)
+    fx.blast_light(at, 5.0)
+    ambience.blast()
+    ambience.crack()
+    # The mark, kept in ship space so it rides with the hull.
+    var local := ship.to_local(at)
+    local.y = ship.cannon_mount.y - 0.45
+    var hole := MeshInstance3D.new()
+    var hm := CylinderMesh.new()
+    hm.top_radius = 0.55
+    hm.bottom_radius = 0.55
+    hm.height = 0.04
+    hm.radial_segments = 14
+    hole.mesh = hm
+    hole.material_override = Models.flat_material(Color(0.07, 0.05, 0.04), 1.0)
+    hole.position = local + Vector3(0, 0.02, 0)
+    ship.add_child(hole)
+    for k in 5:
+        var plank := MeshInstance3D.new()
+        var pm := BoxMesh.new()
+        pm.size = Vector3(randf_range(0.4, 0.8), 0.05, 0.12)
+        plank.mesh = pm
+        plank.material_override = Models.tex_material("brown_planks_07", 1.5, Color(0.3, 0.22, 0.18))
+        plank.position = local + Vector3(randf_range(-0.5, 0.5), 0.08, randf_range(-0.5, 0.5))
+        plank.rotation = Vector3(randf_range(-0.5, 0.5), randf_range(0, TAU), randf_range(-0.4, 0.4))
+        ship.add_child(plank)
+    var fire := EnemyShip._flames(0.8 + 0.3 * hull_hits)
+    fire.position = local + Vector3(0, 0.3, 0)
+    ship.add_child(fire)
+    var smoke := CPUParticles3D.new()
+    smoke.amount = 16
+    smoke.lifetime = 3.0
+    smoke.local_coords = false
+    smoke.direction = Vector3(0.2, 1, 0)
+    smoke.spread = 12.0
+    smoke.initial_velocity_min = 1.0
+    smoke.initial_velocity_max = 1.8
+    smoke.scale_amount_min = 1.0
+    smoke.scale_amount_max = 1.8
+    var ramp := Gradient.new()
+    ramp.set_color(0, Color(0.15, 0.13, 0.12, 0.6))
+    ramp.set_color(1, Color(0.4, 0.4, 0.42, 0.0))
+    smoke.color_ramp = ramp
+    smoke.mesh = QuadMesh.new()
+    var sm := StandardMaterial3D.new()
+    sm.albedo_texture = load("res://assets/particles/blackSmoke16.png")
+    sm.vertex_color_use_as_albedo = true
+    sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    smoke.material_override = sm
+    smoke.position = local + Vector3(0, 0.6, 0)
+    ship.add_child(smoke)
+    # The ship lurches from the blow.
+    _kick_vel += Tuning.KICK_ROLL * 14.0
 
 # MARK: Feel
 
@@ -1723,7 +1846,7 @@ func set_paused(p: bool) -> void:
 func _update_weather() -> void:
     if time >= next_thunder:
         var fury := clampf((float(data.get("sea", 0.0)) - 0.8) * 5.0, 0.0, 1.0)
-        next_thunder = time + randf_range(Tuning.THUNDER_MIN, Tuning.THUNDER_MAX) * (1.0 - 0.55 * fury)
+        next_thunder = time + randf_range(Tuning.THUNDER_MIN, Tuning.THUNDER_MAX) * (1.0 - 0.72 * fury)
         thunder_count += 1
         weather.lightning()
         event.emit("thunder", {})

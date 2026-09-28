@@ -7,6 +7,19 @@ uniform float sea_time = 0.0;
 uniform float storm = 0.0;
 uniform float shore_z = 2.5;
 uniform bool open_sea = false;
+// The island's curved shoreline (same formula as Decor.shore_z), so waves calm along it.
+uniform float shore_seed = 0.0;
+uniform bool curved_shore = false;
+
+float shore_at(float x) {
+    if (!curved_shore) {
+        return shore_z;
+    }
+    float p = shore_seed;
+    float w = 3.0 * sin(x * 0.07 + p) + 1.7 * sin(x * 0.19 + p * 2.3) + 0.8 * sin(x * 0.41 + p * 0.7);
+    w *= mix(0.55, 1.0, smoothstep(6.0, 20.0, abs(x)));
+    return shore_z + w + max(0.0, -x - 26.0) * 0.5;
+}
 uniform vec3 deep_color : source_color = vec3(0.08, 0.30, 0.52);
 uniform vec3 shallow_color : source_color = vec3(0.22, 0.62, 0.74);
 uniform vec3 sky_color : source_color = vec3(0.42, 0.60, 0.90);
@@ -28,7 +41,8 @@ float wave_height(vec2 q, float t) {
     float w3 = sin(p.y * 0.5 + t * 1.6) * 0.35;
     float w4 = sin((p.x * 0.6 - p.y * 0.4) + t * 1.9) * 0.25;
     float chop = storm > 0.4 ? sin(p.x * 1.3 - t * 3.2) * 0.12 * storm : 0.0;
-    float fade = open_sea ? 1.0 : smoothstep(shore_z + 0.5, shore_z + 4.0, q.y);
+    float s = shore_at(q.x);
+    float fade = open_sea ? 1.0 : smoothstep(s + 0.5, s + 5.0 + amplitude * 6.0, q.y);
     return amplitude * fade * (w1 + w2 + w3 + w4 + chop);
 }
 
@@ -63,7 +77,8 @@ vec3 ripple_normal(vec2 p, float t) {
 }
 
 void fragment() {
-    float depth_mix = open_sea ? 0.7 : clamp((world_pos.z - shore_z) / 10.0, 0.0, 1.0);
+    float sz = shore_at(world_pos.x);
+    float depth_mix = open_sea ? 0.7 : clamp((world_pos.z - sz) / 10.0, 0.0, 1.0);
     vec3 base = mix(shallow_color, deep_color, depth_mix);
     // Ripples on top of the swell normal, in view space.
     vec3 rn = ripple_normal(world_pos.xz, sea_time);
@@ -77,7 +92,7 @@ void fragment() {
     float foam = smoothstep(0.7, 1.0, crest) * streaks * (0.25 + 0.5 * storm);
     // Thin foam line along the shore.
     if (!open_sea) {
-        foam += smoothstep(1.6, 0.0, abs(world_pos.z - shore_z - 0.9)) * 0.45;
+        foam += smoothstep(1.6, 0.0, abs(world_pos.z - sz - 0.9)) * 0.45;
     }
     ALBEDO = mix(base, foam_color, clamp(foam, 0.0, 1.0));
     ROUGHNESS = 0.16;

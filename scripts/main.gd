@@ -57,6 +57,10 @@ func _ready() -> void:
             get_tree().create_timer(float(parts[0])).timeout.connect(func():
                 get_viewport().get_texture().get_image().save_png(parts[1])
                 get_tree().quit())
+        elif arg.begins_with("--hullhit="):
+            get_tree().create_timer(float(arg.substr(10))).timeout.connect(func():
+                if _level:
+                    _level._hull_hit())
         elif arg.begins_with("--sink="):
             # --sink=SECONDS  debug: two hits on every enemy ship after SECONDS
             var at := float(arg.substr(7))

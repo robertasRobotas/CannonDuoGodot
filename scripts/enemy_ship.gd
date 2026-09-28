@@ -120,7 +120,7 @@ func break_apart(sea: Sea, fx: Fx) -> void:
     fx.smoke_column(center)
     fx.splinters(center, 24)
 
-func _flames(size: float) -> CPUParticles3D:
+static func _flames(size: float) -> CPUParticles3D:
     var p := CPUParticles3D.new()
     p.amount = 20
     p.lifetime = 0.8

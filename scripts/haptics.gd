@@ -10,6 +10,10 @@ static var _busy_until := 0.0
 static func tick(power: float) -> void:
     _buzz(8 + int(10 * power), 0.25 + 0.35 * power)
 
+## A short click, like a gear tooth, while the cannon is turned.
+static func detent() -> void:
+    _buzz(12, 0.55)
+
 static func thump() -> void:
     _buzz(70, 1.0)
 

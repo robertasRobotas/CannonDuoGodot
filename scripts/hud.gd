@@ -487,6 +487,13 @@ func _on_event(name: String, d: Dictionary) -> void:
         "fired":
             _last_interaction = level.time
             _build_specials()
+        "hull":
+            # Red flash at the edges when our ship is hit.
+            _flash.color = Color(0.8, 0.05, 0.02, 0.45)
+            var tw := create_tween()
+            tw.set_ignore_time_scale(true)
+            tw.tween_property(_flash, "color:a", 0.0, 0.6)
+            tw.tween_callback(func(): _flash.color = Color(1, 1, 1, 0))
         "blast":
             # A light blink on the first blast only; a chain must stay clearly visible.
             if level.combo <= 1:

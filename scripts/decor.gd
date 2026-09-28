@@ -76,7 +76,13 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
             _volcano(parent)
             _mesas(parent, rng, 5, -60.0, -40.0, 3.0, 5.0, Color(0.35, 0.3, 0.3))
             _props(parent, rng, [["dead_tree_trunk", 3.0, 5.0], ["boulder_01", 1.0, 2.6], ["namaqualand_boulder_02", 1.0, 2.4]], 50)
-        "meadow", "harbor":
+        "harbor":
+            # A tropical port: palms and shrubs like the rest of the southern islands.
+            _hills(parent, rng, Color(0.5, 0.72, 0.42))
+            _forest(parent, rng, ["palm_coconut", "palm_coconut", "palm_plant"], 40, 5.0, 8.5)
+            _props(parent, rng, [["shrub_02", 0.7, 1.2], ["fern_02", 1.5, 2.6], ["boulder_01", 0.6, 1.4]], 60)
+            _quay(parent, rng)
+        "meadow":
             # Green farmland: rolling hills, oaks and maples, windmills turning.
             _hills(parent, rng, Color(0.62, 0.8, 0.5))
             _forest(parent, rng, ["oak_small", "oak_medium", "oak_large", "maple", "oak_medium"], 40 if biome == "meadow" else 18, 4.5, 8.0)
@@ -167,7 +173,7 @@ static func height(x: float, z: float) -> float:
     var d := shore_z(x) - z                       # metres inland from the waterline
     var h: float
     if d < 0.0:
-        h = maxf(d * 0.28, -1.6)                   # sand slope under the water
+        h = d * 0.3 + minf(d * d * -0.05, 0.0)     # sand shelving steeply into deep water
     else:
         h = 0.05 + minf(d, 6.0) * 0.07             # the beach rising gently
         var p := _seed
@@ -273,12 +279,19 @@ static func _mountains(parent: Node3D, rng: RandomNumberGenerator, count: int, m
 
 ## A dense wood behind the castle so the fort stands against trees, not bare grass.
 static func _forest(parent: Node3D, rng: RandomNumberGenerator, names: Array, count: int, min_h: float, max_h: float) -> void:
-    for i in count:
-        var x := rng.randf_range(-30, 30)
-        var z := rng.randf_range(-36, -8.5)
-        if not _free(x, z, 1.5):
+    # Woods across the whole island, in clumps: thick in groves, thin in the open, bigger
+    # further back where they climb the hills.
+    var groves: Array = []
+    for g in 15:
+        groves.append(Vector2(-88.0 + g * 12.5 + rng.randf_range(-4, 4), rng.randf_range(-80, -8)))
+    var total := int(count * 2.2)
+    for i in total:
+        var c: Vector2 = groves[rng.randi_range(0, groves.size() - 1)]
+        var x := c.x + rng.randfn(0.0, 9.0)
+        var z := minf(c.y + rng.randfn(0.0, 7.0), -4.0)
+        if not _free(x, z, 1.5) or shore_z(x) - z < 5.0:
             continue
-        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h) * (1.0 + (-z - 8.0) / 40.0))
+        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h) * (1.0 + clampf((-z - 8.0) / 60.0, 0.0, 0.6)))
         t.position = Vector3(x, 0, z)
         t.rotation.y = rng.randf_range(0, TAU)
         _sway(t, rng)
@@ -533,8 +546,9 @@ static func _windmills(parent: Node3D, rng: RandomNumberGenerator, count: int) -
     for attempt in 30:
         if placed >= count:
             break
-        var x := rng.randf_range(-26, 26)
-        var z := rng.randf_range(-30, -13)
+        # Out on the fields to either side, well back from the fort.
+        var x := (1.0 if attempt % 2 == 0 else -1.0) * rng.randf_range(22, 40)
+        var z := rng.randf_range(-55, -32)
         if not _free(x, z, 4.0):
             continue
         var mill := Node3D.new()

@@ -16,7 +16,7 @@ if [ "$1" != "--no-install" ]; then
   if [ -n "$DEVICE" ]; then
     echo "==> Installing on $DEVICE"
     xcrun devicectl device install app --device "$DEVICE" build/ios/CannonDuo.ipa | grep -i installed
-    xcrun devicectl device process launch --device "$DEVICE" com.faufaufau.cannonduo.godot | tail -1
+    xcrun devicectl device process launch --device "$DEVICE" com.faufaufau.cannonduo | tail -1
   else
     echo "No iPhone connected; IPA is at build/ios/CannonDuo.ipa"
   fi

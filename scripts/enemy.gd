@@ -24,6 +24,7 @@ var sword_arm: Node3D
 var _pending_pop := false
 var _level_time_ref: Callable
 var _shake_phase := 0.0
+var _falling := false
 
 func setup(r: float, i: int, level_time: Callable) -> void:
     radius = r
@@ -241,11 +242,18 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 func _on_body_entered(body: Node) -> void:
     if frozen:
         return
+    # Knocked off and falling: the landing, on anything, finishes him.
+    if _falling:
+        _pending_pop = true
+        return
     if body.is_in_group("ground") and global_position.distance_to(base_position) > Tuning.TARGET_GROUND_POP_DISTANCE:
         _pending_pop = true
 
 func _physics_process(_delta: float) -> void:
     if not frozen and base_position.y - global_position.y > Tuning.TARGET_FALL_POP:
+        _falling = true
+    # Into the sea.
+    if not frozen and global_position.y < Tuning.SEA_LEVEL - 0.3:
         _pending_pop = true
     if _pending_pop:
         _pending_pop = false
