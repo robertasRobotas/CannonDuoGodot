@@ -37,7 +37,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         z = -16.0 if site == "far" else -10.5
     var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "huge": 18.0, "boss": 18.0,
         "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0,
-        "keyhole": 12.0}.get(kind, 10.0) as float
+        "keyhole": 12.0, "lighthouse": 6.0, "ropebridge": 16.0, "pier": 8.0}.get(kind, 10.0) as float
     f._site(site, width, z)
     match kind:
         "small": f._small(z)
@@ -49,6 +49,9 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "harbor": f._harbor(z)
         "battery": f._battery(z)
         "keyhole": f._keyhole(z)
+        "lighthouse": f._lighthouse(z)
+        "ropebridge": f._ropebridge(z)
+        "pier": f._pier(z)
         "stockade": f._stockade(z)
         "coastal": f._coastal_battery(z)
     f._place_guns(int(opts.get("guns", 0)))
@@ -293,7 +296,83 @@ func _keyhole(z: float) -> void:
     _tops.append([-5.0, wall_z, 1.0])
     _tops.append([5.0, wall_z, 1.0])
 
-## A small gun battery: a squat tower with a gun either side.
+## A square lighthouse in red and white bands on its rock, the lantern at the top, a keeper's
+## hut with powder at its foot. The lantern is the point of the level (see ScnLighthouse).
+func _lighthouse(z: float) -> void:
+    var rows := 9
+    for row in rows:
+        var w := 1.7 - row * 0.05
+        var tint := ":red" if (row / 3) % 2 == 1 else ":white"
+        _part("stone", Vector3(0, 0.5 + row, z), Vector3(w, 0.98, w), {"style": tint})
+    _part("wood", Vector3(0, rows + 0.1, z), Vector3(2.6, 0.2, 2.6))
+    for side: float in [-1.0, 1.0]:
+        _part("wood", Vector3(side * 1.2, rows + 0.5, z), Vector3(0.1, 0.6, 2.4))
+    _part("wood", Vector3(0, rows + 0.75, z), Vector3(0.9, 1.0, 0.9), {"style": "lamp"})
+    _guard(Vector3(0.95, rows + 0.2, z + 0.9))
+    # The keeper's hut and his powder, and two pirates on the rock.
+    var y := _storey(-2.6, z + 0.4, 1.5, 1.5, 0.0, 0.2, true, false)
+    _part("wood", Vector3(-2.6, y + 0.3, z + 0.4), Vector3(1.9, 0.5, 1.9), {"style": "roof"})
+    _part("tnt", Vector3(-1.5, 0.4, z + 1.6), Vector3(0.6, 0.8, 0.6))
+    _part("tnt", Vector3(1.6, 0.4, z + 1.5), Vector3(0.6, 0.8, 0.6))
+    _guard(Vector3(1.6, 0.0, z + 2.3))
+    _guard(Vector3(-2.6, y + 0.55, z + 0.4))
+
+## Two rock towers with a plank bridge slung between them on two ropes over four posts.
+## Pirates run across; powder waits underneath for whatever falls.
+func _ropebridge(z: float) -> void:
+    var top := 5.0
+    for side: float in [-1.0, 1.0]:
+        var x := side * 6.5
+        _blk("stone", Vector3(x, top / 2.0, z), Vector3(3.2, top, 4.2), {"isStatic": true, "style": "plateau"})
+        var y := _storey(x, z, 1.7, 1.7, top, 0.22, true, true)
+        y = _storey(x, z, 1.5, 1.5, y, 0.2, false, true)
+        _guard(Vector3(x, y, z))
+        for dz: float in [-0.5, 0.5]:
+            _part("wood", Vector3(side * 4.95, top + 0.6, z + dz), Vector3(0.24, 1.2, 0.24))
+        _part("tnt", Vector3(side * 4.6, top + 0.4, z - 1.4), Vector3(0.55, 0.75, 0.55))
+    for dz: float in [-0.5, 0.5]:
+        _part("wood", Vector3(0, top + 1.26, z + dz), Vector3(10.2, 0.1, 0.1), {"style": "log"})
+    for i in 9:
+        var x := -4.0 + i
+        _part("wood", Vector3(x, top + 1.37, z), Vector3(0.88, 0.08, 1.3))
+    for i in 3:
+        targets.append({"position": [-2.5 + i * 2.5, top + 1.72 + base, z], "radius": 0.28, "run": true})
+    # The powder under the bridge, and crates to break the fall... or not.
+    for i in 4:
+        _part("tnt" if i % 2 == 0 else "wood", Vector3(-2.4 + i * 1.6, 0.4, z + 0.3), Vector3(0.6, 0.8, 0.6), {} if i % 2 == 0 else {"style": "barrel"})
+    _part("wood", Vector3(0.4, 1.25, z + 0.3), Vector3(0.9, 0.9, 0.9), {"style": "crate"})
+
+## A long wooden pier out over the bay on stilts, platforms either side with cargo and powder,
+## pirates all along it. What falls off goes in the water (see ScnSharks).
+func _pier(z: float) -> void:
+    var deck := 1.3
+    var zz := z
+    while zz < z + 10.0:
+        for sx: float in [-1.0, 1.0]:
+            _part("wood", Vector3(sx, deck * 0.5, zz), Vector3(0.24, deck, 0.24), {"isStatic": true})
+        zz += 1.7
+    var n := 6
+    for i in n:
+        _part("wood", Vector3(0, deck + 0.07, z + 0.85 + i * 1.7), Vector3(2.6, 0.14, 1.65))
+    for side: float in [-1.0, 1.0]:
+        var px := side * 3.3
+        var pz := z + 5.0
+        for dx: float in [-1.0, 1.0]:
+            for dz: float in [-1.0, 1.0]:
+                _part("wood", Vector3(px + dx, deck * 0.5, pz + dz), Vector3(0.24, deck, 0.24), {"isStatic": true})
+        _part("wood", Vector3(px, deck + 0.07, pz), Vector3(2.8, 0.14, 2.8))
+        _part("wood", Vector3(px - side * 1.2, deck * 0.5 + 0.07, pz), Vector3(0.6, 0.14, 2.6))   # plank to the pier
+        _part("tnt", Vector3(px + side * 0.6, deck + 0.54, pz - 0.7), Vector3(0.6, 0.8, 0.6))
+        _part("wood", Vector3(px - side * 0.4, deck + 0.54, pz + 0.7), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+        _part("wood", Vector3(px + side * 0.6, deck + 1.34, pz - 0.7), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+        _guard(Vector3(px, deck + 0.14, pz + 0.1))
+    _guard(Vector3(0, deck + 0.14, z + 2.0))
+    _guard(Vector3(0.4, deck + 0.14, z + 6.2))
+    _guard(Vector3(-0.3, deck + 0.14, z + 9.4))
+    # The pier head: a lantern post and a crate stack.
+    _part("wood", Vector3(0.9, deck + 1.1, z + 9.8), Vector3(0.14, 2.0, 0.14))
+    _part("wood", Vector3(-0.7, deck + 0.5, z + 9.3), Vector3(0.75, 0.75, 0.75), {"style": "crate"})
+    _tops.append([0.0, z + 0.5, 2.0])
 func _battery(z: float) -> void:
     _tower(0.0, z, 2, 2.6)
     _palisade(-2.4, -1.5, z + 1.0)

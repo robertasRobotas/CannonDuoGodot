@@ -91,6 +91,8 @@ var focus_point: Variant = null
 var next_thunder := 0.0
 var is_paused := false
 var ship_lift := 0.0   # the whale under the keel (The Pod) raises this
+var scenario: Scenario = null   # the level's special rules, if any (see Scenario)
+var ship_yaw := 0.0             # the hull turned bow-forward (stern gun levels)
 var _touches: Dictionary = {}
 var _pinch_start := -1.0
 var zoom_out := 0.0
@@ -302,7 +304,12 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     var cannon_pos := _v3(data.cannon) + Vector3(0, 0, float(data.get("offshore", Tuning.offshore(int(data.id)))))
     ship = Ship.new()
     ship.setup()
-    var ship_pos := cannon_pos - Vector3(ship.cannon_mount.x, 0.9, ship.cannon_mount.z)
+    if bool(data.get("stern_gun", false)):
+        ship.use_stern_gun()
+        ship_yaw = PI / 2.0
+        ship.rotation.y = ship_yaw
+    var mount_off := ship.transform.basis * Vector3(ship.cannon_mount.x, 0, ship.cannon_mount.z)
+    var ship_pos := cannon_pos - Vector3(mount_off.x, 0.9, mount_off.z)
     ship.position = ship_pos
     ship_base_x = ship_pos.x
     sea = Sea.new()
@@ -338,6 +345,11 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         var pod := OrcaDirector.new()
         add_child(pod)
         pod.setup(self)
+    if data.has("scenario"):
+        scenario = Scenario.make(str(data.scenario))
+        if scenario:
+            add_child(scenario)
+            scenario.setup(self)
     _freeze_all(true)
     _castle_zone = _castle_rect()
     for b in data.blocks:
@@ -531,6 +543,62 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))
             roof.position.y = size.y / 2.0 + size.x * 0.65
             root.add_child(roof)
+        "lamp":
+            # The lighthouse lantern: a brass cage round a glowing glass, and a sweeping beam.
+            var glass := MeshInstance3D.new()
+            var gm := SphereMesh.new()
+            gm.radius = size.x * 0.42
+            gm.height = size.x * 0.84
+            glass.mesh = gm
+            var em := StandardMaterial3D.new()
+            em.albedo_color = Color(1.0, 0.9, 0.6)
+            em.emission_enabled = true
+            em.emission = Color(1.0, 0.85, 0.5)
+            em.emission_energy_multiplier = 3.0
+            glass.material_override = em
+            root.add_child(glass)
+            for i in 4:
+                var bar := MeshInstance3D.new()
+                var bm := BoxMesh.new()
+                bm.size = Vector3(0.05, size.y, 0.05)
+                bar.mesh = bm
+                bar.material_override = Models.flat_material(Color(0.7, 0.55, 0.25), 0.35, 0.8)
+                bar.position = Vector3(cos(i * PI / 2.0) * size.x * 0.46, 0, sin(i * PI / 2.0) * size.x * 0.46)
+                root.add_child(bar)
+            var cap := MeshInstance3D.new()
+            var cm2 := CylinderMesh.new()
+            cm2.top_radius = 0.0
+            cm2.bottom_radius = size.x * 0.65
+            cm2.height = size.y * 0.5
+            cap.mesh = cm2
+            cap.material_override = Models.flat_material(Color(0.5, 0.12, 0.1), 0.6)
+            cap.position.y = size.y * 0.72
+            root.add_child(cap)
+            var light := OmniLight3D.new()
+            light.light_color = Color(1.0, 0.88, 0.6)
+            light.light_energy = 6.0
+            light.omni_range = 14.0
+            root.add_child(light)
+            var beam := MeshInstance3D.new()
+            var bmesh := CylinderMesh.new()
+            bmesh.top_radius = 2.2
+            bmesh.bottom_radius = 0.15
+            bmesh.height = 26.0
+            bmesh.radial_segments = 12
+            beam.mesh = bmesh
+            var bmat := StandardMaterial3D.new()
+            bmat.albedo_color = Color(1.0, 0.92, 0.7, 0.16)
+            bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+            bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+            bmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+            bmat.no_depth_test = false
+            beam.material_override = bmat
+            beam.rotation.z = -PI / 2.0
+            beam.position = Vector3(13.0, 0, 0)
+            var pivot := Node3D.new()
+            pivot.add_child(beam)
+            pivot.set_meta("spin", true)
+            root.add_child(pivot)
         "gate":
             var g := Models.instance("res://assets/castle/gate.glb")
             Models.fit(g, size)
@@ -698,6 +766,8 @@ func _spawn_target(t: Dictionary, index: int) -> void:
     e.fired.connect(_on_enemy_fired)
     e.position = _v3(t.position)
     e.base_position = e.position
+    if t.has("run"):
+        e.set_meta("run", true)
     e.popped.connect(_on_enemy_popped)
     add_child(e)
 
@@ -710,17 +780,21 @@ func _spawn_gun(g: Dictionary) -> void:
     add_child(gun)
     enemy_guns.append(gun)
 
-func _spawn_enemy_ship(s: Dictionary) -> void:
+func _spawn_enemy_ship(s: Dictionary) -> EnemyShip:
     var es := EnemyShip.new()
     # Longboats rowing at you are small; gunships at anchor are bigger.
-    var length := 4.5 if float(s.get("speed", 0.0)) > 0.0 else 6.5
+    var length := float(s.get("length", 4.5 if float(s.get("speed", 0.0)) > 0.0 else 6.5))
     es.setup(float(s.get("speed", 0.0)), int(s.get("hitPoints", 2)), bool(s.get("hasCannon", true)), float(s.get("interval", 7.0)), length)
     es.position = _v3(s.position)
+    es.friendly = bool(s.get("friendly", false))
+    if s.has("waypoint"):
+        es.waypoint = _v3(s.waypoint)
     es.fired.connect(_on_enemy_fired)
     es.sunk.connect(_on_ship_sunk)
     es.rammed.connect(_on_ship_rammed)
     add_child(es)
     enemy_ships.append(es)
+    return es
 
 func _freeze_all(value: bool) -> void:
     frozen = value
@@ -882,9 +956,12 @@ func _rock_ship() -> void:
     # Recoil heel: a damped spring kicked by each shot.
     _kick_vel += (-kick * 30.0 - _kick_vel * 5.0) * dt
     kick += _kick_vel * dt
-    ship.rotation = Vector3(-_heel - kick, 0, _trim)
+    ship.rotation = Vector3(-_heel - kick, ship_yaw, _trim)
     camera_up = Vector3(sin(_trim * 0.4), cos(_trim * 0.4), 0)
-    sea.set_hull(ship.position, Ship.LENGTH * 0.47, 1.35, ship.position.y - 0.45)
+    if ship_yaw == 0.0:
+        sea.set_hull(ship.position, Ship.LENGTH * 0.47, 1.35, ship.position.y - 0.45)
+    else:
+        sea.set_hull(ship.position, 1.35, Ship.LENGTH * 0.47, ship.position.y - 0.45)
 
 func cannon_world() -> Vector3:
     return ship.to_global(ship.cannon_mount)
@@ -1145,6 +1222,8 @@ func _on_block_broke(blk: Block) -> void:
     var mat := blk.material_name
     if blk.cage_id >= 0:
         _free_cage(blk.cage_id)
+    if scenario:
+        scenario.on_block_broke(blk)
     blocks_broken += 1
     if mat == "tnt":
         blk.queue_free()
@@ -1267,7 +1346,8 @@ func _on_enemy_popped(e: Enemy) -> void:
     var pos := e.global_position
     # Burst at once and fly off tumbling; drop loot.
     fx.pop(pos, e.body_color)
-    _fly_off(e)
+    if scenario == null or not scenario.on_enemy_popped(e):
+        _fly_off(e)
     e.queue_free()
     targets_remaining -= 1
     shot_pops += 1
@@ -1277,6 +1357,18 @@ func _on_enemy_popped(e: Enemy) -> void:
     Haptics.pop()
     if shot_pops >= 2:
         event.emit("multi", {"count": shot_pops})
+    event.emit("target", {"remaining": targets_remaining})
+    if targets_remaining == 0 and ships_remaining == 0:
+        _begin_win(pos)
+
+## A scenario target (a balloon, a wreck) is done: score it like a popped pirate.
+func target_down(pos: Vector3) -> void:
+    targets_remaining -= 1
+    shot_pops += 1
+    _register_combo()
+    _drop_coins(pos)
+    ambience.pop()
+    Haptics.pop()
     event.emit("target", {"remaining": targets_remaining})
     if targets_remaining == 0 and ships_remaining == 0:
         _begin_win(pos)
@@ -1293,7 +1385,9 @@ func _on_gun_destroyed(gun: EnemyGun) -> void:
 
 func _on_enemy_fired(from: Vector3, velocity: Vector3) -> void:
     var ball := RigidBody3D.new()
-    ball.mass = 12.0
+    # Light, so a shot fired from inside a fort glances off its own crates instead of
+    # smashing them (the arc is the same; hull hits are measured by distance).
+    ball.mass = 0.6
     var shape := CollisionShape3D.new()
     var s := SphereShape3D.new()
     s.radius = 0.15
@@ -1340,6 +1434,9 @@ func _on_ship_rammed(s: EnemyShip) -> void:
     s.queue_free()
     ships_remaining -= 1
     fx.blast(p)
+    if s.target_node != null and scenario:
+        scenario.on_ram(s)
+        return
     _hull_hit()
     if hull_hits < max_hull and ships_remaining == 0 and targets_remaining == 0:
         _begin_win(p)
@@ -1348,6 +1445,10 @@ func damage_ship(s: EnemyShip, at: Vector3) -> void:
     fx.dust(at, "wood")
     fx.splinters(at, 14)
     ambience.crack()
+    if s.friendly:
+        if scenario:
+            scenario.on_friendly_hit(s, at)
+        return
     if s.damage():
         s.sinking_since = time
         ships_remaining -= 1
@@ -1361,6 +1462,8 @@ func damage_ship(s: EnemyShip, at: Vector3) -> void:
         _drop_coins(at + Vector3(0, 0.5, 0))
         Haptics.rumble(2)
         event.emit("blast", {})
+        if scenario:
+            scenario.on_ship_sunk(s)
         if ships_remaining == 0 and targets_remaining == 0:
             _begin_win(at)
     else:
@@ -1381,15 +1484,19 @@ func _update_enemies(delta: float) -> void:
     if phase == Phase.LOADING or phase == Phase.INTRO or phase == Phase.FINISHED:
         return
     var target := cannon_world()
-    for g in enemy_guns:
-        if is_instance_valid(g):
-            g.tick(delta, target)
+    var silent := scenario != null and scenario.guns_silent()
+    if not silent:
+        for g in enemy_guns:
+            if is_instance_valid(g):
+                g.tick(delta, target)
     for s in enemy_ships.duplicate():
         if is_instance_valid(s):
             s.tick(delta, time, sea, ship.global_position)
-    if phase != Phase.SLOWMO:
+    if phase != Phase.SLOWMO and not silent:
         for n in get_tree().get_nodes_in_group("enemies"):
             (n as Enemy).tick_gun(delta, target)
+    if scenario and phase != Phase.SLOWMO:
+        scenario.tick(delta)
     if bool(data.get("volcano", false)) and phase != Phase.SLOWMO:
         lava_next -= delta
         if lava_next <= 0.0:
@@ -1803,6 +1910,8 @@ func _check_progress() -> void:
                 var nothing := blocks_broken == _shot_start_breaks and targets_remaining == _shot_start_targets and _shot_blasts == 0
                 if nothing and _shot_min_dist < Tuning.NEAR_MISS:
                     event.emit("near_miss", {})
+                if scenario:
+                    scenario.on_shot_settled(nothing)
             if phase == Phase.SETTLING:
                 var out_of_ammo := projectiles_remaining == 0 and (targets_remaining > 0 or ships_remaining > 0)
                 var timeout := Tuning.OUT_OF_AMMO_SETTLE if out_of_ammo else Tuning.SETTLE_TIMEOUT

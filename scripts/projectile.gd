@@ -117,6 +117,11 @@ func _on_body_entered(body: Node) -> void:
         (body as Orca).damage(global_position)
         queue_free()
         return
+    if body is Balloon and not _done:
+        _done = true
+        (body as Balloon).puncture(global_position)
+        queue_free()
+        return
     if body is Block:
         var b := body as Block
         # A heavy ball at speed smashes through wood, whatever its size.

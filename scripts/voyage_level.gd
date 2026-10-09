@@ -16,8 +16,9 @@ signal quit
 
 enum Phase { PREP, SAILING, DOCKING, ENDED }
 
-const LANE := 10.0          # how far to port or starboard the helm allows
-const CRUISE := {"sail": 8.0, "waves": 7.0}
+const LANE := 10.0          # how far to port or starboard the helm allows (default)
+var lane := LANE            # a mode may open the channel wider
+const CRUISE := {"sail": 8.0, "waves": 7.0, "reef": 8.0, "whirl": 7.0, "escape": 3.0, "wrecks": 6.5, "gauntlet": 8.5, "cave": 6.5}
 
 var data: Dictionary
 var settings: Dictionary
@@ -55,6 +56,14 @@ var _next_crest := 0.0
 var _final_spawned := false
 var _trim := 0.0
 var _heel := 0.0
+var _lat_vel := 0.0        # sideways speed: the helm steers momentum, not position
+var _yaw := 0.0            # the bow points where the ship is actually going
+var _shake := 0.0          # camera kick from impacts
+var _env: Environment
+var _sun: DirectionalLight3D
+var mode_obj: VoyageMode = null    # the special courses (see VoyageMode)
+var _press_pos := Vector2.ZERO
+var _press_time := 0.0
 var _wind: AudioStreamPlayer
 var _result_up := false
 
@@ -70,6 +79,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     sea = Sea.new()
     add_child(sea)
     sea.setup(float(data.get("sea", 0.2)), Vector3.ZERO, true, float(data.get("swell", 1.0)))
+    if str(data.get("terrain", {}).get("sky", "noon")) == "night":
+        sea.set_colors(Color(0.03, 0.07, 0.14), Color(0.06, 0.14, 0.22), Color(0.12, 0.16, 0.28))
     root = Node3D.new()
     add_child(root)
     ship = Ship.new()
@@ -84,15 +95,15 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     spray.local_coords = false
     spray.direction = Vector3(0, 1, -1)
     spray.spread = 35.0
-    spray.initial_velocity_min = 2.0
-    spray.initial_velocity_max = 4.5
-    spray.gravity = Vector3(0, -9, 0)
-    spray.scale_amount_min = 0.25
-    spray.scale_amount_max = 0.6
+    spray.initial_velocity_min = 3.5
+    spray.initial_velocity_max = 7.0
+    spray.gravity = Vector3(0, -13, 0)
+    spray.scale_amount_min = 0.14
+    spray.scale_amount_max = 0.38
     spray.mesh = QuadMesh.new()
     var sm := StandardMaterial3D.new()
     sm.albedo_texture = load("res://assets/particles/whitePuff12.png")
-    sm.albedo_color = Color(1, 1, 1, 0.7)
+    sm.albedo_color = Color(1, 1, 1, 0.55)
     sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
@@ -106,44 +117,110 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     camera.far = 500.0
     add_child(camera)
     camera.make_current()
+    if mode == "waves":
+        _build_rain()
     if mode == "sail":
         _build_course_rocks()
         _build_port()
-    else:
+    elif mode == "waves":
         phase = Phase.SAILING
         _next_crest = 2.0
+    else:
+        phase = Phase.SAILING
+        mode_obj = VoyageMode.make(mode)
+        mode_obj.build(self)
     _build_overlay()
     _sounds()
-    _say("Hoist the sail, lad!" if mode == "sail" else "Storm swell! Steer where it's green!")
+    if mode_obj:
+        _say(mode_obj.intro_line)
+    else:
+        _say("Hoist the sail, lad!" if mode == "sail" else "Storm swell! Steer where it's green!")
 
 ## Sky, sun and haze, matching the battle levels' look.
 func _build_sky() -> void:
     var sky_kind := str(data.get("terrain", {}).get("sky", "noon"))
+    var stormy := mode == "waves"
+    var night := sky_kind == "night"
     var env := WorldEnvironment.new()
     var e := Environment.new()
     var sky := Sky.new()
-    var pano := PanoramaSkyMaterial.new()
-    pano.panorama = load("res://assets/sky/sky_noon.jpg" if sky_kind == "noon" else "res://assets/sky/overcast.hdr")
-    pano.energy_multiplier = 1.0 if sky_kind == "noon" else 0.7
-    sky.sky_material = pano
+    if night:
+        var ps := ProceduralSkyMaterial.new()
+        ps.sky_top_color = Color(0.01, 0.02, 0.06)
+        ps.sky_horizon_color = Color(0.06, 0.09, 0.18)
+        ps.ground_horizon_color = Color(0.06, 0.09, 0.18)
+        ps.ground_bottom_color = Color(0.02, 0.03, 0.05)
+        ps.sun_angle_max = 3.0
+        ps.sun_curve = 0.02
+        sky.sky_material = ps
+        Atmosphere.stars(self, 320)
+    else:
+        var pano := PanoramaSkyMaterial.new()
+        pano.panorama = load("res://assets/sky/sky_noon.jpg" if sky_kind == "noon" else ("res://assets/sky/sky_sunset.jpg" if sky_kind == "sunset" else "res://assets/sky/overcast.hdr"))
+        pano.energy_multiplier = 1.0 if sky_kind == "noon" else (1.1 if sky_kind == "sunset" else (0.55 if stormy else 0.7))
+        sky.sky_material = pano
     e.background_mode = Environment.BG_SKY
     e.sky = sky
     e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    e.ambient_light_energy = 0.9 if sky_kind == "noon" else 0.7
+    e.ambient_light_energy = 0.9 if sky_kind == "noon" else (0.55 if stormy else 0.7)
     e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     e.fog_enabled = true
-    e.fog_light_color = Color(0.72, 0.8, 0.88) if sky_kind == "noon" else Color(0.5, 0.55, 0.6)
-    e.fog_density = 0.003 if sky_kind == "noon" else 0.006
-    e.fog_sky_affect = 0.2
+    # The storm sits in thick wet air; the sunny run has only a breath of haze.
+    e.fog_light_color = Color(0.72, 0.8, 0.88) if sky_kind == "noon" else (Color(0.9, 0.7, 0.6) if sky_kind == "sunset" else Color(0.44, 0.49, 0.55))
+    e.fog_density = 0.003 if sky_kind in ["noon", "sunset"] else (0.011 if stormy else 0.006)
+    e.fog_sky_affect = 0.35 if stormy else 0.2
+    if night:
+        e.ambient_light_energy = 0.35
+        e.fog_light_color = Color(0.05, 0.07, 0.13)
+        e.fog_density = 0.006
     env.environment = e
+    _env = e
     add_child(env)
     var sun := DirectionalLight3D.new()
-    sun.light_energy = 1.1 if sky_kind == "noon" else 0.7
-    sun.light_color = Color(1.0, 0.95, 0.88) if sky_kind == "noon" else Color(0.85, 0.88, 0.95)
+    sun.light_energy = 1.1 if sky_kind == "noon" else (0.5 if stormy else 0.7)
+    sun.light_color = Color(1.0, 0.95, 0.88) if sky_kind == "noon" else Color(0.78, 0.83, 0.92)
+    if sky_kind == "sunset":
+        sun.light_color = Color(1.0, 0.72, 0.48)
+        sun.light_energy = 1.2
+        sun.rotation_degrees = Vector3(-14, 70, 0)
+    elif night:
+        sun.light_color = Color(0.58, 0.68, 1.0)
+        sun.light_energy = 0.3
+        sun.rotation_degrees = Vector3(-38, -35, 0)
+    else:
+        sun.rotation_degrees = Vector3(-50, 40, 0)
     sun.shadow_enabled = true
     sun.directional_shadow_max_distance = 30.0
-    sun.rotation_degrees = Vector3(-50, 40, 0)
+    _sun = sun
     add_child(sun)
+
+## Driving rain, streaking down-wind past the camera.
+func _build_rain() -> void:
+    var rain := CPUParticles3D.new()
+    rain.amount = 260
+    rain.lifetime = 0.8
+    rain.local_coords = false
+    rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    rain.emission_box_extents = Vector3(16.0, 0.5, 16.0)
+    rain.direction = Vector3(0, -1, 0)
+    rain.spread = 4.0
+    rain.initial_velocity_min = 18.0
+    rain.initial_velocity_max = 23.0
+    rain.gravity = Vector3(0, -6, -4)
+    rain.scale_amount_min = 0.5
+    rain.scale_amount_max = 0.9
+    var q := QuadMesh.new()
+    q.size = Vector2(0.025, 0.55)
+    rain.mesh = q
+    var m := StandardMaterial3D.new()
+    m.albedo_color = Color(0.8, 0.86, 0.92, 0.32)
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+    m.billboard_keep_scale = true
+    rain.material_override = m
+    camera.add_child(rain)
+    rain.position = Vector3(0, 9.0, -7.0)
 
 func _sounds() -> void:
     if not bool(settings.get("sound", true)):
@@ -177,10 +254,11 @@ func _build_course_rocks() -> void:
         var gap_x := rng.randf_range(-6.0, 6.0)   # the safe water this row leaves open
         var n := 1 if rng.randf() < 0.45 else 2
         for i in n:
-            var x := gap_x + (rng.randf_range(4.5, 8.5) * (1.0 if i == 0 else -1.0))
-            if absf(x) > 11.0:
-                continue
             var r := rng.randf_range(1.2, 2.4)
+            # Clear water either side of the gap, whatever the rock's size.
+            var x := gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i == 0 else -1.0)
+            if absf(x) > 11.5:
+                continue
             var pick: String = ["boulder_01", "namaqualand_boulder_02", "namaqualand_cliff_01"][rng.randi_range(0, 2)]
             var m := Models.prop(pick)
             var k := r / (2.5 if pick == "namaqualand_cliff_01" else 0.9)
@@ -232,7 +310,8 @@ func _spawn_crest(final := false) -> void:
     var rng := RandomNumberGenerator.new()
     rng.seed = int(time * 977.0) + crests.size()
     var c := {
-        "z": root.position.z - 110.0,
+        # Born inside the animated patch (which trails the ship), behind the haze.
+        "z": root.position.z - 100.0,
         "bx": rng.randf_range(-7.0, 7.0),
         "bw": rng.randf_range(5.0, 8.0),
         "h": (4.5 if final else rng.randf_range(1.8, 2.6)),
@@ -244,50 +323,34 @@ func _spawn_crest(final := false) -> void:
     else:
         # Leave at least a helm's width of green inside the lane on one side.
         c.bw = minf(float(c.bw), LANE + absf(float(c.bx)) - 2.6)
+    # The wave itself is real displaced water in the sea shader (see Sea.set_wave_crests);
+    # only the breaking lip gets a line of fine wind-torn spray on top.
     var node := Node3D.new()
     add_child(node)
     node.position = Vector3(0, 0, c.z)
-    # The crest line: a row of foam puffs the whole lane wide.
-    var mm := MultiMesh.new()
-    mm.transform_format = MultiMesh.TRANSFORM_3D
-    var q := QuadMesh.new()
-    q.size = Vector2(1, 1)
-    mm.mesh = q
-    mm.instance_count = 26
-    for i in 26:
-        var x := -16.0 + i * 1.28
-        var s := randf_range(1.6, 2.6) * (1.6 if final else 1.0)
-        mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), Vector3(x, float(c.h) * 0.55, 0)))
-    var mi := MultiMeshInstance3D.new()
-    mi.multimesh = mm
-    var m := StandardMaterial3D.new()
-    m.albedo_texture = load("res://assets/particles/whitePuff05.png")
-    m.albedo_color = Color(1, 1, 1, 0.5)
-    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-    m.billboard_keep_scale = true
-    mi.material_override = m
-    mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    node.add_child(mi)
     if not final:
-        # The breaking section: a churning white wall. This is the part that rolls you.
-        var churn := CPUParticles3D.new()
-        churn.amount = 70
-        churn.lifetime = 0.8
-        churn.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-        churn.emission_box_extents = Vector3(float(c.bw), 0.4, 0.8)
-        churn.direction = Vector3(0, 1, 1)
-        churn.spread = 25.0
-        churn.initial_velocity_min = 2.0
-        churn.initial_velocity_max = 5.0
-        churn.gravity = Vector3(0, -7, 0)
-        churn.scale_amount_min = 0.6
-        churn.scale_amount_max = 1.4
-        churn.mesh = QuadMesh.new()
-        churn.material_override = m.duplicate()
-        churn.position = Vector3(float(c.bx), float(c.h) * 0.7, 0)
-        node.add_child(churn)
+        var spume := CPUParticles3D.new()
+        spume.amount = 28
+        spume.lifetime = 0.45
+        spume.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+        spume.emission_box_extents = Vector3(float(c.bw), 0.2, 0.4)
+        spume.direction = Vector3(0, 1, 0.5)
+        spume.spread = 16.0
+        spume.initial_velocity_min = 4.0
+        spume.initial_velocity_max = 8.0
+        spume.gravity = Vector3(0, -12, 0)
+        spume.scale_amount_min = 0.07
+        spume.scale_amount_max = 0.18
+        spume.mesh = QuadMesh.new()
+        var m := StandardMaterial3D.new()
+        m.albedo_texture = load("res://assets/particles/whitePuff12.png")
+        m.albedo_color = Color(1, 1, 1, 0.45)
+        m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+        spume.material_override = m
+        spume.position = Vector3(float(c.bx), float(c.h) * 1.1, 0)
+        node.add_child(spume)
     c["node"] = node
     crests.append(c)
 
@@ -308,6 +371,9 @@ func _process(delta: float) -> void:
             _tick_docking(delta)
         Phase.ENDED:
             pass
+    # The clouds never stand still: the panorama drifts, fast in the storm scud.
+    if _env:
+        _env.sky_rotation.y += delta * (0.022 if mode == "waves" else 0.008)
     _float_ship(delta)
     _update_camera(real_delta)
     if ui:
@@ -328,11 +394,23 @@ func _tick_prep(delta: float) -> void:
         _say("Now take the helm. Lean her past the rocks!")
 
 func _tick_sailing(delta: float) -> void:
+    if mode_obj and mode_obj.drives():
+        mode_obj.tick(delta)
+        return
     var cruise: float = CRUISE[mode]
     speed = move_toward(speed, cruise, delta * (2.6 if mode == "sail" else 4.0))
-    steer = clampf(_steer_touch + _steer_gyro, -1.0, 1.0)
+    # The rudder answers, the hull carries its way: steering drives sideways momentum,
+    # and the bow swings to point where the ship is actually going.
+    steer = move_toward(steer, clampf(_steer_touch + _steer_gyro, -1.0, 1.0), delta * 5.0)
+    var want_lat := steer * 7.5 * minf(speed / 4.0, 1.0)
+    _lat_vel = lerpf(_lat_vel, want_lat, minf(delta * 3.6, 1.0))
     root.position.z -= speed * delta
-    root.position.x = clampf(root.position.x + steer * 6.5 * delta * minf(speed / 4.0, 1.0), -LANE, LANE)
+    var nx := root.position.x + _lat_vel * delta
+    if absf(nx) >= lane:
+        nx = clampf(nx, -lane, lane)
+        _lat_vel = 0.0
+    root.position.x = nx
+    _yaw = lerpf(_yaw, atan2(-_lat_vel, maxf(speed, 1.0)), minf(delta * 4.0, 1.0))
     spray.emitting = speed > 2.5
     spray.amount = int(20 + speed * 6.0)
     if mode == "sail":
@@ -342,8 +420,14 @@ func _tick_sailing(delta: float) -> void:
         if root.position.z < -goal:
             phase = Phase.DOCKING
             _say("Easy now...")
-    else:
+    elif mode == "waves":
         _tick_crests(delta)
+    else:
+        mode_obj.tick(delta)
+        if mode_obj.ends_by_distance() and root.position.z < -goal:
+            _say(mode_obj.end_line)
+            Haptics.thump()
+            _win()
 
 func _check_rocks() -> void:
     for r: Dictionary in rocks:
@@ -353,20 +437,35 @@ func _check_rocks() -> void:
         var dx: float = absf(float(r.x) - root.position.x)
         if not bool(r.hit) and dx < float(r.r) + 1.5:
             r.hit = true
-            hits += 1
-            speed *= 0.45
-            _steer_touch = 0.0
-            root.position.x += signf(root.position.x - float(r.x)) * 1.2
-            Haptics.rumble(2)
-            _flash(Color(0.8, 0.1, 0.05, 0.4))
+            # The hull glances off: momentum away from the rock, a lurch, the camera kicks.
+            _lat_vel = signf(root.position.x - float(r.x)) * 3.5
             _splash_at(Vector3(float(r.x), 0.2, float(r.z)))
-            if hits >= 3:
-                _fail("The hull gave way on the rocks.")
-            else:
-                _say(["Mind the rocks, lad!", "You'll have us swimming!"][hits - 1])
+            take_hit("The hull gave way on the rocks.", ["Mind the rocks, lad!", "You'll have us swimming!"][mini(hits, 1)])
         elif not bool(r.grazed) and dx < float(r.r) + 3.4:
             r.grazed = true
             Haptics.detent()
+            # A whisker past: a breath of slow motion to savour it.
+            if dx < float(r.r) + 2.3 and phase == Phase.SAILING:
+                Engine.time_scale = 0.55
+                var tw := create_tween()
+                tw.set_ignore_time_scale(true)
+                tw.tween_interval(0.35)
+                tw.tween_callback(func(): if phase == Phase.SAILING: Engine.time_scale = 1.0)
+
+## Damage to the ship: a heart gone, a lurch, the red flash. Three and she is lost.
+func take_hit(fail_reason: String, line: String) -> void:
+    if phase != Phase.SAILING:
+        return
+    hits += 1
+    speed *= 0.5
+    _steer_touch = 0.0
+    _shake = maxf(_shake, 0.9)
+    Haptics.rumble(2)
+    _flash(Color(0.8, 0.1, 0.05, 0.4))
+    if hits >= 3:
+        _fail(fail_reason)
+    else:
+        _say(line)
 
 func _tick_crests(delta: float) -> void:
     _next_crest -= delta
@@ -388,6 +487,12 @@ func _tick_crests(delta: float) -> void:
         if dz > 25.0:
             (c.node as Node3D).queue_free()
             crests.erase(c)
+    # Hand the crest lines to the water: the shader stands them up as real waves and the
+    # same maths lifts the hull in _float_ship.
+    var packed: Array[Vector4] = []
+    for c: Dictionary in crests:
+        packed.append(Vector4(float(c.z), float(c.bx), float(c.bw), float(c.h)))
+    sea.set_wave_crests(packed)
 
 func _cross_crest(c: Dictionary) -> void:
     if phase != Phase.SAILING:
@@ -397,6 +502,7 @@ func _cross_crest(c: Dictionary) -> void:
         return
     waves_cleared += 1
     Haptics.thump()
+    _shake = 0.9 if bool(c.final) else 0.5
     _splash_at(root.position + Vector3(0, 0, -3))
     if bool(c.final):
         # Over the mountain: a beat of slow motion on the crest, then down its back and done.
@@ -412,6 +518,8 @@ func _cross_crest(c: Dictionary) -> void:
 
 func _tick_docking(delta: float) -> void:
     speed = move_toward(speed, 0.0, delta * 2.2)
+    _lat_vel = move_toward(_lat_vel, 0.0, delta * 5.0)
+    _yaw = lerpf(_yaw, 0.0, minf(delta * 2.0, 1.0))
     root.position.z -= speed * delta
     root.position.x = move_toward(root.position.x, 2.6, delta * 1.4)
     ship.set_sail(maxf(1.0 - (time - _dock_t()) * 0.6, 0.0))
@@ -427,43 +535,54 @@ func _dock_t() -> float:
         _dock_time = time
     return _dock_time
 
-## The hull rides the water under bow, stern and both rails, like the battle levels, plus the
-## lift of any crest passing beneath.
+## The hull rides the water under bow, stern and both rails. The crest ridges are part of
+## sea.height itself now, so the bow lifts first, the ship pitches over the face and slides
+## down the back — real wave riding, not a scripted bump.
 func _float_ship(delta: float) -> void:
     var p := root.position
+    # Keep the animated water patch under and ahead of the ship for the whole run.
+    sea.position.z = p.z - 35.0
     var half_l := Ship.LENGTH * 0.45
     var bow := sea.height(p.x, p.z - half_l)
     var stern := sea.height(p.x, p.z + half_l)
     var port_h := sea.height(p.x - 1.1, p.z)
     var star_h := sea.height(p.x + 1.1, p.z)
     var level_y := Tuning.SEA_LEVEL + (bow + stern + port_h + star_h) / 4.0 + Tuning.SHIP_FREEBOARD
-    var trim := clampf(atan2(bow - stern, half_l * 2.0), -0.3, 0.3)
+    var trim := clampf(atan2(bow - stern, half_l * 2.0), -0.38, 0.38)
     var heel := clampf(atan2(star_h - port_h, 2.2) * 0.5, -0.2, 0.2)
-    for c: Dictionary in crests:
-        var dz := float(c.z) - p.z
-        var bump: float = float(c.h) * exp(-(dz * dz) / 18.0)
-        level_y += bump
-        trim += clampf(float(c.h) * dz * exp(-(dz * dz) / 18.0) * 0.08, -0.45, 0.45)
-    var follow := minf(delta * 3.5, 1.0)
+    var follow := minf(delta * (4.5 if mode == "waves" else 3.5), 1.0)
     root.position.y = lerpf(root.position.y, level_y, follow) if time > 0.1 else level_y
     _trim = lerpf(_trim, trim, follow)
-    _heel = lerpf(_heel, heel - steer * 0.3, follow)
+    # She banks into the turn with the sideways momentum, on top of the wave heel.
+    _heel = lerpf(_heel, heel - _lat_vel * 0.028, follow)
     if phase != Phase.ENDED:
-        root.rotation = Vector3(_trim, -steer * 0.22, _heel)
+        root.rotation = Vector3(_trim, _yaw, _heel)
 
 func _update_camera(delta: float) -> void:
+    if mode_obj and mode_obj.camera(delta):
+        return
     var p := root.position
     var want: Vector3
     var look: Vector3
+    var fov := 72.0
     if phase == Phase.PREP:
         # Standing on deck looking up at the sail, from the quarter.
         want = p + Vector3(5.0, 3.4, 7.0)
         look = p + Vector3(0, 4.5, 0)
     else:
-        want = p + Vector3(steer * 1.6, 4.4, 10.5)
-        look = p + Vector3(0, 1.2, -10.0)
-    camera.global_position = camera.global_position.lerp(want, minf(delta * 3.0, 1.0)) if time > 0.1 else want
+        # Astern and above, trailing the ship: it slides across the frame when she turns,
+        # the lens looks a touch into the turn, and speed widens the view.
+        want = p + Vector3(_lat_vel * 0.4, 4.2 + speed * 0.06, 10.8)
+        look = p + Vector3(_lat_vel * 0.9, 1.1, -12.0)
+        fov = 66.0 + speed * 1.1
+    if _shake > 0.005:
+        want += Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0) * _shake * 0.3
+        _shake = maxf(_shake - delta * 1.8, 0.0)
+    camera.global_position = camera.global_position.lerp(want, minf(delta * 2.6, 1.0)) if time > 0.1 else want
+    camera.fov = lerpf(camera.fov, fov, minf(delta * 2.0, 1.0))
     camera.look_at(look, Vector3.UP)
+    # The horizon tips with the hull, a fraction: the sea feels alive, the stomach stays calm.
+    camera.rotation.z += _heel * 0.22
 
 # MARK: Input
 
@@ -484,9 +603,13 @@ func _input(ev: InputEvent) -> void:
         if t.pressed and _drag_id < 0:
             _drag_id = t.index
             _drag_start = t.position
+            _press_pos = t.position
+            _press_time = time
         elif not t.pressed and t.index == _drag_id:
             _drag_id = -1
             _steer_touch = 0.0
+            if mode_obj and t.position.distance_to(_press_pos) < 24.0 and time - _press_time < 0.4:
+                mode_obj.tap(t.position)
     elif ev is InputEventScreenDrag and ev.index == _drag_id:
         var d := ev as InputEventScreenDrag
         if phase == Phase.PREP:
@@ -508,18 +631,43 @@ func _autopilot(delta: float) -> void:
         return
     var target := 0.0
     if mode == "sail":
-        var best := 1e9
+        # The nearest row of rocks ahead; pick the closest clear water that is inside the
+        # lane and not in another rock's way.
+        var row_z := -1e9
         for r: Dictionary in rocks:
             var dz := float(r.z) - root.position.z
-            if dz < -40.0 or dz > -2.0:
+            if dz < -55.0 or dz > -2.0:
                 continue
-            if absf(dz) < best:
-                best = absf(dz)
-                var dx := root.position.x - float(r.x)
-                if absf(dx) < float(r.r) + 3.0:
-                    target = float(r.x) + signf(dx if dx != 0.0 else 1.0) * (float(r.r) + 3.5)
-                else:
-                    target = root.position.x
+            if dz > row_z:
+                row_z = dz
+        target = root.position.x
+        if row_z > -1e8:
+            var row: Array = []
+            for r: Dictionary in rocks:
+                if absf((float(r.z) - root.position.z) - row_z) < 6.0:
+                    row.append(r)
+            var blocked := false
+            for r: Dictionary in row:
+                if absf(root.position.x - float(r.x)) < float(r.r) + 3.5:
+                    blocked = true
+            if blocked:
+                var best_d := 1e9
+                for r: Dictionary in row:
+                    for side: float in [-1.0, 1.0]:
+                        var cx: float = float(r.x) + side * (float(r.r) + 4.0)
+                        if absf(cx) > LANE - 0.5:
+                            continue
+                        var clear := true
+                        for o: Dictionary in row:
+                            if o != r and absf(cx - float(o.x)) < float(o.r) + 3.0:
+                                clear = false
+                        if clear and absf(cx - root.position.x) < best_d:
+                            best_d = absf(cx - root.position.x)
+                            target = cx
+    elif mode_obj:
+        target = mode_obj.autopilot_target()
+        if mode_obj.drives():
+            return   # the mode set the helm itself
     else:
         target = root.position.x
         for c: Dictionary in crests:
@@ -528,7 +676,8 @@ func _autopilot(delta: float) -> void:
                 continue
             if absf(root.position.x - float(c.bx)) < float(c.bw) + 1.5:
                 target = float(c.bx) + _green_side(c) * (float(c.bw) + 2.5)
-    _steer_touch = clampf((target - root.position.x) * 0.4, -1.0, 1.0)
+    # Proportional on the gap, damped on the sideways speed, since the hull now carries way.
+    _steer_touch = clampf((target - root.position.x) * 0.45 - _lat_vel * 0.08, -1.0, 1.0)
 
 # MARK: Ends
 
@@ -558,7 +707,7 @@ func _win() -> void:
     phase = Phase.ENDED
     won = true
     var stars := 3
-    if mode == "sail":
+    if mode == "sail" or (mode_obj and mode_obj.has_hearts):
         stars = 3 if hits == 0 else (2 if hits == 1 else 1)
     _show_result("")
     var score := int(goal) * 10 + (3 - hits) * 500
@@ -574,11 +723,11 @@ func _splash_at(at: Vector3) -> void:
     p.explosiveness = 1.0
     p.direction = Vector3(0, 1, 0)
     p.spread = 60.0
-    p.initial_velocity_min = 3.0
-    p.initial_velocity_max = 7.0
-    p.gravity = Vector3(0, -9, 0)
-    p.scale_amount_min = 0.3
-    p.scale_amount_max = 0.8
+    p.initial_velocity_min = 4.0
+    p.initial_velocity_max = 9.0
+    p.gravity = Vector3(0, -13, 0)
+    p.scale_amount_min = 0.2
+    p.scale_amount_max = 0.5
     p.mesh = QuadMesh.new()
     p.material_override = spray.material_override
     p.position = at
@@ -636,18 +785,23 @@ func _draw_ui() -> void:
     var w := ui.size.x
     # Course bar across the top: a white track, the ship a little triangle on it.
     var frac := clampf(-root.position.z / goal, 0.0, 1.0)
-    ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8, 6), Color(1, 1, 1, 0.25))
-    ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8 * frac, 6), Color(1, 1, 1, 0.8))
-    var sx := w * 0.1 + w * 0.8 * frac
-    ui.draw_colored_polygon(PackedVector2Array([Vector2(sx, 62), Vector2(sx + 12, 86), Vector2(sx - 12, 86)]), Color.WHITE)
-    # Hearts (the rocks level).
-    if mode == "sail":
+    if mode_obj and not mode_obj.ends_by_distance():
+        frac = -1.0
+    if frac >= 0.0:
+        ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8, 6), Color(1, 1, 1, 0.25))
+        ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8 * frac, 6), Color(1, 1, 1, 0.8))
+        var sx := w * 0.1 + w * 0.8 * frac
+        ui.draw_colored_polygon(PackedVector2Array([Vector2(sx, 62), Vector2(sx + 12, 86), Vector2(sx - 12, 86)]), Color.WHITE)
+    # Hearts (the levels where the hull takes damage).
+    if mode == "sail" or (mode_obj and mode_obj.has_hearts):
         var font := ThemeDB.fallback_font
         ui.draw_string(font, Vector2(w - 220, 100), "♥".repeat(maxi(3 - hits, 0)) + "♡".repeat(mini(hits, 3)), HORIZONTAL_ALIGNMENT_LEFT, -1, 44, Color(1, 1, 1, 0.9))
     if phase == Phase.PREP:
         _draw_haul(Vector2(w * 0.72, ui.size.y * 0.42))
     if mode == "waves" and phase == Phase.SAILING:
         _draw_wave_arrows()
+    if mode_obj and phase == Phase.SAILING:
+        mode_obj.draw(ui)
 
 ## The halyard: a rope from the yard with a ring handle, a white hand pulling it down,
 ## and a fill ring showing how much canvas is set.
@@ -737,7 +891,7 @@ func _show_result(fail_reason: String) -> void:
     var v := VBoxContainer.new()
     v.add_theme_constant_override("separation", 22)
     var head := Label.new()
-    head.text = ("Made fast!" if mode == "sail" else "Through the storm!") if won else "Lost her!"
+    head.text = ((mode_obj.win_title if mode_obj else ("Made fast!" if mode == "sail" else "Through the storm!")) if won else "Lost her!")
     head.add_theme_font_size_override("font_size", 60)
     head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     v.add_child(head)
@@ -748,7 +902,7 @@ func _show_result(fail_reason: String) -> void:
     sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     v.add_child(sub)
     if won:
-        var stars := 3 if mode == "waves" else (3 if hits == 0 else (2 if hits == 1 else 1))
+        var stars := 3 if mode == "waves" or (mode_obj and not mode_obj.has_hearts) else (3 if hits == 0 else (2 if hits == 1 else 1))
         var row := Label.new()
         row.text = "★".repeat(stars) + "☆".repeat(3 - stars)
         row.add_theme_font_size_override("font_size", 110)

@@ -40,6 +40,11 @@ func setup() -> void:
     # Find the deck under the cannon by raycast once we are in the tree.
     call_deferred("_find_deck")
 
+## The chase level: the gun stands on the quarterdeck firing over the stern, and the ship is
+## turned bow-forward so the stern faces the pursuers. Call right after setup().
+func use_stern_gun() -> void:
+    cannon_mount = Vector3(LENGTH * 0.5 - 1.5, 1.0, 0.0)
+
 func _hull(node: Node) -> MeshInstance3D:
     for c in node.find_children("*", "MeshInstance3D", true, false):
         if c.name.contains("hull"):

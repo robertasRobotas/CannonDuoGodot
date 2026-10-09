@@ -46,6 +46,9 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     _terrain_on = false
     _seed = float(level_id) * 1.37
     _flat = castle.grow(3.0) if castle.size.x > 0.0 else Rect2()
+    # The level yard stops at the waterline: a pier's footprint stays over the water.
+    if _flat.size.x > 0.0 and _flat.end.y > Tuning.SHORE_Z - 1.5:
+        _flat.size.y = maxf((Tuning.SHORE_Z - 1.5) - _flat.position.y, 0.5)
     if biome != "opensea":
         _island(parent, biome, shore, float(st.get("beach", 4.2)))
     var first_decor := parent.get_child_count()
@@ -637,6 +640,9 @@ static func _quay(parent: Node3D, rng: RandomNumberGenerator) -> void:
 ## A cobbled yard under the castle so it stands on a proper floor.
 static func _yard(parent: Node3D, castle: Rect2, biome: String) -> void:
     var r := castle.grow(1.2)
+    # The floor stops at the beach: a pier's far end stands in the water.
+    if r.end.y > Tuning.SHORE_Z - 1.5:
+        r.size.y = maxf(Tuning.SHORE_Z - 1.5 - r.position.y, 0.5)
     var mi := MeshInstance3D.new()
     var bm := BoxMesh.new()
     bm.size = Vector3(r.size.x, 0.06, r.size.y)
