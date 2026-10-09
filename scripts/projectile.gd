@@ -112,6 +112,11 @@ func _add_flame_trail() -> void:
 
 func _on_body_entered(body: Node) -> void:
     hit.emit(body)
+    if body is Orca and not _done:
+        _done = true
+        (body as Orca).damage(global_position)
+        queue_free()
+        return
     if body is Block:
         var b := body as Block
         # A heavy ball at speed smashes through wood, whatever its size.

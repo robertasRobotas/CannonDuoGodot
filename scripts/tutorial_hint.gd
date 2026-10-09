@@ -22,7 +22,8 @@ func set_touch_mode(on: bool) -> void:
 func nudge() -> void:
     _nudge_until = _t + 3.0
 
-const GOLD := Color(1.0, 0.8, 0.35)
+# One colour only: the whole tutorial is a clean white pictogram.
+const GOLD := Color(1, 1, 1)
 const WHITE := Color(1, 1, 1)
 
 func _ready() -> void:
@@ -78,25 +79,36 @@ func _draw_aim(c: Vector2) -> void:
         _round_rect(Rect2(fp.x - 22, fp.y + 60, 110, 150), 40, _c(WHITE, 0.95))
         draw_arc(fp + Vector2(0, 4), 30, 0, TAU, 32, _c(WHITE, 0.5), 3.0)
         return
-    # The phone slides and turns a little, as if pointed at different parts of the fort.
+    # The phone turns in 3D, like a camera panned across the fort: its face foreshortens as
+    # it turns and one side edge comes into view, so the motion reads as depth, not a slide.
     var w := 100.0
     var h := 180.0
-    var pos := c + Vector2(swing * 70, 70)
-    var ang := swing * 0.18
+    var yaw := swing * 0.85                      # how far it has turned away from flat
+    var squish := 0.55 + 0.45 * cos(yaw)         # perspective: the face narrows as it turns
+    var edge := 16.0 * sin(yaw)                  # the thickness revealed on the trailing side
+    var pos := c + Vector2(swing * 46, 70)
+    var ang := swing * 0.05
     # View beam from the top of the phone to a target mark above.
     var look := c + Vector2(swing * 170, -150)
     var top := pos + Vector2(0, -h / 2).rotated(ang)
-    draw_colored_polygon(PackedVector2Array([top, look + Vector2(-46, 0), look + Vector2(46, 0)]), _c(GOLD, 0.22))
-    draw_arc(look, 26, 0, TAU, 32, _c(GOLD, 0.95), 5.0)
-    draw_circle(look, 6, _c(GOLD))
-    draw_set_transform_matrix(Transform2D(ang, pos))
+    draw_colored_polygon(PackedVector2Array([top, look + Vector2(-46, 0), look + Vector2(46, 0)]), _c(WHITE, 0.14))
+    draw_arc(look, 26, 0, TAU, 32, _c(WHITE, 0.95), 5.0)
+    draw_circle(look, 6, _c(WHITE))
+    draw_set_transform_matrix(Transform2D(ang, pos) * Transform2D(0.0, Vector2(squish, 1.0), 0.0, Vector2.ZERO))
+    # The side of the case, offset behind the face, grows as the phone turns.
+    if absf(edge) > 1.5:
+        _round_rect(Rect2(-w / 2 - 8 - maxf(-edge, 0.0) / squish, -h / 2 - 8, w + 16 + absf(edge) / squish, h + 16), 26, _c(Color(0.62, 0.64, 0.68), 0.95))
     _round_rect(Rect2(-w / 2 - 8, -h / 2 - 8, w + 16, h + 16), 26, _c(WHITE, 0.95))
-    _round_rect(Rect2(-w / 2, -h / 2, w, h), 20, _c(Color(0.15, 0.25, 0.4), 0.95))
+    _round_rect(Rect2(-w / 2, -h / 2, w, h), 20, _c(Color(0.16, 0.17, 0.2), 0.95))
+    # The fort on the screen slides the other way as the phone pans past it.
+    var fx := clampf(-swing * 34.0, -26.0, 26.0)
+    _round_rect(Rect2(fx - 16, -14, 32, 44), 4, _c(WHITE, 0.8))
+    _round_rect(Rect2(fx - 26, 20, 52, 10), 3, _c(WHITE, 0.8))
     draw_circle(Vector2(0, h / 2 - 16), 7, _c(WHITE, 0.5))
     draw_set_transform_matrix(Transform2D.IDENTITY)
-    # Two hands holding it.
+    # Two hands holding it, following the turn.
     for side: float in [-1.0, 1.0]:
-        _round_rect(Rect2(pos.x + side * (w / 2 + 6) - 18, pos.y - 10, 36, 110), 18, _c(Color(0.95, 0.8, 0.7), 0.9))
+        _round_rect(Rect2(pos.x + side * (w / 2 * squish + 6) - 18, pos.y - 10, 36, 110), 18, _c(WHITE, 0.85))
 
 ## A finger that presses, pulls down and lifts, with a power bar filling beside it.
 func _draw_load(at: Vector2) -> void:
@@ -111,7 +123,7 @@ func _draw_load(at: Vector2) -> void:
     # Track and fill.
     _round_rect(Rect2(x - 70, at.y - 20, 28, travel + 40), 14, _c(WHITE, 0.2 * a + 0.1))
     var fill := pull * travel
-    _round_rect(Rect2(x - 70, at.y - 20, 28, fill + 20), 14, _c(Color(1.0, 0.55 + 0.3 * (1.0 - pull), 0.15), 0.9 * a))
+    _round_rect(Rect2(x - 70, at.y - 20, 28, fill + 20), 14, _c(WHITE, 0.85 * a))
     # Dotted path the finger follows.
     for k in 7:
         var py := at.y + k * travel / 6.0
@@ -123,7 +135,7 @@ func _draw_load(at: Vector2) -> void:
     var hp := Vector2(x + 40, y - 8 * (1.0 - press) - 30 * lift)
     _round_rect(Rect2(hp.x - 22, hp.y - 10, 44, 120), 22, _c(WHITE, 0.95 * (a * 0.8 + 0.2)))
     _round_rect(Rect2(hp.x - 22, hp.y + 60, 110, 150), 40, _c(WHITE, 0.95 * (a * 0.8 + 0.2)))
-    draw_circle(hp + Vector2(0, 4), 14, _c(Color(0.95, 0.8, 0.7), a * 0.8 + 0.2))
+    draw_circle(hp + Vector2(0, 4), 14, _c(WHITE, 0.6 * (a * 0.8 + 0.2)))
     # On release: a burst toward the fort.
     if lift > 0.0:
         var bc := Vector2(x - 56, at.y - 70)

@@ -5,9 +5,10 @@ extends Control
 
 signal done
 
-const HOLD := 4.2
+const TAP_FROM := 3.0   # seconds before a tap may close the card
 
 var _t := 0.0
+var _done := false
 var _wind: AudioStreamPlayer
 var _puffs: Array = []   # [x, y, radius, speed, phase]
 var _font: Font
@@ -31,20 +32,22 @@ func _ready() -> void:
 func _process(delta: float) -> void:
     _t += delta
     queue_redraw()
-    if _t > HOLD and _wind:
-        var w := _wind
-        _wind = null
-        var tw := create_tween()
-        tw.tween_property(w, "volume_db", -40.0, 1.0)
-        tw.tween_callback(w.queue_free)
+
+## The card stays until the player taps it away.
+func _gui_input(ev: InputEvent) -> void:
+    if (ev is InputEventScreenTouch or ev is InputEventMouseButton) and ev.pressed and _t > TAP_FROM and not _done:
+        _done = true
+        if _wind:
+            var w := _wind
+            _wind = null
+            var tw := create_tween()
+            tw.tween_property(w, "volume_db", -40.0, 1.0)
+            tw.tween_callback(w.queue_free)
         done.emit()
 
-func _gui_input(ev: InputEvent) -> void:
-    if (ev is InputEventScreenTouch or ev is InputEventMouseButton) and ev.pressed and _t > 1.5:
-        _t = HOLD + 0.01
-
 func _draw() -> void:
-    var fog := smoothstep(0.0, 1.8, _t)
+    # The fog waits a second: the wreck gets its moment before the veil rolls in.
+    var fog := smoothstep(1.0, 2.8, _t)
     # Fog: a grey veil plus drifting banks.
     draw_rect(Rect2(Vector2.ZERO, size), Color(0.62, 0.66, 0.7, 0.55 * fog))
     for p: Array in _puffs:
@@ -53,7 +56,7 @@ func _draw() -> void:
         var r: float = float(p[2]) * 1.6
         draw_texture_rect(_smoke, Rect2(x - r, y - r, r * 2.0, r * 2.0), false, Color(0.8, 0.83, 0.86, 0.35 * fog))
     # The crest rises out of the fog.
-    var k := smoothstep(0.9, 2.2, _t)
+    var k := smoothstep(1.9, 3.2, _t)
     if k <= 0.0:
         return
     var c := Vector2(size.x / 2.0, size.y * 0.4 + (1.0 - k) * 60.0)
@@ -67,6 +70,12 @@ func _draw() -> void:
     var sub := "KINGDOM OF VALORA"
     var sw := _font.get_string_size(sub, HORIZONTAL_ALIGNMENT_CENTER, -1, 40).x
     draw_string(_font, Vector2(c.x - sw / 2.0, ty + 70), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1, 1, 1, 0.85 * k))
+    # Once everything is in, a pulsing prompt at the bottom.
+    if _t > TAP_FROM + 0.4:
+        var tap := "Tap the screen to continue"
+        var pulse := 0.5 + 0.4 * sin(_t * 3.5)
+        var tpw := _font.get_string_size(tap, HORIZONTAL_ALIGNMENT_CENTER, -1, 34).x
+        draw_string(_font, Vector2(c.x - tpw / 2.0, size.y - 220.0), tap, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1, 1, 1, pulse))
 
 ## A shield with two crossed cannons under a crown.
 func _crest(c: Vector2, r: float, a: float) -> void:

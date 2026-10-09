@@ -6,7 +6,7 @@ extends Control
 const NAMES := {
     "king": "King Aldric", "fisher": "Old Tomas", "mira": "Mira", "mate": "Pip, first mate",
     "grimhorn": "Grimhorn", "vesk": "Lord Vesk", "olaf": "Olaf", "bottle": "A message in a bottle",
-    "bjorn": "Red Bjorn",
+    "bjorn": "Red Bjorn", "captain": "The Captain",
 }
 
 var who := "mate"
@@ -27,7 +27,8 @@ func _draw() -> void:
     var r := s * 0.5
     var bg: Color = {"king": Color(0.36, 0.18, 0.42), "fisher": Color(0.28, 0.46, 0.58), "mira": Color(0.86, 0.62, 0.42),
         "mate": Color(0.30, 0.58, 0.62), "grimhorn": Color(0.32, 0.08, 0.06), "vesk": Color(0.22, 0.2, 0.3),
-        "olaf": Color(0.4, 0.44, 0.5), "bottle": Color(0.2, 0.42, 0.58), "bjorn": Color(0.42, 0.12, 0.06)}.get(who, Color(0.3, 0.3, 0.3))
+        "olaf": Color(0.4, 0.44, 0.5), "bottle": Color(0.2, 0.42, 0.58), "bjorn": Color(0.42, 0.12, 0.06),
+        "captain": Color(0.14, 0.24, 0.4)}.get(who, Color(0.3, 0.3, 0.3))
     # Frame and backdrop with a soft light.
     draw_circle(c, r, Color(0.78, 0.6, 0.24))
     draw_circle(c, r * 0.93, Color(0.42, 0.3, 0.12))
@@ -42,7 +43,7 @@ func _draw() -> void:
         skin = Color(0.84, 0.6, 0.48)
     var coat: Color = {"king": Color(0.7, 0.08, 0.1), "fisher": Color(0.95, 0.78, 0.15), "mira": Color(0.25, 0.5, 0.35),
         "mate": Color(0.95, 0.95, 0.95), "grimhorn": Color(0.15, 0.1, 0.1), "vesk": Color(0.35, 0.18, 0.45),
-        "olaf": Color(0.45, 0.38, 0.3), "bjorn": Color(0.5, 0.12, 0.08)}.get(who, Color.GRAY)
+        "olaf": Color(0.45, 0.38, 0.3), "bjorn": Color(0.5, 0.12, 0.08), "captain": Color(0.1, 0.16, 0.34)}.get(who, Color.GRAY)
     # Shoulders.
     _ellipse(c + Vector2(0, r * 0.62), Vector2(r * 0.62, r * 0.28), coat)
     if who == "mate":
@@ -60,7 +61,8 @@ func _draw() -> void:
     _ellipse(c + Vector2(0, -r * 0.08), Vector2(r * 0.36, r * 0.42), skin)
     # Beards.
     var beard: Color = {"king": Color(0.95, 0.95, 0.95), "fisher": Color(0.8, 0.8, 0.82), "grimhorn": Color(0.1, 0.08, 0.08),
-        "olaf": Color(0.95, 0.8, 0.4), "bjorn": Color(0.8, 0.3, 0.1), "vesk": Color(0.12, 0.1, 0.12)}.get(who, Color(0, 0, 0, 0))
+        "olaf": Color(0.95, 0.8, 0.4), "bjorn": Color(0.8, 0.3, 0.1), "vesk": Color(0.12, 0.1, 0.12),
+        "captain": Color(0.55, 0.55, 0.58)}.get(who, Color(0, 0, 0, 0))
     if beard.a > 0.0:
         if who == "vesk":
             # A thin pointed moustache.
@@ -109,6 +111,16 @@ func _draw() -> void:
         "vesk":
             draw_rect(Rect2(c.x - r * 0.3, c.y - r * 0.78, r * 0.6, r * 0.3), Color(0.1, 0.08, 0.12))
             _ellipse(c + Vector2(0, -r * 0.47), Vector2(r * 0.46, r * 0.07), Color(0.1, 0.08, 0.12))
+        "captain":
+            # A navy bicorne with gold trim and a cockade, plus gold epaulettes.
+            var navy := Color(0.08, 0.13, 0.26)
+            draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.52, -r * 0.4), c + Vector2(-r * 0.3, -r * 0.72),
+                c + Vector2(0, -r * 0.8), c + Vector2(r * 0.3, -r * 0.72), c + Vector2(r * 0.52, -r * 0.4),
+                c + Vector2(r * 0.3, -r * 0.46), c + Vector2(0, -r * 0.5), c + Vector2(-r * 0.3, -r * 0.46)]), navy)
+            draw_arc(c + Vector2(0, -r * 0.44), r * 0.5, PI + 0.5, TAU - 0.5, 20, Color(0.95, 0.8, 0.36), r * 0.035)
+            draw_circle(c + Vector2(r * 0.3, -r * 0.6), r * 0.065, Color(0.95, 0.8, 0.36))
+            for side: float in [-1.0, 1.0]:
+                draw_rect(Rect2(c.x + side * r * 0.62 - r * 0.14, c.y + r * 0.42, r * 0.28, r * 0.1), Color(0.95, 0.8, 0.36))
         "grimhorn", "olaf", "bjorn":
             var steel := Color(0.6, 0.62, 0.66) if who != "olaf" else Color(0.5, 0.48, 0.46)
             _ellipse(c + Vector2(0, -r * 0.36), Vector2(r * 0.4, r * 0.26), steel)

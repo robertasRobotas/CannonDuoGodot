@@ -14,6 +14,7 @@ var _auto_fire: PackedStringArray = []
 var _auto_arm := ""
 var _loading: LoadingScreen
 var _last_won := -1
+var _voyage: VoyageLevel
 
 func _ready() -> void:
     _load_state()
@@ -163,6 +164,9 @@ func _clear() -> void:
     if _level:
         _level.queue_free()
         _level = null
+    if _voyage:
+        _voyage.queue_free()
+        _voyage = null
     Engine.time_scale = 1.0
     get_tree().paused = false
     Haptics.muted = false
@@ -435,7 +439,7 @@ func _level_info(id: int) -> Dictionary:
 func _level_data(id: int) -> Dictionary:
     if id == DAILY_ID:
         return _daily_data()
-    var f := FileAccess.open("res://levels/level%02d.json" % id, FileAccess.READ)
+    var f := FileAccess.open("res://levels/level%02d.json" % Campaign.file_id(id), FileAccess.READ)
     var d = JSON.parse_string(f.get_as_text()) if f else {}
     if not (d is Dictionary):
         return {}
@@ -535,7 +539,7 @@ func _with_story(id: int, when: String, then: Callable) -> void:
     add_child(layer)
     var card := StoryCard.new()
     layer.add_child(card)
-    card.play(lines)
+    card.play(lines, Story.is_eavesdrop(id, when))
     card.done.connect(func():
         layer.queue_free()
         then.call())
@@ -582,6 +586,25 @@ func _build_level(id: int) -> void:
     _clear()
     _current_id = id
     var data := _level_data(id)
+    # A voyage at the helm (Set Sail, Wave Rider): its own gameplay, HUD and result panel.
+    if data.has("mode"):
+        _voyage = VoyageLevel.new()
+        add_child(_voyage)
+        _voyage.build(data, settings)
+        music.play("level")
+        _voyage.next_level.connect(func(): _after_level(id, func(): play_level(id + 1) if id < LEVEL_COUNT else _show_levels()))
+        _voyage.replay.connect(func(): start_level(id))
+        _voyage.quit.connect(func(): _after_level(id, _show_levels))
+        if loading:
+            var lay := CanvasLayer.new()
+            lay.layer = 20
+            add_child(lay)
+            lay.add_child(loading)
+            var tw := create_tween()
+            tw.tween_interval(0.7)
+            tw.tween_property(loading, "modulate:a", 0.0, 0.4)
+            tw.tween_callback(lay.queue_free)
+        return
     var level_settings := settings.duplicate()
     var ups: Dictionary = progress.get("upgrades", {}).duplicate()
     if "olaf" in progress.get("crew", []):

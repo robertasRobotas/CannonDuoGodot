@@ -36,7 +36,8 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         site = ["sand", "rock", "cliff", "far"][f.rng.randi_range(0, 3)]
         z = -16.0 if site == "far" else -10.5
     var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "huge": 18.0, "boss": 18.0,
-        "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0}.get(kind, 10.0) as float
+        "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0,
+        "keyhole": 12.0}.get(kind, 10.0) as float
     f._site(site, width, z)
     match kind:
         "small": f._small(z)
@@ -47,6 +48,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "mega": f._mega(z)
         "harbor": f._harbor(z)
         "battery": f._battery(z)
+        "keyhole": f._keyhole(z)
         "stockade": f._stockade(z)
         "coastal": f._coastal_battery(z)
     f._place_guns(int(opts.get("guns", 0)))
@@ -254,6 +256,42 @@ func _coastal_battery(z: float) -> void:
     _part("wood", Vector3(0.95, 2.85, mz), Vector3(2.1, 0.16, 3.2), {"rotation": [0, 0, -30], "style": "roof"})
     _guard(Vector3(0, 3.35, mz))
     _tops.append([0.0, mz, 2.4])
+
+## The Keyhole: a sheer curtain wall of dressed stone with one small window dead centre.
+## Iron does nothing to the wall; the only way in is a ball through the window, straight into
+## the powder shelf behind it. Pirates watch from the rampart and the scaffolds behind.
+func _keyhole(z: float) -> void:
+    var wall_z := z + 1.6
+    var rows := 5
+    for row in rows:
+        var y := 0.5 + row
+        for i in 11:
+            var x := (i - 5) * 1.02
+            if row == 2 and i == 5:
+                continue   # the window
+            _part("stone", Vector3(x, y, wall_z), Vector3(0.98, 0.98, 0.9), {"style": ":sand"})
+    # Merlons along the top, pirates on the rampart between them.
+    for i in 5:
+        _part("stone", Vector3(-5.1 + i * 2.55, rows + 0.9, wall_z), Vector3(1.0, 0.8, 0.9), {"style": ":sand"})
+    for x: float in [-3.8, 3.8]:
+        _guard(Vector3(x, rows + 0.55, wall_z))
+    # The powder shelf, level with the window, right behind it: thread the window and it goes.
+    _part("wood", Vector3(0, 2.0, wall_z - 1.1), Vector3(2.0, 0.16, 1.4))
+    for sx: float in [-0.65, 0.65]:
+        _part("wood", Vector3(sx, 1.0, wall_z - 1.5), Vector3(0.22, 2.0, 0.22))
+    for sx: float in [-0.5, 0.5]:
+        _part("tnt", Vector3(sx, 2.45, wall_z - 1.2), Vector3(0.55, 0.72, 0.55))
+    for sx: float in [-0.6, 0.6]:
+        _part("tnt", Vector3(sx, 0.4, wall_z - 1.6), Vector3(0.6, 0.8, 0.6))
+    # Scaffold lookouts behind the wall, heads showing over the rampart.
+    for side: float in [-1.0, 1.0]:
+        var sx := side * 2.6
+        var y := _storey(sx, wall_z - 2.8, 1.5, 1.5, 0.0, 0.22, false, false)
+        y = _storey(sx, wall_z - 2.8, 1.4, 1.4, y, 0.2, false, false)
+        y = _storey(sx, wall_z - 2.8, 1.3, 1.3, y, 0.18, false, false)
+        _guard(Vector3(sx, y, wall_z - 2.8))
+    _tops.append([-5.0, wall_z, 1.0])
+    _tops.append([5.0, wall_z, 1.0])
 
 ## A small gun battery: a squat tower with a gun either side.
 func _battery(z: float) -> void:

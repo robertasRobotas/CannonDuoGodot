@@ -1,112 +1,135 @@
-## The story of Chapter 1, told in short scenes before and after levels, and Pip's jokes after
-## every other win. Scenes play once; `seen` is saved in the player's progress.
+## The story of Chapter 1. You are the young gunner of the last navy ship afloat; the Captain
+## gives the orders. Scenes play once before or after a level; Pip jokes after the other wins.
+## Lines are kept short: one thought each, never a paragraph.
 class_name Story
 
 ## "N_before" plays before level N starts, "N_after" after it is won. Each line: [who, text].
+## The 3_before scene is overheard through the cabin door (the eavesdrop presentation).
 const BEATS := {
     "1_before": [
-        ["king", "Captain. The pirate Grimhorn has taken the Valora Islands. His horned brutes have built a fort on every one."],
-        ["king", "They have locked our people in cages. I can give you one ship and one cannon. It will have to be enough."],
-        ["king", "Free the islands. Free my people."],
-        ["fisher", "Old Tomas, Captain. I've fished these waters fifty years. A word of advice: pirates keep their powder close. Hit the red barrels."],
+        ["king", "Grimhorn took our islands. Our people sit in cages."],
+        ["captain", "You heard the king, lad. You're my gunner now."],
+        ["fisher", "Old fisherman's tip: red barrels. Boom."],
     ],
     "1_after": [
-        ["mate", "Pip, your first mate, reporting! First fort down, Captain. I'd cheer louder, but I swallowed a seagull feather."],
+        ["mate", "First fort down! I'll carve a notch in the mast."],
+    ],
+    "2_before": [
+        ["captain", "No cannon work today, lad. Take the helm."],
+        ["captain", "Hoist the sail and bring us into port. Mind the rocks."],
     ],
     "2_after": [
-        ["mira", "You're the king's captain? I'm Mira. I got out of Grimhorn's cages on Gull Rock."],
-        ["mira", "I know where every one of their forts is. I'll mark them on your chart. Follow me."],
+        ["captain", "Well sailed. You might make a sailor yet."],
     ],
-    "5_before": [
-        ["mira", "Their ships guard the Bay of Gulls. Two pinnaces and a gun on the rocks. Sink them before they sink you."],
+    "3_before": [
+        ["king", "Captain. Yours is the only ship that came back."],
+        ["king", "The rest lie on the sea floor."],
+        ["king", "Break their forts. Every last one."],
+        ["captain", "...You heard none of that, lad. To your gun."],
     ],
-    "6_before": [
-        ["mira", "Port Alder, the harbour. It was the busiest port in Valora. Now it's a pirate warehouse."],
-        ["fisher", "Cranes and crates fall hard, Captain. And they keep powder among the cargo."],
+    "3_after": [
+        ["mira", "I'm Mira. I escaped their cages."],
+        ["mira", "I know every fort they hold. I'll mark your chart."],
     ],
-    "6_after": [
-        ["mate", "The harbour's ours! The fishmongers are back already. It smells... victorious."],
-        ["fisher", "The shipwrights of Port Alder owe you now. Remember that."],
+    "4_before": [
+        ["captain", "Storm swell ahead. Meet the waves where they're green."],
+        ["captain", "White water rolls a ship over, lad. Steer around it."],
+    ],
+    "4_after": [
+        ["mate", "My breakfast is still up on that last wave."],
+    ],
+    "7_before": [
+        ["mira", "Gunships in the bay. Sink them before they sink you."],
+    ],
+    "8_before": [
+        ["fisher", "Port Alder. Their whole loot sits on that quay."],
     ],
     "8_after": [
-        ["mira", "They were waiting for us tonight. They knew we were coming."],
-        ["mira", "Someone is telling them where we sail."],
-        ["mate", "A spy? On OUR side? I only told my mum. And the parrot. The parrot talks, Captain."],
+        ["mate", "The harbour's ours! Smells like fish and freedom."],
     ],
     "10_after": [
-        ["mate", "Captain! Red Bjorn's last shot cracked the hull from stem to stern! We're taking water!"],
-        ["fisher", "Sail for Port Alder. The harbour you freed will mend her."],
-        ["mate", "...Patched, caulked and painted. She's prettier than before. Don't tell her I said that."],
+        ["mira", "They knew we were coming. Someone talks."],
+        ["mate", "Not me! ...Maybe the parrot."],
     ],
     "12_after": [
-        ["mate", "Captain, wake up! They boarded us in the night while we slept off the storm..."],
-        ["mate", "The cannon. They took our cannon."],
-        ["fisher", "Then take mine. It's old and small and slow. But it never missed a gull."],
+        ["mate", "Captain, the hull's cracked!"],
+        ["fisher", "Port Alder will mend her. You freed them, remember?"],
     ],
-    "13_before": [
-        ["fisher", "My old cannon shoots short and soft. Sail in close and aim higher than you think."],
-    ],
-    "14_before": [
-        ["mira", "Fire Mountain. The pirates built right under the volcano. When it spits, it spits rocks of fire."],
+    "14_after": [
+        ["mate", "They boarded us in the dark. The cannon's gone."],
+        ["fisher", "Take mine. Old and small... but she never missed."],
     ],
     "15_before": [
-        ["mira", "Skull Rock. They took your cannon there, to the vault in the cliff."],
-    ],
-    "15_after": [
-        ["mira", "It's here! Your cannon!"],
-        ["mate", "Welcome back, old girl. No offence to the fisherman's peashooter."],
-        ["fisher", "None taken. It's retired now. Like me. Mostly."],
+        ["fisher", "She throws short. Sail close, aim high."],
     ],
     "16_before": [
-        ["mira", "At Windmill Vale some pirates are in cages too. Grimhorn locked up the ones who wanted to quit."],
-        ["mira", "Free them. See what they say."],
+        ["mira", "Fire Mountain spits burning rock. Let it fight for you."],
     ],
-    "16_after": [
-        ["olaf", "Olaf. Ten years I rowed for Grimhorn. No more."],
-        ["olaf", "Your cannon is slow to load, Captain. Let me and my brothers help. We know the work."],
-        ["mate", "New crew! They're big. They're hairy. They eat a lot. I love them."],
+    "17_before": [
+        ["mira", "Skull Rock. Your cannon is in that vault."],
     ],
     "17_after": [
-        ["mira", "Captain, look. Letters in the treasury, with the royal seal. Signed... Lord Vesk."],
-        ["vesk", "The king's own steward. For every island he betrayed, Grimhorn paid him in gold."],
-        ["king", "Vesk?! He sat at my table. He will answer for this. Finish it, Captain."],
+        ["mate", "Welcome back, old girl!"],
     ],
     "18_before": [
-        ["olaf", "You should know who you fight. Grimhorn was a navy captain once. Like you."],
-        ["olaf", "He quarrelled with the king, took his ship and sailed away. He never forgave Valora."],
+        ["mira", "Some pirates want out. Free them too."],
+    ],
+    "18_after": [
+        ["olaf", "Olaf. Ten years with Grimhorn. No more."],
+        ["olaf", "My brothers and I will work your gun."],
     ],
     "19_after": [
-        ["mira", "One island left. Grimhorn's own. The sea there is quiet. Too quiet."],
-        ["mate", "Quiet is good! Quiet means nobody is shooting at me. ...Right?"],
+        ["mira", "Letters with the royal seal. Lord Vesk sold us out."],
+        ["king", "Vesk?! He will answer. Finish this, Captain."],
     ],
     "20_before": [
-        ["grimhorn", "So the king's little captain came at last. With one ship and one cannon."],
-        ["grimhorn", "You sailed into my trap. Every ship I have is here. Every gun."],
-        ["grimhorn", "I was the best captain Valora ever had. Come and see why."],
+        ["olaf", "Grimhorn was navy once. The best. Then the king broke him."],
     ],
-    "20_after": [
-        ["grimhorn", "...You think this is over? I was never the one in charge."],
-        ["mate", "Captain! A bottle in the surf, from his cabin..."],
-        ["bottle", "Grimhorn. The islands were only the start. The North is ready. My ice fleet sails at the thaw. -- The Pirate King"],
-        ["king", "The Valora Islands are free, Captain. My people are home. Rest now."],
-        ["king", "When the ice melts, the Frozen North will need you."],
+    "21_after": [
+        ["mira", "One island left after the vault. It's too quiet."],
+    ],
+    "22_before": [
+        ["captain", "Their vault has one window, lad."],
+        ["captain", "Thread it. Make the king proud."],
+    ],
+    "23_before": [
+        ["captain", "Something big is circling us."],
+        ["mate", "Please be dolphins. Please be dolphins."],
+    ],
+    "23_after": [
+        ["mate", "THE WHALE LIFTED THE SHIP. I kissed the deck twice."],
+        ["fisher", "The old sea looks after her own."],
+    ],
+    "24_before": [
+        ["grimhorn", "The king's little captain. One ship. One cannon."],
+        ["grimhorn", "Welcome to my trap."],
+    ],
+    "24_after": [
+        ["bottle", "\"The islands were the start. My ice fleet sails at the thaw. — The Pirate King\""],
+        ["king", "Valora is free. Rest, gunner. The North will need you soon."],
     ],
 }
 
+## Which scenes are overheard through a door, not spoken to you.
+const EAVESDROP := ["3_before"]
+
 ## Pip after a win with no scene of its own.
 const MATE_JOKES := [
-    "I counted the cannonballs, Captain. Then I counted them again. We have fewer now.",
-    "Another fort down! My mum will be so proud. She thinks I'm a baker.",
+    "I counted the cannonballs. Twice. We have fewer now.",
+    "My mum thinks I'm a baker. Don't tell her.",
     "That pirate flew so far he'll be home before us.",
-    "Nice shot! I'd high-five you but I'm holding the rope. Which rope? Good question.",
-    "I made a list of every pirate we beat. The list is on fire now. Sorry.",
-    "The islanders brought fish! I love fish. I love them. I love you, Captain.",
+    "Nice shot! I'd clap, but I'm holding a rope.",
     "Grimhorn is going to be SO cross.",
     "That tower fell like my cousin at a wedding.",
+    "The islanders brought fish! I love you, Captain.",
+    "I'd have fired sooner, but I blinked.",
 ]
 
 static func beat(id: int, when: String) -> Array:
     return BEATS.get("%d_%s" % [id, when], [])
+
+static func is_eavesdrop(id: int, when: String) -> bool:
+    return ("%d_%s" % [id, when]) in EAVESDROP
 
 static func joke(id: int) -> String:
     return MATE_JOKES[id % MATE_JOKES.size()]

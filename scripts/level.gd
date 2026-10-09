@@ -90,6 +90,7 @@ var open_sea := false
 var focus_point: Variant = null
 var next_thunder := 0.0
 var is_paused := false
+var ship_lift := 0.0   # the whale under the keel (The Pod) raises this
 var _touches: Dictionary = {}
 var _pinch_start := -1.0
 var zoom_out := 0.0
@@ -333,6 +334,10 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         _spawn_gun(g)
     for s in data.get("enemyShips", []):
         _spawn_enemy_ship(s)
+    if data.has("orcas"):
+        var pod := OrcaDirector.new()
+        add_child(pod)
+        pod.setup(self)
     _freeze_all(true)
     _castle_zone = _castle_rect()
     for b in data.blocks:
@@ -867,7 +872,7 @@ func _rock_ship() -> void:
     var port := sea.height(p.x, p.z - half_w)
     var starboard := sea.height(p.x, p.z + half_w)
     var mid := sea.height(p.x, p.z)
-    var level_y := Tuning.SEA_LEVEL + (bow + stern + port + starboard + mid * 2.0) / 6.0 + Tuning.SHIP_FREEBOARD
+    var level_y := Tuning.SEA_LEVEL + (bow + stern + port + starboard + mid * 2.0) / 6.0 + Tuning.SHIP_FREEBOARD + ship_lift
     var trim := clampf(atan2(stern - bow, half_l * 2.0), -0.22, 0.22)      # fore and aft
     var heel := clampf(atan2(starboard - port, half_w * 2.0) * 0.55, -0.2, 0.2)   # side to side
     var follow := minf(dt * 3.5, 1.0)
@@ -1781,7 +1786,10 @@ func _check_progress() -> void:
                 win_linger_start = time
             if win_linger_start >= 0.0:
                 var waited := time - win_linger_start
-                if (waited >= Tuning.WIN_LINGER and _debris_resting()) or waited >= Tuning.WIN_LINGER_MAX:
+                # The pause lasts while something is still falling; once the scene is still,
+                # a short beat and the panel comes up. No staring at a frozen screen.
+                var min_wait := 1.1 if _debris_resting() else Tuning.WIN_LINGER
+                if waited >= min_wait or waited >= Tuning.WIN_LINGER_MAX:
                     win_linger_start = -1.0
                     _finish(true)
         Phase.IN_FLIGHT, Phase.SETTLING:

@@ -344,7 +344,7 @@ func _process(delta: float) -> void:
 func _refresh() -> void:
     var parts: Array[String] = []
     parts.append(level.sea_description())
-    if not level.data.get("enemyCannons", []).is_empty() or not level.data.get("enemyShips", []).is_empty():
+    if not level.data.get("enemyCannons", []).is_empty() or not level.data.get("enemyShips", []).is_empty() or level.data.has("orcas"):
         var hearts := ""
         for i in level.max_hull:
             hearts += "♥" if i < level.max_hull - level.hull_hits else "♡"
@@ -466,6 +466,9 @@ func _on_event(name: String, d: Dictionary) -> void:
         "multi":
             var n := int(d.count)
             _show_banner(["", "", "DOUBLE!", "TRIPLE!"][n] if n <= 3 else "MULTI ×%d!" % n, "", Color(0.6, 0.95, 1.0))
+        "banner":
+            if str(d.text) != "":
+                _show_banner(str(d.text), str(d.get("sub", "")), Color(0.8, 0.95, 1.0))
         "near_miss":
             _show_banner("So close!", "", Color(1, 1, 1))
         "freed":

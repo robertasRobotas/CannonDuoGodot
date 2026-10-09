@@ -52,10 +52,26 @@ func _hull(node: Node) -> MeshInstance3D:
 const RIGGING_FADE_NEAR := 3.0
 const RIGGING_FADE_FAR := 7.0
 
+var _sails: Array[MeshInstance3D] = []
+var _sail_base: Array = []   # [rest position, top of the canvas in node space]
+
+## Hoist amount, 0 furled to 1 full: the canvas drops from the yards, top edge staying put.
+func set_sail(s: float) -> void:
+    s = clampf(s, 0.0, 1.0)
+    for i in _sails.size():
+        var mi := _sails[i]
+        var base: Array = _sail_base[i]
+        var sc := maxf(s, 0.05)
+        mi.scale.y = sc
+        mi.position.y = float(base[0].y) + float(base[1]) * (1.0 - sc)
+
 func _tag_rigging(node: Node) -> void:
     for c in node.get_children():
         if c is MeshInstance3D and not c.name.contains("hull"):
             var mi := c as MeshInstance3D
+            if c.name.contains("sails"):
+                _sails.append(mi)
+                _sail_base.append([mi.position, mi.mesh.get_aabb().end.y])
             # Sail shadows lay a dark sheet over the water in front of the cannon.
             mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             for i in mi.mesh.get_surface_count():
