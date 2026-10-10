@@ -109,13 +109,19 @@ func pop(at: Vector3, color: Color) -> void:
     _burst(at, color, 46, 3.2, 0.08, 0.9)
     _burst(at, Color(1, 0.96, 0.88), 14, 1.5, 0.14, 0.6)
 
-func blast(at: Vector3) -> void:
+## `hold` stretches the fireball, smoke and sparks: a powder magazine in a stone fort burns
+## longer than a crate.
+func blast(at: Vector3, hold: float = 1.0) -> void:
     var k := blast_scale
-    _sprites(at, "res://assets/particles/explosion02.png", Color(1, 0.9, 0.7, 1), 6, 2.5 * k, 3.2 * k, 0.8, 0.0, 2.2)
-    _sprites(at, "res://assets/particles/explosion05.png", Color(1, 0.75, 0.45, 1), 6, 4.0 * k, 2.6 * k, 1.0, 0.0, 2.0)
-    _sprites(at + Vector3(0, 0.5, 0), "res://assets/particles/blackSmoke08.png", Color(0.25, 0.23, 0.22, 0.85), 14, 2.2 * k, 3.0 * k, 3.2, 1.2, 2.2, 70.0)
-    _sprites(at, "res://assets/particles/spark_05.png", Color(1, 0.8, 0.4, 1), 34, 9.0 * k, 0.35 * k, 0.9, -8.0, 1.0)
-    _burst(at, Color(1, 0.62, 0.2), 40, 5.5, 0.16, 0.9)
+    var big := hold > 1.0
+    _sprites(at, "res://assets/particles/explosion02.png", Color(1, 0.9, 0.7, 1), 8 if big else 6, 2.5 * k, 3.2 * k, 0.8 * hold, 0.0, 2.2)
+    _sprites(at, "res://assets/particles/explosion05.png", Color(1, 0.75, 0.45, 1), 8 if big else 6, 4.0 * k, 2.6 * k, 1.0 * hold, 0.0, 2.0)
+    _sprites(at + Vector3(0, 0.5, 0), "res://assets/particles/blackSmoke08.png", Color(0.25, 0.23, 0.22, 0.85), 20 if big else 14, 2.2 * k, 3.0 * k, 3.2 * hold, 1.2, 2.2, 70.0)
+    _sprites(at, "res://assets/particles/spark_05.png", Color(1, 0.8, 0.4, 1), 50 if big else 34, 9.0 * k, 0.35 * k, 0.9 * hold, -8.0, 1.0)
+    _burst(at, Color(1, 0.62, 0.2), 60 if big else 40, 5.5, 0.16, 0.9 * hold)
+    if big:
+        # A second, slower fireball rolls up out of the first.
+        _sprites(at + Vector3(0, 1.0, 0), "res://assets/particles/explosion05.png", Color(1, 0.6, 0.3, 0.9), 6, 2.0 * k, 3.4 * k, 1.6 * hold, 1.5, 1.6, 40.0)
     # Shock ring: a flat expanding disc.
     var ring := MeshInstance3D.new()
     var tm := TorusMesh.new()
@@ -130,8 +136,8 @@ func blast(at: Vector3) -> void:
     ring.position = Vector3(at.x, maxf(at.y - 0.2, 0.05), at.z)
     add_child(ring)
     var tw := create_tween()
-    tw.tween_property(ring, "scale", Vector3(9, 1, 9), 0.4).set_ease(Tween.EASE_OUT)
-    tw.parallel().tween_property(mat, "albedo_color:a", 0.0, 0.4)
+    tw.tween_property(ring, "scale", Vector3(9, 1, 9) * (1.3 if big else 1.0), 0.4 * hold).set_ease(Tween.EASE_OUT)
+    tw.parallel().tween_property(mat, "albedo_color:a", 0.0, 0.4 * hold)
     tw.tween_callback(ring.queue_free)
 
 func splash(at: Vector3) -> void:

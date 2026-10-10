@@ -21,11 +21,13 @@ static func style(data: Dictionary, storm: bool) -> Dictionary:
         sky = "storm"
     elif float(data.get("sea", 0.0)) >= 0.4 and sky == "noon":
         sky = "overcast"
-    return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2))}
+    return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2)), "tree_max": float(terrain.get("tree_max", 0.0))}
 
 ## Areas nothing may be placed in (x, z rectangles): the castle and the view in front of it,
 ## and the sea lane the ship sails in along, far out to the right where it comes from.
 static var _clear: Array[Rect2] = []
+## A level's ceiling for trees in metres (terrain "tree_max"); 0 means no cap.
+static var _tree_cap := 0.0
 
 static func _free(x: float, z: float, r: float = 0.0) -> bool:
     for rect in _clear:
@@ -38,6 +40,7 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     var rng := RandomNumberGenerator.new()
     rng.seed = level_id * 7919 + 13
     var shore: String = st.get("shore", "sand")
+    _tree_cap = float(st.get("tree_max", 0.0))
     _clear = [Rect2(-13.0, ship_z - 5.5, 90.0, 11.0)]
     if castle.size.x > 0.0:
         var c := castle.grow(2.0)
@@ -308,7 +311,7 @@ static func _forest(parent: Node3D, rng: RandomNumberGenerator, names: Array, co
         var z := minf(c.y + rng.randfn(0.0, 7.0), -4.0)
         if not _free(x, z, 1.5) or shore_z(x) - z < 5.0:
             continue
-        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h) * (1.0 + clampf((-z - 8.0) / 60.0, 0.0, 0.6)))
+        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], _capped(rng.randf_range(min_h, max_h) * (1.0 + clampf((-z - 8.0) / 60.0, 0.0, 0.6))))
         t.position = Vector3(x, 0, z)
         t.rotation.y = rng.randf_range(0, TAU)
         _sway(t, rng)
@@ -392,7 +395,7 @@ static func _shore(parent: Node3D, rng: RandomNumberGenerator, biome: String, sh
                     var pz := rng.randf_range(-4.5, 1.2)
                     if not _free(px, pz, 1.0):
                         continue
-                    var t := Models.tree("palm_coconut" if i % 3 != 0 else "palm_plant", rng.randf_range(5.0, 8.0))
+                    var t := Models.tree("palm_coconut" if i % 3 != 0 else "palm_plant", _capped(rng.randf_range(5.0, 8.0)))
                     t.position = Vector3(px, 0.0, pz)
                     t.rotation.y = rng.randf_range(0, TAU)
                     _sway(t, rng)
@@ -446,11 +449,14 @@ static func _trees(parent: Node3D, rng: RandomNumberGenerator, names: Array, cou
         var z := rng.randf_range(-26, 1)
         if not _free(x, z, 1.5):
             continue
-        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], rng.randf_range(min_h, max_h))
+        var t := Models.tree(names[rng.randi_range(0, names.size() - 1)], _capped(rng.randf_range(min_h, max_h)))
         t.position = Vector3(x, 0, z)
         t.rotation.y = rng.randf_range(0, TAU)
         _sway(t, rng)
         parent.add_child(t)
+
+static func _capped(h: float) -> float:
+    return minf(h, _tree_cap) if _tree_cap > 0.0 else h
 
 ## Marks a tree for the wind: Level sways everything in the "sway" group about its base.
 static func _sway(t: Node3D, rng: RandomNumberGenerator) -> void:
@@ -688,5 +694,6 @@ static func _scud(parent: Node3D) -> void:
         m.disable_fog = true
         p.material_override = m
         p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        p.position = Vector3(-75.0, 22.0 + layer * 7.0, -38.0 - layer * 14.0)
+        # High enough that the lowest cards clear a fort's spires.
+        p.position = Vector3(-75.0, 36.0 + layer * 7.0, -38.0 - layer * 14.0)
         parent.add_child(p)

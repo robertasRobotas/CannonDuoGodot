@@ -41,6 +41,7 @@ func _alarm() -> void:
             if is_instance_valid(level):
                 var p := AudioStreamPlayer.new()
                 p.stream = _bell
+                p.bus = &"Sfx"
                 p.volume_db = -4.0
                 p.pitch_scale = randf_range(0.95, 1.05)
                 level.add_child(p)

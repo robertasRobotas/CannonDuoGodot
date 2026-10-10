@@ -223,15 +223,17 @@ func _build_rain() -> void:
     rain.position = Vector3(0, 9.0, -7.0)
 
 func _sounds() -> void:
-    if not bool(settings.get("sound", true)):
+    if int(settings.get("sound", 100)) <= 0:
         return
     var waves := AudioStreamPlayer.new()
     waves.stream = load("res://assets/audio/waves_loop.wav")
+    waves.bus = &"Sfx"
     waves.volume_db = -8.0
     add_child(waves)
     waves.play(randf_range(0.0, 20.0))
     _wind = AudioStreamPlayer.new()
     _wind.stream = load("res://assets/audio/wind_loop.wav")
+    _wind.bus = &"Sfx"
     # The sail level starts with a light air that swells as the canvas drops.
     _wind.volume_db = -26.0 if mode == "sail" else -8.0
     add_child(_wind)
@@ -239,6 +241,7 @@ func _sounds() -> void:
     if mode == "waves":
         var storm := AudioStreamPlayer.new()
         storm.stream = load("res://assets/audio/rain_loop.wav")
+        storm.bus = &"Sfx"
         storm.volume_db = -10.0
         add_child(storm)
         storm.play(randf_range(0.0, 20.0))

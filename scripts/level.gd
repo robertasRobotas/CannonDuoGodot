@@ -219,7 +219,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         pano.panorama = load("res://assets/sky/overcast.hdr")
         pano.energy_multiplier = 0.45 if sky_kind == "storm" else 0.8
         if tempest:
-            pano.energy_multiplier = 0.2
+            pano.energy_multiplier = 0.09
         sm = pano
     elif sky_kind in ["noon", "sunset"]:
         # A real photographed sky (Poly Haven), clouds and all: cheap, and never flat.
@@ -254,7 +254,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     e.background_mode = Environment.BG_SKY
     e.sky = sky
     e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-    e.ambient_light_energy = 0.9 if not storm else (0.32 if tempest else 0.6)
+    e.ambient_light_energy = 0.9 if not storm else (0.26 if tempest else 0.6)
     if sky_kind == "night":
         e.ambient_light_energy = 0.4
     e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
@@ -264,7 +264,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     e.fog_light_color = Color(0.46, 0.50, 0.56) if storm else (Color(0.92, 0.72, 0.62) if sky_kind == "sunset" else Color(0.72, 0.80, 0.88))
     e.fog_density = 0.008 if storm else (0.005 if is_windy() else 0.003)
     if tempest:
-        e.fog_light_color = Color(0.2, 0.22, 0.26)
+        e.fog_light_color = Color(0.13, 0.145, 0.18)
         e.fog_density = 0.0055
     if sky_kind == "night":
         e.fog_light_color = Color(0.05, 0.07, 0.13)
@@ -323,6 +323,11 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 
     # Island and scenery.
     Decor.build(self, int(data.id), data.get("terrain", {}).get("biome", "tropic"), storm, style, cannon_pos.z, _castle_rect())
+    # Bonfires on the ground where the level asks ("bonfires": [[x, z], ...]).
+    for f in data.get("bonfires", []):
+        var fx_ := float(f[0])
+        var fz := float(f[1])
+        Atmosphere.bonfire(self, Vector3(fx_, Decor.height(fx_, fz), fz), float(f[2]) if f.size() > 2 else 1.0)
     if not open_sea:
         sea.set_shore(Decor._seed)
 
@@ -409,7 +414,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     weather.setup(self, float(data.get("sea", 0.0)), ship_pos)
     ambience = Ambience.new()
     add_child(ambience)
-    ambience.setup(float(data.get("sea", 0.0)), bool(settings.get("sound", true)))
+    ambience.setup(float(data.get("sea", 0.0)), int(settings.get("sound", 100)) > 0)
     weather.thunder.connect(ambience.thunder)
     if storm:
         next_thunder = Tuning.THUNDER_MIN
@@ -500,16 +505,28 @@ func _spawn_block(b: Dictionary) -> void:
     blk.broke.connect(_on_block_broke)
     add_child(blk)
 
+func _tint_color(tint: String) -> Color:
+    match tint:
+        "sand": return Color(1.0, 0.88, 0.70)
+        "white": return Color(1.1, 1.1, 1.08)
+        "dark": return Color(0.62, 0.60, 0.66)
+        "red": return Color(1.0, 0.70, 0.62)
+        "grey": return Color(0.72, 0.78, 0.92)
+    return Color.WHITE
+
+## Wall material by tint: brick as a rule; dressed sandstone for "sand", and the same blocks
+## cooled to a light grey for "grey" (level 1's fort).
+func _stone_material(tint: String) -> StandardMaterial3D:
+    match tint:
+        "sand": return Models.tex_material("large_sandstone_blocks", 0.45)
+        "grey": return Models.tex_material("large_sandstone_blocks", 0.45, _tint_color(tint))
+    return Models.tex_material("castle_brick_07", 0.8, _tint_color(tint))
+
 func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
     var parts := style_raw.split(":")
     var style: String = parts[0] if parts.size() > 0 else ""
     var tint: String = parts[1] if parts.size() > 1 else ""
-    var tint_color := Color.WHITE
-    match tint:
-        "sand": tint_color = Color(1.0, 0.88, 0.70)
-        "white": tint_color = Color(1.1, 1.1, 1.08)
-        "dark": tint_color = Color(0.62, 0.60, 0.66)
-        "red": tint_color = Color(1.0, 0.70, 0.62)
+    var tint_color := _tint_color(tint)
     var root := Node3D.new()
     match style:
         "tower":
@@ -521,7 +538,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             cm.height = size.y
             cm.radial_segments = 20
             body.mesh = cm
-            body.material_override = Models.tex_material("castle_brick_07", 0.8, tint_color)
+            body.material_override = _stone_material(tint)
             root.add_child(body)
             var ring := MeshInstance3D.new()
             var rm := CylinderMesh.new()
@@ -530,7 +547,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             rm.height = size.x * 0.22
             rm.radial_segments = 20
             ring.mesh = rm
-            ring.material_override = Models.tex_material("castle_brick_07", 0.8, tint_color * Color(0.85, 0.85, 0.85))
+            ring.material_override = _stone_material(tint) if tint == "grey" else Models.tex_material("castle_brick_07", 0.8, tint_color * Color(0.85, 0.85, 0.85))
             ring.position.y = size.y / 2.0 - size.x * 0.11
             root.add_child(ring)
             var roof := MeshInstance3D.new()
@@ -540,9 +557,32 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             rc.height = size.x * 1.3
             rc.radial_segments = 20
             roof.mesh = rc
-            roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))
+            # Slate on a grey fort, clay tiles elsewhere.
+            roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.40, 0.44, 0.52) if tint == "grey" else Color(0.95, 0.75, 0.7))
             roof.position.y = size.y / 2.0 + size.x * 0.65
             root.add_child(roof)
+        "spire":
+            # A pointed tower roof: a slate cone on a short stone drum, sized to the block.
+            var drum := MeshInstance3D.new()
+            var dm := CylinderMesh.new()
+            dm.top_radius = size.x * 0.5
+            dm.bottom_radius = size.x * 0.5
+            dm.height = size.y * 0.18
+            dm.radial_segments = 16
+            drum.mesh = dm
+            drum.material_override = _stone_material(tint)
+            drum.position.y = -size.y / 2.0 + size.y * 0.09
+            root.add_child(drum)
+            var cone := MeshInstance3D.new()
+            var cm := CylinderMesh.new()
+            cm.top_radius = 0.0
+            cm.bottom_radius = size.x * 0.56
+            cm.height = size.y * 0.82
+            cm.radial_segments = 16
+            cone.mesh = cm
+            cone.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.40, 0.44, 0.52))
+            cone.position.y = size.y * 0.09
+            root.add_child(cone)
         "lamp":
             # The lighthouse lantern: a brass cage round a glowing glass, and a sweeping beam.
             var glass := MeshInstance3D.new()
@@ -699,11 +739,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
         _:
             match mat:
                 "stone":
-                    # Sand-coloured walls are dressed coral stone blocks; the rest brick.
-                    if tint == "sand":
-                        root.add_child(_box(size, Models.tex_material("large_sandstone_blocks", 0.45)))
-                    else:
-                        root.add_child(_box(size, Models.tex_material("castle_brick_07", 0.8, tint_color)))
+                    root.add_child(_box(size, _stone_material(tint)))
                 "wood":
                     root.add_child(_box(size, Models.wood_material()))
                 "tnt":
@@ -713,6 +749,9 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                     holder.add_child(c)
                     Models.fit(holder, size, true)
                     Models.tint(holder, Color(2.4, 0.42, 0.32))
+                    # A faint red glow that slowly pulses, so the powder shows in a dark cellar.
+                    Models.glow(holder, Color(1.0, 0.12, 0.05), 0.55)
+                    Models.pulse(holder, 0.25, 0.9, 1.6)
                     root.add_child(holder)
                 "glass":
                     var gm := StandardMaterial3D.new()
@@ -1256,6 +1295,45 @@ func _fragment(blk: Block) -> void:
         axis = 2
     var piece := size
     piece[axis] = size[axis] / float(n)
+    # Pieces as [local centre, size]. Blasted stone shatters unevenly: one big chunk and a
+    # scatter of smaller ones, some of them split again across, so the rubble has every size.
+    var pieces: Array = []
+    if blasted and blk.material_name == "stone":
+        var fractions: Array[float] = [randf_range(0.38, 0.52)]
+        var small_n := 3
+        var weights: Array[float] = []
+        var total := 0.0
+        for i in small_n:
+            var w := randf_range(0.5, 1.5)
+            weights.append(w)
+            total += w
+        for w in weights:
+            fractions.append((1.0 - fractions[0]) * w / total)
+        fractions.shuffle()
+        var across := (axis + 1) % 3 if size[(axis + 1) % 3] >= size[(axis + 2) % 3] else (axis + 2) % 3
+        var along := -size[axis] / 2.0
+        for fr in fractions:
+            var ps := size
+            ps[axis] = size[axis] * fr
+            var at := Vector3.ZERO
+            at[axis] = along + ps[axis] / 2.0
+            along += ps[axis]
+            if fr < 0.3 and size[across] > 0.3 and randf() < 0.5:
+                # A small piece breaks in two across its width.
+                var half := ps
+                half[across] = ps[across] / 2.0
+                for side in [-1.0, 1.0]:
+                    var hat := at
+                    hat[across] = side * ps[across] / 4.0
+                    pieces.append([hat, half])
+            else:
+                pieces.append([at, ps])
+        n = pieces.size()
+    else:
+        for i in n:
+            var at := Vector3.ZERO
+            at[axis] = (float(i) + 0.5) * piece[axis] - size[axis] / 2.0
+            pieces.append([at, piece])
     var color: Color
     match blk.material_name:
         "wood": color = Color(0.93, 0.55, 0.40)
@@ -1263,18 +1341,18 @@ func _fragment(blk: Block) -> void:
         "stone": color = Color(0.78, 0.74, 0.76)
         _: color = Color(0.5, 0.5, 0.5)
     for i in n:
+        var local: Vector3 = pieces[i][0]
+        var psize: Vector3 = pieces[i][1]
         var f := Block.new()
         var mi := MeshInstance3D.new()
         var bm := BoxMesh.new()
-        bm.size = piece * 0.92
+        bm.size = psize * 0.92
         mi.mesh = bm
         match blk.material_name:
             "wood": mi.material_override = Models.tex_material("brown_planks_07", 0.9, Color(0.35, 0.28, 0.24)) if blk.burning or blk.burn_time > 0.0 else Models.wood_material()
-            "stone": mi.material_override = Models.tex_material("castle_brick_07", 0.8)
+            "stone": mi.material_override = _stone_material(blk.tint)
             _: mi.material_override = Models.flat_material(color, 0.9)
-        f.setup(blk.material_name, piece * 0.92, "", false, {}, true, mi)
-        var local := Vector3.ZERO
-        local[axis] = (float(i) + 0.5) * piece[axis] - size[axis] / 2.0
+        f.setup(blk.material_name, psize * 0.92, "", false, {}, true, mi)
         f.position = blk.to_global(local)
         f.rotation = blk.global_rotation
         var push: Vector3 = blk.get_meta("blast_v", Vector3.ZERO)
@@ -1290,17 +1368,28 @@ func explode(center: Vector3) -> void:
     blast_count += 1
     _shot_blasts += 1
     _register_combo()
+    # A stone fort's magazine ("big_blast" levels): a longer blast, held in slow motion, that
+    # shakes the camera harder and rumbles the phone through the collapse.
+    var big := bool(data.get("big_blast", false))
     blast_shake = minf(1.0 + 0.25 * (combo - 1), 1.8)
-    fx.blast(center)
+    if big:
+        blast_shake = 2.0
+    fx.blast(center, 1.8 if big else 1.0)
     fx.blast_light(center, 9.0 if style.get("sky", "") == "night" else 3.5)
     fx.smoke_column(center + Vector3(0, 0.5, 0))
     ambience.blast()
     _start_cine(center)
+    if big and cine_until > 0.0:
+        # The stones fall in real time: the slow motion is only the flash.
+        cine_until = minf(cine_until, _now() + Tuning.CINE_DURATION * 0.5)
     event.emit("blast", {})
-    Haptics.rumble(combo)
+    if big:
+        Haptics.blast_rumble()
+    else:
+        Haptics.rumble(combo)
     if phase != Phase.SLOWMO and phase != Phase.FINISHED and cine_until < 0.0:
         Engine.time_scale = 0.35
-        blast_slowmo_end = time + 0.45
+        blast_slowmo_end = time + (0.3 if big else 0.45)
     for n in get_tree().get_nodes_in_group("dynamic"):
         if not (n is RigidBody3D):
             continue

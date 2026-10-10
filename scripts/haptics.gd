@@ -27,6 +27,16 @@ static func crack() -> void:
 static func rumble(combo: int = 1) -> void:
     _buzz(180 + 90 * mini(combo, 4), minf(0.7 + 0.1 * combo, 1.0))
 
+## A magazine going up in a stone fort: the longest, heaviest buzz, twice more as the stones
+## come down. Real seconds, so slow motion does not stretch the gaps.
+static func blast_rumble() -> void:
+    _buzz(350, 1.0)
+    var tree := Engine.get_main_loop() as SceneTree
+    if tree == null:
+        return
+    for delay in [0.45, 0.9]:
+        tree.create_timer(delay, true, false, true).timeout.connect(func(): _buzz(300, 1.0))
+
 static func hull() -> void:
     _buzz(400, 1.0)
 

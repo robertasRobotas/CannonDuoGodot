@@ -24,6 +24,7 @@ func _ready() -> void:
         _puffs.append([rng.randf_range(-300, 1500), rng.randf_range(300, 2400), rng.randf_range(260, 520), rng.randf_range(40, 110), rng.randf() * TAU])
     _wind = AudioStreamPlayer.new()
     _wind.stream = load("res://assets/audio/wind_loop.wav")
+    _wind.bus = &"Sfx"
     _wind.volume_db = -40.0
     add_child(_wind)
     _wind.play()

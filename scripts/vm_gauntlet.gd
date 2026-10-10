@@ -147,6 +147,7 @@ func _fire(b: Dictionary) -> void:
     v.get_tree().create_timer(1.2).timeout.connect(puff.queue_free)
     var snd := AudioStreamPlayer3D.new()
     snd.stream = load("res://assets/audio/cannon.mp3")
+    snd.bus = &"Sfx"
     snd.volume_db = 2.0
     snd.max_distance = 80.0
     snd.position = b.pos

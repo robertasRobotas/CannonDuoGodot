@@ -25,9 +25,9 @@ const CHAPTERS := [
 ##   scenario (special battle rules: chase, landing, lighthouse, raid, escort, bridge, sharks,
 ##   balloons), stern_gun (the gun fires over the stern), shots / par (override the ammo).
 const LEVELS := {
-    1: {"json": true, "name": "Storm Landing", "sub": "Twin forts", "biome": "tropic", "sea": 1.0, "swell": 2.3, "offshore": 18.0, "intro_hold": 3.5, "fov": 74.0,
+    1: {"json": true, "name": "Storm Landing", "sub": "Twin towers", "biome": "tropic", "sea": 1.0, "swell": 2.3, "offshore": 18.0, "intro_hold": 3.5, "fov": 74.0,
         "intro_from": [-30.0, 15.0, 40.0], "sail_in": 11.0, "sail_after": 0.8,
-        "tip": "Their powder is behind the boarded doors. One fort will take the other with it.", },
+        "tip": "Stone laughs at cannonballs. Their powder is in the tower cellars, behind the boarded doors.", },
     2: {"mode": "sail", "name": "Set Sail", "sub": "Take the helm", "biome": "harbor", "sky": "noon", "sea": 0.15, "dist": 260.0,
         "tip": "Haul the halyard, then lean the ship past the rocks. The pier does the rest."},
     3: {"name": "Fisher's Wharf", "sub": "A pirate-held harbour", "biome": "harbor", "sky": "noon", "sea": 0.15,

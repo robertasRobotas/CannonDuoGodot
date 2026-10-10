@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Generates level 1, Storm Landing: Grimhorn's twin forts, into levels/level01.json.
+"""Generates level 1, Storm Landing: Grimhorn's stone fort, into levels/level01.json.
 
-Two identical forts stand a cable apart, joined by a log fence. Each is a real building with
-four walls and depth, not a flat facade: a stone ground floor (stone shrugs off cannonballs;
-only a blast cracks it), two boarded wooden storeys, a peaked roof, and a cargo annex leaning
-on its seaward side. Each fort keeps all its powder in ONE place: the magazine on the ground
-floor, behind the stone footings and two boarded-up front panels.
+Two square stone towers with slate spires stand a cable apart, each with two round turrets
+on its outer corners, joined by a battlemented curtain wall with a gate. Stone shrugs off cannonballs; only a blast cracks it. Each tower
+keeps all its powder in ONE place: the magazine in the cellar, behind two boarded doors on the
+seaward side.
 
-The magazines stand within each other's catch radius, so blowing one fort throws its timbers
-into its twin and lights the other store too: one well-placed low shot brings both down.
+The magazines stand within each other's catch radius, so blowing one tower throws its stones
+into its twin and lights the other store too: one well-placed low shot brings it all down.
 """
 import json
 import os
 
 PATH = os.path.join(os.path.dirname(__file__), "..", "levels", "level01.json")
 Z = -13.0      # the fort line
-CX = 6.25      # fort centres at +-CX; the two magazines sit 2*CX apart
+CX = 4.8       # tower centres at +-CX; the two magazines sit 2*CX apart
 
 blocks = []
 targets = []
@@ -23,6 +22,10 @@ captives = []
 
 
 def blk(mat, pos, size, **kw):
+    if mat == "stone":
+        # The whole fort is light grey stone.
+        st = kw.get("style", "")
+        kw["style"] = st + ":grey" if ":" not in st else st
     b = {"material": mat, "position": [round(v, 3) for v in pos], "size": [round(v, 3) for v in size]}
     b.update(kw)
     blocks.append(b)
@@ -32,65 +35,78 @@ def guard(x, y, z, r=0.35):
     targets.append({"position": [round(x, 3), round(y + r, 3), round(z, 3)], "radius": r})
 
 
-def fort(cx):
-    """One fort, centred on cx."""
-    out = 1.0 if cx >= 0 else -1.0   # toward the outside of the pair
-    # Ground floor: stone corner pillars, stone back and side walls, a boarded front.
-    H0 = 2.4
-    for sx in (-1.9, 1.9):
-        for sz in (-1.55, 1.55):
-            blk("stone", (cx + sx, H0 / 2, Z + sz), (0.55, H0, 0.55))
-    blk("stone", (cx, H0 / 2, Z - 1.55), (3.25, H0, 0.42))
-    for sx in (-1.9, 1.9):
-        blk("stone", (cx + sx, H0 / 2, Z), (0.42, H0, 2.6))
-    for sx in (-0.95, 0.95):
-        blk("wood", (cx + sx, H0 / 2, Z + 1.55), (1.25, H0, 0.22))
-    # The magazine: all the fort's powder in one place, behind the boards.
-    for mx, mz in ((-0.45, 0.0), (0.45, 0.0), (0.0, -0.7)):
-        blk("tnt", (cx + mx, 0.42, Z + mz), (0.6, 0.84, 0.6))
-    blk("wood", (cx, H0 + 0.12, Z), (4.5, 0.24, 3.8))
-    # Two wooden storeys walled on three sides; pirates at the open front.
-    y = H0 + 0.24
-    for h in (2.0, 1.85):
-        for sx in (-1.95, 1.95):
-            for sz in (-1.6, 1.6):
-                blk("wood", (cx + sx, y + h / 2, Z + sz), (0.3, h, 0.3))
-        for sx in (-1.95, 1.95):
-            blk("wood", (cx + sx, y + h / 2, Z), (0.16, h * 0.9, 2.9))
-        blk("wood", (cx, y + h / 2, Z - 1.6), (3.6, h * 0.9, 0.16))
-        y += h
-        blk("wood", (cx, y + 0.12, Z), (4.3, 0.24, 3.6))
-        y += 0.24
-        guard(cx, y, Z + 1.25)
-    # Peaked roof with the lookout on the ridge.
-    blk("wood", (cx - 1.05, y + 0.8, Z), (2.5, 0.2, 3.9), rotation=[0, 0, 38])
-    blk("wood", (cx + 1.05, y + 0.8, Z), (2.5, 0.2, 3.9), rotation=[0, 0, -38])
-    blk("wood", (cx, y + 1.55, Z), (0.34, 0.3, 3.9))
-    guard(cx, y + 1.7, Z)
-    # Seaward annex: a raised cargo platform on posts and a brace, barrels and a crate on top.
-    ax = cx + out * 3.3
-    for dz in (-0.9, 0.9):
-        blk("wood", (ax, 1.2, Z + dz), (0.28, 2.4, 0.28))
-    blk("wood", (cx + out * 2.6, 1.2, Z), (0.28, 2.4, 0.28))
-    blk("wood", (ax - out * 0.35, 2.52, Z), (2.3, 0.22, 2.4))
-    blk("wood", (ax - out * 1.1, 1.25, Z + 1.1), (0.22, 2.9, 0.22), rotation=[0, 0, out * 38])
-    for i in range(3):
-        blk("wood", (ax - out * 0.5 + i * out * 0.62, 2.95, Z + 0.4), (0.55, 0.75, 0.55), style="barrel")
-    blk("wood", (ax, 2.95, Z - 0.8), (0.75, 0.75, 0.75), style="crate")
-    guard(ax - out * 0.2, 3.35, Z + 0.3)
-    # Crates piled against the fort's outer wall.
-    blk("wood", (cx + out * 2.45, 0.42, Z + 1.0), (0.8, 0.8, 0.8), style="crate")
-    blk("wood", (cx + out * 2.45, 1.2, Z + 1.0), (0.72, 0.72, 0.72), style="crate")
+def pillar(x, y0, h, z, w=0.5):
+    blk("stone", (x, y0 + h / 2, z), (w, h, w))
 
 
-fort(-CX)
-fort(CX)
+def tower(cx):
+    """A square stone tower: three storeys of corner pillars and wall slabs, a stone floor
+    between each, and a slate spire. The powder sits in the cellar behind two boarded doors on
+    the seaward side; the upper storeys have arrow slits (a gap between two front slabs)."""
+    R = 1.15     # pillar centres at +-R
+    H = 2.2      # one storey
+    y = 0.0
+    for storey in range(3):
+        for sx in (-R, R):
+            for sz in (-R, R):
+                pillar(cx + sx, y, H, Z + sz)
+        blk("stone", (cx, y + H / 2, Z - R), (1.8, H, 0.36))
+        for sx in (-R, R):
+            blk("stone", (cx + sx, y + H / 2, Z), (0.36, H, 1.8))
+        if storey == 0:
+            # Boarded doors with a gap between them: the red powder shows through, and a
+            # precise ball goes straight in.
+            for dx in (-0.55, 0.55):
+                blk("wood", (cx + dx, y + H / 2, Z + R), (0.6, H, 0.2))
+        else:
+            for dx in (-0.55, 0.55):
+                blk("stone", (cx + dx, y + H / 2, Z + R), (0.6, H, 0.36))
+        y += H
+        blk("stone", (cx, y + 0.11, Z), (2.9, 0.22, 2.9))
+        y += 0.22
+    # The magazine in the cellar: big barrels, two at the doors and one behind.
+    for mx, mz in ((-0.47, 0.45), (0.47, 0.45), (0.0, -0.5)):
+        blk("tnt", (cx + mx, 0.7, Z + mz), (0.9, 1.4, 0.9))
+    # Parapet and the spire; a lookout on the walk.
+    for sx in (-R, R):
+        for sz in (-R, R):
+            blk("stone", (cx + sx, y + 0.3, Z + sz), (0.5, 0.6, 0.5))
+    blk("stone", (cx, y + 1.0, Z), (2.6, 2.0, 2.6), style="spire")
+    guard(cx + 0.55 * (1 if cx < 0 else -1), y, Z + 0.55)
+    # Two round turrets lean on the tower's outer corners, front and back.
+    out = 1.0 if cx >= 0 else -1.0
+    for dz in (-1.15, 1.15):
+        blk("stone", (cx + out * (R + 0.77), 2.1, Z + dz), (1.0, 4.2, 1.0), style="tower")
 
-# A log fence joins the forts; it carries the ruin of one into the other.
-for i in range(9):
-    blk("wood", (-3.2 + i * 0.8, 1.15, Z + 1.3), (0.34, 2.3, 0.34), style="log")
-blk("wood", (0, 2.4, Z + 1.3), (6.9, 0.2, 0.7))
-guard(0, 2.6, Z + 1.3)
+
+def curtain_wall():
+    """The wall between the towers: two courses of stone, merlons on top, and the gate in the
+    middle with a guard either side."""
+    xs = (-2.35, 0.0, 2.35)
+    for x in xs:
+        if x == 0.0:
+            blk("wood", (0.0, 1.0, Z), (1.7, 2.0, 0.3), style="gate")
+        else:
+            blk("stone", (x, 1.0, Z), (2.3, 2.0, 0.4))
+    for x in xs:
+        blk("stone", (x, 2.55, Z), (2.3, 1.1, 0.4))
+    for i in range(7):
+        blk("stone", (-2.9 + i * 0.95, 3.35, Z), (0.45, 0.5, 0.4))
+    guard(-1.5, 3.1, Z)
+    guard(1.5, 3.1, Z)
+    # Stores against the wall, inside the fort.
+    blk("wood", (-2.0, 0.4, Z - 1.1), (0.8, 0.8, 0.8), style="crate")
+    blk("wood", (2.1, 0.375, Z - 1.1), (0.55, 0.75, 0.55), style="barrel")
+    blk("wood", (2.65, 0.375, Z - 1.0), (0.55, 0.75, 0.55), style="barrel")
+
+
+def fort():
+    tower(-CX)
+    tower(CX)
+    curtain_wall()
+
+
+fort()
 
 # Islanders caged beyond each fort, away from the pirates.
 for n, sx in enumerate((-1.0, 1.0), start=1):
@@ -106,8 +122,11 @@ d = json.load(open(PATH))
 d["blocks"] = blocks
 d["targets"] = targets
 d["captives"] = captives
-d["camera"] = {"lookAt": [0, 4.6, Z], "pitch": -6.5}
+d["camera"] = {"lookAt": [0, 4.8, Z], "pitch": -6.5}
 d["blast_radius"] = 1.9   # one magazine lights the other across the gap
+d["big_blast"] = True     # stone flies in slow motion, long and heavy
+d["bonfires"] = [[0.0, Z + 3.4, 0.55]]   # a small fire on the beach before the gate, lighting the walls
+d.setdefault("terrain", {})["tree_max"] = 6.5     # no palm overtops the towers
 d["projectiles"] = 6
 d["par"] = 3
 d["stars"] = {"three": 3, "two": 5}

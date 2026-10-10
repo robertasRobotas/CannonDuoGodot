@@ -81,6 +81,45 @@ static func tint(model: Node3D, color: Color) -> void:
         for c in n.get_children():
             stack.push_back(c)
 
+## Makes a model's materials glow: powder barrels show red through the dark and the rain.
+static func glow(model: Node3D, color: Color, energy: float) -> void:
+    var stack: Array = [model]
+    while not stack.is_empty():
+        var n = stack.pop_back()
+        if n is MeshInstance3D and n.mesh != null:
+            var mi: MeshInstance3D = n
+            for i in mi.mesh.get_surface_count():
+                var m := mi.get_active_material(i)
+                if m is StandardMaterial3D:
+                    var d: StandardMaterial3D = m.duplicate()
+                    d.emission_enabled = true
+                    d.emission = color
+                    d.emission_energy_multiplier = energy
+                    mi.set_surface_override_material(i, d)
+        for c in n.get_children():
+            stack.push_back(c)
+
+## Breathes a glow set by `glow()` between two strengths, starting once the model is in the
+## tree (a tween needs the scene tree): powder barrels pulse faintly red.
+static func pulse(model: Node3D, low: float, high: float, period: float) -> void:
+    model.tree_entered.connect(func():
+        var mats: Array = []
+        var stack: Array = [model]
+        while not stack.is_empty():
+            var n = stack.pop_back()
+            if n is MeshInstance3D and n.mesh != null:
+                var mi: MeshInstance3D = n
+                for i in mi.mesh.get_surface_count():
+                    var m := mi.get_surface_override_material(i)
+                    if m is StandardMaterial3D and (m as StandardMaterial3D).emission_enabled:
+                        mats.append(m)
+            for c in n.get_children():
+                stack.push_back(c)
+        for m in mats:
+            var tw := model.create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+            tw.tween_property(m, "emission_energy_multiplier", high, period / 2.0)
+            tw.tween_property(m, "emission_energy_multiplier", low, period / 2.0))
+
 ## A baked tree from assets/foliage (1 m tall, standing on the origin) scaled to `height`.
 static func tree(name: String, height: float) -> MeshInstance3D:
     var path := "res://assets/foliage/%s.res" % name

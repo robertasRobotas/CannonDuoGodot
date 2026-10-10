@@ -43,9 +43,12 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
         mist.position = Vector3(ship_pos.x, 1.4, ship_pos.z - 10)
         add_child(mist)
     if storminess >= 0.6:
+        # The tempest (level 1) rains at about half density, so the fort stays readable under
+        # its black sky.
+        var density := 0.55 if storminess >= 0.95 else 1.0
         # Rain: streak cards falling at a slant, dense near the camera.
         var rain := _particles("res://assets/particles/trace_01.png", Color(0.85, 0.9, 1.0, 0.5), Vector2(0.05, 0.9), true)
-        rain.amount = int(900 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0))
+        rain.amount = int((900 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0)) * density)
         rain.lifetime = 1.3
         rain.preprocess = 1.3
         rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -59,8 +62,8 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
         add_child(rain)
         # Close rain: long bright streaks falling right in front of the camera, so the storm
         # is felt, not just seen far off.
-        _near_rain = _particles("res://assets/particles/trace_01.png", Color(0.82, 0.86, 0.95, 0.42), Vector2(0.035, 1.4), true)
-        _near_rain.amount = int(700 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0))
+        _near_rain = _particles("res://assets/particles/trace_01.png", Color(0.82, 0.86, 0.95, 0.42 * (0.8 if density < 1.0 else 1.0)), Vector2(0.035, 1.4), true)
+        _near_rain.amount = int((700 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0)) * density)
         _near_rain.lifetime = 0.55
         _near_rain.preprocess = 0.6
         _near_rain.local_coords = false

@@ -47,6 +47,7 @@ func setup(storminess: float, sound_on: bool) -> void:
 func _bed(file: String, volume: float) -> void:
     var p := AudioStreamPlayer.new()
     p.stream = load(DIR + file)
+    p.bus = &"Sfx"
     p.volume_db = -40.0
     add_child(p)
     # Start somewhere in the loop so layers never line up the same way twice.
@@ -58,6 +59,7 @@ func _one_shot(stream: AudioStream, volume: float, pitch: float = 1.0, done: Cal
         return
     var p := AudioStreamPlayer.new()
     p.stream = stream
+    p.bus = &"Sfx"
     p.volume_db = volume
     p.pitch_scale = pitch
     add_child(p)

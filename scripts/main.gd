@@ -3,7 +3,7 @@ extends Node
 
 var LEVEL_COUNT := Campaign.level_count()
 var progress: Dictionary = {"stars": {}, "best": {}}
-var settings: Dictionary = {"gyro": true, "trajectory": true, "sound": true, "music": true, "vibration": true}
+var settings: Dictionary = {"gyro": true, "trajectory": true, "sound": 100, "music": 100, "vibration": true}
 const DAILY_ID := 100
 var music: Music
 var _ui: CanvasLayer
@@ -20,7 +20,9 @@ func _ready() -> void:
     _load_state()
     music = Music.new()
     add_child(music)
-    music.enabled = bool(settings.get("music", true))
+    Audio.setup()
+    Audio.set_volume("Sfx", int(settings.get("sound", 100)))
+    music.set_volume(int(settings.get("music", 100)))
     Haptics.enabled = bool(settings.get("vibration", true))
     _preload_assets()
     get_tree().root.content_scale_size = Vector2i(1179, 2556)
@@ -110,6 +112,10 @@ func _load_state() -> void:
         var parsed = JSON.parse_string(f.get_as_text())
         if parsed is Dictionary:
             settings.merge(parsed, true)
+    # Sound and music were on/off switches before they became 0–100 sliders.
+    for key in ["sound", "music"]:
+        if settings.get(key) is bool:
+            settings[key] = 100 if settings[key] else 0
 
 func _save_state() -> void:
     var f := FileAccess.open("user://progress.json", FileAccess.WRITE)
@@ -483,22 +489,95 @@ func _show_settings() -> void:
     add_child(_ui)
     var v := _column()
     v.add_child(_label("Settings", 70))
+    add_settings_rows(v)
+    v.add_child(_button("Reset progress", func(): progress = {"stars": {}, "best": {}, "gold": 0}; _save_state(); _show_menu()))
+    v.add_child(_button("Back", func(): _save_state(); _show_menu()))
+
+## The settings rows, shared by the settings screen and the pause menu. Every change is
+## saved and applied at once, including to a level in progress.
+func add_settings_rows(v: Control) -> void:
     for entry in [["gyro", "Aim with gyroscope"], ["trajectory", "Trajectory helper"], ["sound", "Sound effects"], ["music", "Music"], ["vibration", "Vibration"]]:
+        var key: String = entry[0]
+        if key == "sound" or key == "music":
+            v.add_child(_volume_row(entry[1], key))
+            continue
         var cb := CheckButton.new()
         cb.text = entry[1]
         cb.add_theme_font_size_override("font_size", 36)
-        cb.button_pressed = bool(settings.get(entry[0], true))
-        var key: String = entry[0]
+        cb.button_pressed = bool(settings.get(key, true))
         cb.toggled.connect(func(on):
             settings[key] = on
             _save_state()
-            if key == "music":
-                music.set_enabled(on)
-            elif key == "vibration":
-                Haptics.enabled = on)
+            if key == "vibration":
+                Haptics.enabled = on
+            elif _level and is_instance_valid(_level):
+                if key == "gyro":
+                    _level.set_gyro(on)
+                else:
+                    _level.settings[key] = on)
         v.add_child(cb)
-    v.add_child(_button("Reset progress", func(): progress = {"stars": {}, "best": {}, "gold": 0}; _save_state(); _show_menu()))
-    v.add_child(_button("Back", _show_menu))
+
+## A settings row with a 0–100 slider: the name, the bar, the value. Volume follows the
+## slider as it moves; the file is written when the drag ends (and on Back).
+func _volume_row(text: String, key: String) -> HBoxContainer:
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 24)
+    var name := _label(text, 36)
+    name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+    name.custom_minimum_size = Vector2(290, 0)
+    row.add_child(name)
+    var value := _label(str(int(settings.get(key, 100))), 36, Color(1, 1, 1, 0.7))
+    value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    value.custom_minimum_size = Vector2(80, 0)
+    var s := HSlider.new()
+    s.min_value = 0
+    s.max_value = 100
+    s.step = 1
+    s.value = int(settings.get(key, 100))
+    s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    s.custom_minimum_size = Vector2(0, 72)
+    s.focus_mode = Control.FOCUS_NONE
+    var track := StyleBoxFlat.new()
+    track.bg_color = Color(1, 1, 1, 0.14)
+    track.content_margin_top = 10
+    track.content_margin_bottom = 10
+    for c in ["corner_radius_top_left", "corner_radius_top_right", "corner_radius_bottom_left", "corner_radius_bottom_right"]:
+        track.set(c, 10)
+    s.add_theme_stylebox_override("slider", track)
+    var fill: StyleBoxFlat = track.duplicate()
+    fill.bg_color = Color(1.0, 0.58, 0.18)
+    s.add_theme_stylebox_override("grabber_area", fill)
+    s.add_theme_stylebox_override("grabber_area_highlight", fill)
+    var knob := _circle_texture(56)
+    s.add_theme_icon_override("grabber", knob)
+    s.add_theme_icon_override("grabber_highlight", knob)
+    s.add_theme_icon_override("grabber_disabled", knob)
+    s.value_changed.connect(func(val):
+        var percent := int(val)
+        settings[key] = percent
+        value.text = str(percent)
+        if key == "music":
+            music.set_volume(percent)
+        else:
+            Audio.set_volume("Sfx", percent)
+            if _level and is_instance_valid(_level):
+                _level.settings[key] = percent
+                if _level.ambience:
+                    _level.ambience.enabled = percent > 0)
+    s.drag_ended.connect(func(_changed): _save_state())
+    row.add_child(s)
+    row.add_child(value)
+    return row
+
+func _circle_texture(size: int) -> ImageTexture:
+    var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+    var r := size / 2.0
+    for y in size:
+        for x in size:
+            var d := Vector2(x + 0.5, y + 0.5).distance_to(Vector2(r, r))
+            img.set_pixel(x, y, Color(1, 1, 1, clampf(r - d, 0.0, 1.0)))
+    return ImageTexture.create_from_image(img)
 
 ## Heavy scenes every level uses, loaded on background threads while the menu is up.
 const PRELOAD := [

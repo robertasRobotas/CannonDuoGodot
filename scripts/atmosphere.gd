@@ -85,6 +85,69 @@ static func _torch(at: Vector3) -> Node3D:
     tw.tween_property(light, "light_energy", 2.2, 0.17)
     return root
 
+## A bonfire on the ground: crossed logs, a tall flame and a wide warm light that picks the
+## fort's walls out of a stormy dark.
+## `size` scales the logs and the flame; the light stays the same.
+static func bonfire(parent: Node3D, at: Vector3, size: float = 1.0) -> void:
+    var root := Node3D.new()
+    root.position = at
+    var body := Node3D.new()
+    body.scale = Vector3.ONE * size
+    root.add_child(body)
+    var bark := Models.tex_material("brown_planks_07", 1.5, Color(0.55, 0.42, 0.32))
+    for i in 4:
+        var log := MeshInstance3D.new()
+        var cm := CylinderMesh.new()
+        cm.top_radius = 0.07
+        cm.bottom_radius = 0.09
+        cm.height = 0.9
+        cm.radial_segments = 8
+        log.mesh = cm
+        log.material_override = bark
+        log.rotation = Vector3(deg_to_rad(68.0), i * PI / 2.0 + 0.4, 0)
+        log.position = Vector3(0, 0.25, 0)
+        body.add_child(log)
+    var light := OmniLight3D.new()
+    light.light_color = Color(1.0, 0.66, 0.3)
+    light.light_energy = 4.5
+    light.omni_range = 13.0
+    light.shadow_enabled = false
+    light.position = Vector3(0, 1.0, 0)
+    root.add_child(light)
+    var fire := CPUParticles3D.new()
+    fire.amount = 36
+    fire.lifetime = 0.8
+    fire.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+    fire.emission_sphere_radius = 0.22
+    fire.direction = Vector3(0, 1, 0)
+    fire.spread = 10.0
+    fire.initial_velocity_min = 0.6
+    fire.initial_velocity_max = 1.6
+    fire.gravity = Vector3(0, 1.4, 0)
+    fire.scale_amount_min = 0.5
+    fire.scale_amount_max = 1.0
+    var ramp := Gradient.new()
+    ramp.set_color(0, Color(1.0, 0.85, 0.4, 1.0))
+    ramp.add_point(0.4, Color(1.0, 0.45, 0.12, 0.9))
+    ramp.set_color(ramp.get_point_count() - 1, Color(0.6, 0.12, 0.03, 0.0))
+    fire.color_ramp = ramp
+    fire.mesh = QuadMesh.new()
+    var m := StandardMaterial3D.new()
+    m.albedo_texture = load("res://assets/particles/flash03.png")
+    m.vertex_color_use_as_albedo = true
+    m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    fire.material_override = m
+    fire.position = Vector3(0, 0.35, 0)
+    body.add_child(fire)
+    var tw := light.create_tween().set_loops()
+    tw.tween_property(light, "light_energy", 3.6, 0.14)
+    tw.tween_property(light, "light_energy", 5.0, 0.12)
+    tw.tween_property(light, "light_energy", 4.2, 0.18)
+    parent.add_child(root)
+
 ## A warm lantern on deck by the gun so the ship is not lost in the dark.
 static func deck_lantern(ship: Node3D, at: Vector3) -> void:
     var l := OmniLight3D.new()

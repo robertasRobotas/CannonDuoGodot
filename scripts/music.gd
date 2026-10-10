@@ -30,6 +30,7 @@ func play(track: String) -> void:
         return
     var p := AudioStreamPlayer.new()
     p.stream = load(TRACKS[track])
+    p.bus = &"Music"
     p.volume_db = -60.0
     add_child(p)
     p.play()
@@ -40,6 +41,13 @@ func play(track: String) -> void:
 func duck(on: bool) -> void:
     if _player:
         create_tween().tween_property(_player, "volume_db", VOLUME.get(_current, -12.0) - (8.0 if on else 0.0), 0.4)
+
+## Slider volume, 0–100; at 0 the track stops instead of playing silently.
+func set_volume(percent: int) -> void:
+    Audio.set_volume("Music", percent)
+    var on := percent > 0
+    if on != enabled:
+        set_enabled(on)
 
 func set_enabled(on: bool) -> void:
     enabled = on

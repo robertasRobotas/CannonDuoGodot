@@ -32,6 +32,8 @@ var _track_fill: ColorRect
 var _last_interaction := 0.0
 var _gyro_btn: Button
 var _pause_menu: Control
+var _pause_panel: Control
+var _pause_settings: Control
 var _banner: Label
 var _banner_sub: Label
 var _bars: Array[ColorRect] = []
@@ -261,9 +263,29 @@ func _build() -> void:
     pv.add_child(pt)
     pv.add_child(_button("Resume", _toggle_pause, true))
     pv.add_child(_button("Restart", func(): _toggle_pause(); replay.emit()))
+    pv.add_child(_button("Settings", func(): pm.visible = false; _pause_settings.visible = true))
     pv.add_child(_button("Quit level", func(): _toggle_pause(); quit.emit()))
     pm.add_child(pv)
     _pause_menu.add_child(pm)
+    _pause_panel = pm
+    # Settings behind the pause menu: the same rows as the settings screen, built by Main.
+    var sm := PanelContainer.new()
+    sm.add_theme_stylebox_override("panel", _panel(28, 0.85))
+    sm.position = Vector2(100, 800)
+    sm.custom_minimum_size = Vector2(979, 0)
+    sm.visible = false
+    var sv := VBoxContainer.new()
+    sv.add_theme_constant_override("separation", 20)
+    var st := _label("Settings", 60, Color.WHITE, true)
+    st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    sv.add_child(st)
+    var main := level.get_parent()
+    if main and main.has_method("add_settings_rows"):
+        main.add_settings_rows(sv)
+    sv.add_child(_button("Back", func(): sm.visible = false; pm.visible = true; _refresh_gyro(), true))
+    sm.add_child(sv)
+    _pause_menu.add_child(sm)
+    _pause_settings = sm
     add_child(_pause_menu)
     _refresh()
 
@@ -310,7 +332,7 @@ func pause_for_background() -> void:
     if level.phase == Level.Phase.FINISHED or level.is_paused:
         return
     level.set_paused(true)
-    _pause_menu.visible = true
+    _show_pause_menu(true)
     paused.emit(true)
 
 func _toggle_pause() -> void:
@@ -318,8 +340,14 @@ func _toggle_pause() -> void:
         return
     var p := not level.is_paused
     level.set_paused(p)
-    _pause_menu.visible = p
+    _show_pause_menu(p)
     paused.emit(p)
+
+## Opens the pause menu on its first page, so settings never stay up across a resume.
+func _show_pause_menu(on: bool) -> void:
+    _pause_menu.visible = on
+    _pause_panel.visible = true
+    _pause_settings.visible = false
 
 func _process(delta: float) -> void:
     _refresh()

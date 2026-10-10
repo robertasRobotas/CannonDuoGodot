@@ -146,6 +146,7 @@ func _cannon_shot_behind() -> void:
     tw.tween_callback(flash.queue_free)
     var snd := AudioStreamPlayer.new()
     snd.stream = load("res://assets/audio/cannon_strong.mp3")
+    snd.bus = &"Sfx"
     snd.volume_db = 4.0
     v.add_child(snd)
     snd.play()
@@ -224,6 +225,7 @@ func tap(pos: Vector2) -> void:
     v.get_tree().create_timer(1.0).timeout.connect(flash.queue_free)
     var snd := AudioStreamPlayer.new()
     snd.stream = load("res://assets/audio/cannon.mp3")
+    snd.bus = &"Sfx"
     snd.volume_db = -2.0
     v.add_child(snd)
     snd.play()
