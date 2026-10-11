@@ -15,6 +15,7 @@ import os
 PATH = os.path.join(os.path.dirname(__file__), "..", "levels", "level01.json")
 Z = -13.0      # the fort line
 CX = 4.8       # tower centres at +-CX; the two magazines sit 2*CX apart
+S = 1.5        # the whole fort is built this much bigger, about the gate on the fort line
 
 blocks = []
 targets = []
@@ -26,13 +27,17 @@ def blk(mat, pos, size, **kw):
         # The whole fort is light grey stone.
         st = kw.get("style", "")
         kw["style"] = st + ":grey" if ":" not in st else st
+    scale = kw.pop("scale", S)
+    pos = (pos[0] * scale, pos[1] * scale, (pos[2] - Z) * scale + Z)
+    size = tuple(v * scale for v in size)
     b = {"material": mat, "position": [round(v, 3) for v in pos], "size": [round(v, 3) for v in size]}
     b.update(kw)
     blocks.append(b)
 
 
 def guard(x, y, z, r=0.35):
-    targets.append({"position": [round(x, 3), round(y + r, 3), round(z, 3)], "radius": r})
+    # Guards stay man-sized; only where they stand scales with the fort.
+    targets.append({"position": [round(x * S, 3), round(y * S + r, 3), round((z - Z) * S + Z, 3)], "radius": r})
 
 
 def pillar(x, y0, h, z, w=0.5):
@@ -81,11 +86,12 @@ def tower(cx):
 
 def curtain_wall():
     """The wall between the towers: two courses of stone, merlons on top, and the gate in the
-    middle with a guard either side."""
+    middle (an iron grate) with a guard either side."""
     xs = (-2.35, 0.0, 2.35)
     for x in xs:
         if x == 0.0:
-            blk("wood", (0.0, 1.0, Z), (1.7, 2.0, 0.3), style="gate")
+            # An iron portcullis: a ball rings off it, only the blast can throw it down.
+            blk("metal", (0.0, 1.0, Z), (1.7, 2.0, 0.2), style="grate")
         else:
             blk("stone", (x, 1.0, Z), (2.3, 2.0, 0.4))
     for x in xs:
@@ -108,25 +114,29 @@ def fort():
 
 fort()
 
-# Islanders caged beyond each fort, away from the pirates.
+# Islanders caged beyond each fort, away from the pirates. The cages are man-sized (not
+# scaled with the fort), so they are placed in final coordinates.
 for n, sx in enumerate((-1.0, 1.0), start=1):
-    x = sx * (CX + 5.6)
-    cz = Z + 2.0
+    x = sx * (CX * S + 5.6)
+    cz = Z + 2.0 * S
     for dx in (-0.45, 0.45):
         for dz in (-0.45, 0.45):
-            blk("wood", (x + dx, 0.62, cz + dz), (0.1, 1.24, 0.1), cage=n)
-    blk("wood", (x, 1.3, cz), (1.1, 0.12, 1.1), cage=n)
+            blk("wood", (x + dx, 0.62, cz + dz), (0.1, 1.24, 0.1), cage=n, scale=1.0)
+    blk("wood", (x, 1.3, cz), (1.1, 0.12, 1.1), cage=n, scale=1.0)
     captives.append({"position": [round(x, 3), 0.55, cz], "cage": n, "deserter": False})
 
 d = json.load(open(PATH))
 d["blocks"] = blocks
 d["targets"] = targets
 d["captives"] = captives
-d["camera"] = {"lookAt": [0, 4.8, Z], "pitch": -6.5}
-d["blast_radius"] = 1.9   # one magazine lights the other across the gap
+d["camera"] = {"lookAt": [0, round(4.8 * S, 3), Z], "pitch": -6.5}
+d["blast_radius"] = round(1.9 * S, 3)   # one magazine lights the other across the gap
 d["big_blast"] = True     # stone flies in slow motion, long and heavy
-d["bonfires"] = [[0.0, Z + 3.4, 0.55]]   # a small fire on the beach before the gate, lighting the walls
-d.setdefault("terrain", {})["tree_max"] = 6.5     # no palm overtops the towers
+d["embers"] = 0.18        # this share of the blown rubble smoulders and smokes a while
+d.pop("bonfires", None)   # no fire on the beach
+d["rain"] = 0.5           # half the rain of a normal storm
+d["fog"] = 0.5            # and half the haze, so the big fort reads clearly
+d.setdefault("terrain", {})["tree_max"] = round(6.5 * S, 3)     # no palm overtops the towers
 d["projectiles"] = 6
 d["par"] = 3
 d["stars"] = {"three": 3, "two": 5}

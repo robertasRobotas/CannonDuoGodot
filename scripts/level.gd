@@ -269,6 +269,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     if sky_kind == "night":
         e.fog_light_color = Color(0.05, 0.07, 0.13)
         e.fog_density = 0.006
+    # A level can thin or thicken its haze ("fog": multiplier, default 1).
+    e.fog_density *= float(data.get("fog", 1.0))
     e.fog_sky_affect = 0.25
     env.environment = e
     add_child(env)
@@ -643,6 +645,30 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             var g := Models.instance("res://assets/castle/gate.glb")
             Models.fit(g, size)
             root.add_child(g)
+        "grate":
+            # A portcullis: an iron frame with a lattice of upright and cross bars. The gaps
+            # are open to the eye only; the body still collides as a solid slab.
+            var iron := Models.flat_material(Color(0.16, 0.17, 0.19), 0.5, 0.9)
+            var bar := minf(size.x, size.y) * 0.045
+            var depth := minf(size.z, bar * 1.6)
+            for sx in [-1.0, 1.0]:
+                var post := _box(Vector3(bar * 1.4, size.y, depth), iron)
+                post.position.x = sx * (size.x - bar * 1.4) / 2.0
+                root.add_child(post)
+            for sy in [-1.0, 1.0]:
+                var rail := _box(Vector3(size.x, bar * 1.4, depth), iron)
+                rail.position.y = sy * (size.y - bar * 1.4) / 2.0
+                root.add_child(rail)
+            var cols := maxi(int(size.x / (bar * 5.0)), 2)
+            for i in cols:
+                var up := _box(Vector3(bar, size.y, depth * 0.8), iron)
+                up.position.x = -size.x / 2.0 + size.x * (float(i) + 1.0) / float(cols + 1)
+                root.add_child(up)
+            var rows := maxi(int(size.y / (bar * 6.0)), 1)
+            for i in rows:
+                var across := _box(Vector3(size.x, bar, depth * 0.8), iron)
+                across.position.y = -size.y / 2.0 + size.y * (float(i) + 1.0) / float(rows + 1)
+                root.add_child(across)
         "log":
             # A round log along its longest side, bark on; upright ones end in a sharpened point.
             var axis := 1
@@ -1363,6 +1389,9 @@ func _fragment(blk: Block) -> void:
         add_child(f)
         fragments_alive += 1
         f.tree_exited.connect(func(): fragments_alive -= 1)
+        # Blown rubble: a few pieces glow and smoke for a while ("embers": share, default 0).
+        if blasted and randf() < float(data.get("embers", 0.0)):
+            f.smoulder()
 
 func explode(center: Vector3) -> void:
     blast_count += 1

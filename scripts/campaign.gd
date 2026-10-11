@@ -186,6 +186,10 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         terrain["shore"] = r.get("shore", fort.shore)
         terrain["beach"] = fort.beach
         d["boss"] = f[0] in ["boss", "mega"]
+        # Powder goes up as on the first island: the long slow blast, and rubble that
+        # smoulders and smokes afterwards.
+        d["big_blast"] = true
+        d["embers"] = 0.18
     else:
         d["camera"] = {"lookAt": r.get("look", [0.0, 1.5, -14.0]), "pitch": -6.0}
         d["boss"] = false

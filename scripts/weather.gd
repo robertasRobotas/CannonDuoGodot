@@ -28,7 +28,7 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
         add_child(wind)
         # Low mist drifting across the water and the beach.
         var mist := _particles("res://assets/particles/smoke_04.png", Color(0.85, 0.88, 0.92, 0.16 + 0.12 * storminess), Vector2(9, 5), true)
-        mist.amount = 26
+        mist.amount = int(26 * float(level.data.get("fog", 1.0)))
         mist.lifetime = 14.0
         mist.preprocess = 14.0
         mist.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -46,6 +46,8 @@ func setup(level: Level, storminess: float, ship_pos: Vector3) -> void:
         # The tempest (level 1) rains at about half density, so the fort stays readable under
         # its black sky.
         var density := 0.55 if storminess >= 0.95 else 1.0
+        # A level can thin or thicken its rain ("rain": multiplier, default 1).
+        density *= float(level.data.get("rain", 1.0))
         # Rain: streak cards falling at a slant, dense near the camera.
         var rain := _particles("res://assets/particles/trace_01.png", Color(0.85, 0.9, 1.0, 0.5), Vector2(0.05, 0.9), true)
         rain.amount = int((900 + 900 * clampf((storminess - 0.8) * 5.0, 0.0, 1.0)) * density)

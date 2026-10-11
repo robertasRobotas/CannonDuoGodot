@@ -92,6 +92,7 @@ const KICK_ROLL := 0.07          # radians the ship heels when the cannon fires
 const BURN_TIME := 2.4           # a burning wood block breaks after this
 const BURN_SPREAD := 1.2         # metres a fire jumps to the next wood block
 const MAX_BURNING := 24
+const MAX_EMBERS := 10            # blown rubble pieces that may glow and smoke at once
 
 ## The cannon workshop: id -> name, what each level does, doubloon price per level, and stars
 ## needed to unlock each level (replaying for stars opens the better parts).

@@ -23,13 +23,13 @@ func build(voyage: VoyageLevel) -> void:
             var x := gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i % 2 == 0 else -1.0) + (rng.randf_range(-9.0, 9.0) if i == 2 else 0.0)
             if absf(x) > 11.5 or absf(x - gap_x) < r + 4.0:
                 continue
-            var m := Models.prop("boulder_01" if rng.randf() < 0.6 else "namaqualand_boulder_02")
-            var k := r / 0.9
-            m.scale = Vector3(k, k * rng.randf_range(0.8, 1.1), k)
-            m.position = Vector3(x, -6.0, z)
-            m.rotation.y = rng.randf_range(0.0, TAU)
+            # Spires and mermaid rocks alternate as on the sail course; each hides under the
+            # water by its own height until it rises.
+            var m := v.make_rock("boulder_01" if rng.randf() < 0.6 else "namaqualand_boulder_02", r, rng)
+            var hidden := -1.5 - float(m.get_meta("top"))
+            m.position = Vector3(x, hidden, z)
             v.add_child(m)
-            _reef.append({"x": x, "z": z, "r": r, "node": m, "state": 0, "t": 0.0})
+            _reef.append({"x": x, "z": z, "r": r, "node": m, "state": 0, "t": 0.0, "hidden": hidden})
         z -= rng.randf_range(16.0, 24.0)
 
 func tick(delta: float) -> void:
@@ -58,14 +58,17 @@ func tick(delta: float) -> void:
             rk.t = float(rk.t) + delta
             var k: float = clampf(float(rk.t) / 2.2, 0.0, 1.0)
             var e := 1.0 - pow(1.0 - k, 2.0)
-            (rk.node as Node3D).position.y = lerpf(-6.0, -0.7, e)
+            (rk.node as Node3D).position.y = lerpf(float(rk.hidden), 0.0, e)
             if rk.has("ring"):
                 var ring: MeshInstance3D = rk.ring
                 ring.scale = Vector3.ONE * (1.0 + 0.5 * sin(float(rk.t) * 5.0))
                 ring.material_override.albedo_color.a = 0.75 * (1.0 - k) + 0.1
             if k >= 1.0:
                 rk.state = 2
-                v.rocks.append({"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false})
+                var rock := {"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false}
+                if (rk.node as Node).has_meta("siren"):
+                    rock["siren"] = (rk.node as Node).get_meta("siren")
+                v.rocks.append(rock)
                 v._splash_at(Vector3(float(rk.x), 0.1, float(rk.z)))
                 if rk.has("boil"):
                     (rk.boil as CPUParticles3D).emitting = false

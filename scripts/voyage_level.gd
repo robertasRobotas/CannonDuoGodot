@@ -45,7 +45,12 @@ var prompt_who: Label
 var ui: Control
 var spray: CPUParticles3D
 
-var rocks: Array = []       # {x, z, r, hit, grazed}
+var rocks: Array = []       # {x, z, r, hit, grazed, siren?}
+const SIREN_RANGE := 28.0   # metres ahead at which a mermaid starts to sing
+const SIREN_PULL := 1.3     # sideways drift she adds per second, before the helm's damping
+var _rock_count := 0        # every other rock is a tall spire; the rest carry a mermaid
+var _siren_count := 0
+var _siren_warned := false
 var crests: Array = []      # {z, bx, bw, h, node, prev, final}
 var _steer_touch := 0.0
 var _steer_gyro := 0.0
@@ -263,14 +268,60 @@ func _build_course_rocks() -> void:
             if absf(x) > 11.5:
                 continue
             var pick: String = ["boulder_01", "namaqualand_boulder_02", "namaqualand_cliff_01"][rng.randi_range(0, 2)]
-            var m := Models.prop(pick)
-            var k := r / (2.5 if pick == "namaqualand_cliff_01" else 0.9)
-            m.scale = Vector3(k, k * rng.randf_range(0.9, 1.3), k)
-            m.position = Vector3(x, -0.6, z)
-            m.rotation.y = rng.randf_range(0.0, TAU)
-            add_child(m)
-            rocks.append({"x": x, "z": z, "r": r, "hit": false, "grazed": false})
+            var holder := make_rock(pick, r, rng)
+            holder.position = Vector3(x, 0.0, z)
+            add_child(holder)
+            var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false}
+            if holder.has_meta("siren"):
+                rock["siren"] = holder.get_meta("siren")
+            rocks.append(rock)
         z -= rng.randf_range(15.0, 24.0)
+
+## A rock in the lane, at sea level in a holder (position it; its mesh keeps its own scale
+## and spin). Rocks alternate: a spire three times the height with a sharpened peak, then a
+## plain rock with a mermaid sitting on it (holder meta "siren"). `r` is the hull radius.
+func make_rock(pick: String, r: float, rng: RandomNumberGenerator) -> Node3D:
+    var holder := Node3D.new()
+    var m := Models.prop(pick)
+    var k := r / (2.5 if pick == "namaqualand_cliff_01" else 0.9)
+    var ky := k * rng.randf_range(0.9, 1.3)
+    var tall := _rock_count % 2 == 0
+    _rock_count += 1
+    if tall:
+        ky *= 3.0
+    m.scale = Vector3(k, ky, k)
+    m.position = Vector3(0, -0.6, 0)
+    m.rotation.y = rng.randf_range(0.0, TAU)
+    holder.add_child(m)
+    var top := m.mesh.get_aabb().end.y * ky - 0.6
+    if tall:
+        # The peak: a sharp stone spire growing out of the rock's top. Its own dice, so the
+        # course's rock positions stay as they were laid out.
+        var dice := RandomNumberGenerator.new()
+        dice.seed = 91 + _rock_count
+        var spire := MeshInstance3D.new()
+        var cm := CylinderMesh.new()
+        cm.top_radius = 0.0
+        cm.bottom_radius = r * 0.55
+        cm.height = r * 1.8
+        cm.radial_segments = 7
+        spire.mesh = cm
+        # Dressed in the rock's own stone, so the peak reads as part of it.
+        spire.material_override = m.mesh.surface_get_material(0)
+        spire.position = Vector3(dice.randf_range(-0.2, 0.2) * r, top - r * 0.55 + cm.height / 2.0, dice.randf_range(-0.2, 0.2) * r)
+        spire.rotation = Vector3(dice.randf_range(-0.08, 0.08), dice.randf_range(0.0, TAU), dice.randf_range(-0.08, 0.08))
+        holder.add_child(spire)
+        top += cm.height - r * 0.55
+    else:
+        var siren := Siren.new()
+        siren.setup(_siren_count, int(settings.get("sound", 100)) > 0)
+        _siren_count += 1
+        siren.position = Vector3(0, top - 0.2 - r * 0.12, 0)
+        siren.scale = Vector3.ONE * 1.15
+        holder.add_child(siren)
+        holder.set_meta("siren", siren)
+    holder.set_meta("top", top)
+    return holder
 
 ## The pier at the end of the run: a stone quay, two wooden piers, cargo and the flag.
 func _build_port() -> void:
@@ -433,7 +484,10 @@ func _tick_sailing(delta: float) -> void:
             _win()
 
 func _check_rocks() -> void:
+    var delta := get_process_delta_time()
     for r: Dictionary in rocks:
+        if r.has("siren"):
+            _tick_siren(r, delta)
         var dz: float = absf(float(r.z) - root.position.z)
         if dz > float(r.r) + 2.4:
             continue
@@ -454,6 +508,22 @@ func _check_rocks() -> void:
                 tw.set_ignore_time_scale(true)
                 tw.tween_interval(0.35)
                 tw.tween_callback(func(): if phase == Phase.SAILING: Engine.time_scale = 1.0)
+
+## A mermaid's rock: she sings while the ship is coming up on her and until it is past, and
+## the hull drifts her way, faintly, so the helm must hold against it.
+func _tick_siren(r: Dictionary, delta: float) -> void:
+    var siren: Siren = r.siren
+    var ahead := root.position.z - float(r.z)    # metres until abeam (negative once past)
+    var dx := float(r.x) - root.position.x
+    var near := phase == Phase.SAILING and ahead > -8.0 and ahead < SIREN_RANGE and absf(dx) < 20.0
+    siren.set_singing(near)
+    if not near:
+        return
+    if not _siren_warned:
+        _siren_warned = true
+        _say("Mermaids on the rocks! Don't listen to them, lad!")
+    var falloff := 1.0 - clampf(ahead / SIREN_RANGE, 0.0, 1.0) * 0.5
+    _lat_vel += signf(dx) * SIREN_PULL * falloff * delta
 
 ## Damage to the ship: a heart gone, a lurch, the red flash. Three and she is lost.
 func take_hit(fail_reason: String, line: String) -> void:

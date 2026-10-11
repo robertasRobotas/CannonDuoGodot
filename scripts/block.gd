@@ -22,6 +22,7 @@ var cage_id := -1   # bars of a prisoner's cage: breaking one frees them
 var burning := false
 var burn_time := 0.0
 var _flames: CPUParticles3D
+var smouldering := false
 
 func setup(mat: String, sz: Vector3, st: String, static_block: bool, mo: Dictionary, fragment: bool = false, visual: Node3D = null) -> void:
     material_name = mat
@@ -116,15 +117,110 @@ func ignite() -> void:
     ramp.set_color(1, Color(0.3, 0.1, 0.05, 0.0))
     _flames.color_ramp = ramp
     _flames.mesh = QuadMesh.new()
+    _flames.material_override = _particle_material("flash03.png", true)
+    add_child(_flames)
+
+## Blown rubble that still glows: a few weak tongues of flame, a thread of smoke and a dim
+## red light, dying away over `duration` seconds. The piece itself does not burn up.
+func smoulder(duration: float = randf_range(9.0, 16.0)) -> void:
+    if smouldering or is_queued_for_deletion():
+        return
+    if get_tree().get_nodes_in_group("embers").size() >= Tuning.MAX_EMBERS:
+        return
+    smouldering = true
+    add_to_group("embers")
+    var reach := size * 0.3
+    var fire := CPUParticles3D.new()
+    fire.amount = 7
+    fire.lifetime = 0.6
+    fire.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    fire.emission_box_extents = reach
+    fire.direction = Vector3(0, 1, 0)
+    fire.spread = 20.0
+    fire.initial_velocity_min = 0.2
+    fire.initial_velocity_max = 0.6
+    fire.gravity = Vector3(0, 0.8, 0)
+    fire.scale_amount_min = 0.14
+    fire.scale_amount_max = 0.3
+    var ramp := Gradient.new()
+    ramp.set_color(0, Color(1.0, 0.6, 0.2, 0.9))
+    ramp.set_color(1, Color(0.35, 0.08, 0.03, 0.0))
+    fire.color_ramp = ramp
+    fire.mesh = QuadMesh.new()
+    fire.material_override = _particle_material("flash03.png", true)
+    fire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(fire)
+    var smoke := CPUParticles3D.new()
+    smoke.amount = 6
+    smoke.lifetime = 2.4
+    smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    smoke.emission_box_extents = reach
+    smoke.direction = Vector3(0.1, 1, 0)
+    smoke.spread = 15.0
+    smoke.initial_velocity_min = 0.3
+    smoke.initial_velocity_max = 0.7
+    smoke.gravity = Vector3(0.15, 0.35, 0)
+    smoke.angle_min = 0.0
+    smoke.angle_max = 360.0
+    smoke.scale_amount_min = 0.3
+    smoke.scale_amount_max = 0.5
+    var grow := Curve.new()
+    grow.add_point(Vector2(0, 0.5))
+    grow.add_point(Vector2(1, 2.0))
+    smoke.scale_amount_curve = grow
+    var sramp := Gradient.new()
+    sramp.set_color(0, Color(0.3, 0.28, 0.26, 0.0))
+    sramp.add_point(0.2, Color(0.3, 0.28, 0.26, 0.4))
+    sramp.set_color(sramp.get_point_count() - 1, Color(0.45, 0.45, 0.47, 0.0))
+    smoke.color_ramp = sramp
+    smoke.mesh = QuadMesh.new()
+    smoke.material_override = _particle_material("blackSmoke16.png", false)
+    smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(smoke)
+    var light := OmniLight3D.new()
+    light.light_color = Color(1.0, 0.45, 0.15)
+    light.light_energy = 0.9
+    light.omni_range = 2.2
+    light.shadow_enabled = false
+    add_child(light)
+    var flicker := light.create_tween().set_loops()
+    flicker.tween_property(light, "light_energy", 0.6, 0.11)
+    flicker.tween_property(light, "light_energy", 1.0, 0.09)
+    flicker.tween_property(light, "light_energy", 0.8, 0.15)
+    # Die down: the flames go first, the smoke and the glow linger a little longer.
+    var t := get_tree().create_timer(duration)
+    t.timeout.connect(func():
+        if not is_instance_valid(self):
+            return
+        fire.emitting = false
+        flicker.kill()
+        var fade := light.create_tween()
+        fade.tween_property(light, "light_energy", 0.0, 3.0)
+        get_tree().create_timer(3.0).timeout.connect(func():
+            if is_instance_valid(smoke):
+                smoke.emitting = false
+            if is_instance_valid(light):
+                light.queue_free()
+            if is_instance_valid(fire):
+                fire.queue_free()
+            if is_instance_valid(self):
+                remove_from_group("embers")
+                smouldering = false)
+        get_tree().create_timer(6.0).timeout.connect(func():
+            if is_instance_valid(smoke):
+                smoke.queue_free()))
+
+## An unshaded billboard card for flames (additive) or smoke (plain alpha).
+static func _particle_material(texture: String, additive: bool) -> StandardMaterial3D:
     var m := StandardMaterial3D.new()
-    m.albedo_texture = load("res://assets/particles/flash03.png")
+    m.albedo_texture = load("res://assets/particles/" + texture)
     m.vertex_color_use_as_albedo = true
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    if additive:
+        m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
     m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-    _flames.material_override = m
-    add_child(_flames)
+    return m
 
 func _physics_process(delta: float) -> void:
     if burning:

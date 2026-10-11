@@ -28,6 +28,9 @@ static func style(data: Dictionary, storm: bool) -> Dictionary:
 static var _clear: Array[Rect2] = []
 ## A level's ceiling for trees in metres (terrain "tree_max"); 0 means no cap.
 static var _tree_cap := 0.0
+## Palm islands cap their trees here unless the level says otherwise, as the first island
+## does: a palm never outgrows the fort into a long bare trunk.
+const PALM_MAX := 6.5
 
 static func _free(x: float, z: float, r: float = 0.0) -> bool:
     for rect in _clear:
@@ -41,6 +44,8 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     rng.seed = level_id * 7919 + 13
     var shore: String = st.get("shore", "sand")
     _tree_cap = float(st.get("tree_max", 0.0))
+    if _tree_cap <= 0.0 and biome in ["tropic", "harbor"]:
+        _tree_cap = PALM_MAX
     _clear = [Rect2(-13.0, ship_z - 5.5, 90.0, 11.0)]
     if castle.size.x > 0.0:
         var c := castle.grow(2.0)
