@@ -16,7 +16,8 @@ signal quit
 
 enum Phase { PREP, SAILING, DOCKING, ENDED }
 
-const LANE := 10.0          # how far to port or starboard the helm allows (default)
+const LANE := 20.0          # how far to port or starboard the helm allows (default)
+const ROCK_SPAN := 23.0     # rocks stand out to here either side of the course
 var lane := LANE            # a mode may open the channel wider
 const CRUISE := {"sail": 8.0, "waves": 7.0, "reef": 8.0, "whirl": 7.0, "escape": 3.0, "wrecks": 6.5, "gauntlet": 8.5, "cave": 6.5}
 
@@ -45,12 +46,16 @@ var prompt_who: Label
 var ui: Control
 var spray: CPUParticles3D
 
-var rocks: Array = []       # {x, z, r, hit, grazed, siren?}
-const SIREN_RANGE := 28.0   # metres ahead at which a mermaid starts to sing
-const SIREN_PULL := 1.3     # sideways drift she adds per second, before the helm's damping
-var _rock_count := 0        # every other rock is a tall spire; the rest carry a mermaid
-var _siren_count := 0
-var _siren_warned := false
+var rocks: Array = []       # {x, z, r, hit, grazed}
+var _rock_count := 0        # seeds each sea stack's own shape
+var _port_arrow: Node3D     # floats over the ship, turning to point at the harbour
+var _pier_edge := 0.0       # the great pier's starboard edge in x (sail level)
+var _pier_z := 0.0          # ...and how far out to sea it reaches
+var _has_pier := false
+var _dock_z := 0.0          # where the hull comes to rest: midway along the pier
+var _quay_z := 0.0          # the quay's face: a ship still under way here hits it
+const BERTH_REACH := 5.0    # how far from the berth the helm may still be to bring her in
+var _arrow_yaw := 0.0
 var crests: Array = []      # {z, bx, bw, h, node, prev, final}
 var _steer_touch := 0.0
 var _steer_gyro := 0.0
@@ -122,6 +127,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     camera.far = 500.0
     add_child(camera)
     camera.make_current()
+    _build_port_arrow()
     if mode == "waves":
         _build_rain()
     if mode == "sail":
@@ -253,97 +259,220 @@ func _sounds() -> void:
 
 # MARK: Course
 
-## Rocks scattered down the lane, always leaving a way through.
+## Rocks scattered down the lane, always leaving a way through: two flank the gap, and
+## with the course this wide a few more stand further out.
 func _build_course_rocks() -> void:
     var rng := RandomNumberGenerator.new()
     rng.seed = 2024
     var z := -45.0
+    var gap_x := 0.0
     while z > -(goal - 50.0):
-        var gap_x := rng.randf_range(-6.0, 6.0)   # the safe water this row leaves open
-        var n := 1 if rng.randf() < 0.45 else 2
+        # The safe water this row leaves open: it wanders across the wide course, but never
+        # further between rows than the helm can reach.
+        gap_x = clampf(gap_x + rng.randf_range(-9.0, 9.0), -12.0, 12.0)
+        var n := 2 if rng.randf() < 0.45 else 4
+        var row: Array = []
         for i in n:
             var r := rng.randf_range(1.2, 2.4)
-            # Clear water either side of the gap, whatever the rock's size.
-            var x := gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i == 0 else -1.0)
-            if absf(x) > 11.5:
+            var x: float
+            if i < 2:
+                # Clear water either side of the gap, whatever the rock's size.
+                x = gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i == 0 else -1.0)
+            else:
+                x = rng.randf_range(-ROCK_SPAN, ROCK_SPAN)
+            var shape := rock_shape(r)
+            r = float(shape.r)
+            if not _row_fits(row, x, r, gap_x):
                 continue
-            var pick: String = ["boulder_01", "namaqualand_boulder_02", "namaqualand_cliff_01"][rng.randi_range(0, 2)]
-            var holder := make_rock(pick, r, rng)
+            var holder := make_rock(shape)
             holder.position = Vector3(x, 0.0, z)
             add_child(holder)
             var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false}
-            if holder.has_meta("siren"):
-                rock["siren"] = holder.get_meta("siren")
+            row.append(rock)
             rocks.append(rock)
         z -= rng.randf_range(15.0, 24.0)
 
-## A rock in the lane, at sea level in a holder (position it; its mesh keeps its own scale
-## and spin). Rocks alternate: a spire three times the height with a sharpened peak, then a
-## plain rock with a mermaid sitting on it (holder meta "siren"). `r` is the hull radius.
-func make_rock(pick: String, r: float, rng: RandomNumberGenerator) -> Node3D:
-    var holder := Node3D.new()
-    var m := Models.prop(pick)
-    var k := r / (2.5 if pick == "namaqualand_cliff_01" else 0.9)
-    var ky := k * rng.randf_range(0.9, 1.3)
-    var tall := _rock_count % 2 == 0
+## Whether a rock at `x` keeps out of the row's gap and off the rocks already in it.
+func _row_fits(row: Array, x: float, r: float, gap_x: float) -> bool:
+    if absf(x) > ROCK_SPAN or absf(x - gap_x) < r + 5.0:
+        return false
+    for o: Dictionary in row:
+        if absf(x - float(o.x)) < r + float(o.r) + 4.5:
+            return false
+    return true
+
+## What a rock will be, from its own dice: a crag of grey stone, small, medium or, now and
+## then, a big one. The wider kinds grow their hull radius `r` too, so the course is laid
+## out round the real stone. Returns {seed, h, r, w}: height, hull radius and width over
+## the hull.
+func rock_shape(r: float) -> Dictionary:
+    var dice := RandomNumberGenerator.new()
+    dice.seed = 91 + _rock_count * 7
     _rock_count += 1
-    if tall:
-        ky *= 3.0
-    m.scale = Vector3(k, ky, k)
-    m.position = Vector3(0, -0.6, 0)
-    m.rotation.y = rng.randf_range(0.0, TAU)
-    holder.add_child(m)
-    var top := m.mesh.get_aabb().end.y * ky - 0.6
-    if tall:
-        # The peak: a sharp stone spire growing out of the rock's top. Its own dice, so the
-        # course's rock positions stay as they were laid out.
-        var dice := RandomNumberGenerator.new()
-        dice.seed = 91 + _rock_count
-        var spire := MeshInstance3D.new()
-        var cm := CylinderMesh.new()
-        cm.top_radius = 0.0
-        cm.bottom_radius = r * 0.55
-        cm.height = r * 1.8
-        cm.radial_segments = 7
-        spire.mesh = cm
-        # Dressed in the rock's own stone, so the peak reads as part of it.
-        spire.material_override = m.mesh.surface_get_material(0)
-        spire.position = Vector3(dice.randf_range(-0.2, 0.2) * r, top - r * 0.55 + cm.height / 2.0, dice.randf_range(-0.2, 0.2) * r)
-        spire.rotation = Vector3(dice.randf_range(-0.08, 0.08), dice.randf_range(0.0, TAU), dice.randf_range(-0.08, 0.08))
-        holder.add_child(spire)
-        top += cm.height - r * 0.55
+    var roll := dice.randf()
+    var h: float
+    var wide: float
+    if roll < 0.45:
+        h = dice.randf_range(1.2, 2.2)        # small
+        wide = 1.0
+    elif roll < 0.8:
+        h = dice.randf_range(2.2, 3.8)        # medium
+        wide = 1.3
     else:
-        var siren := Siren.new()
-        siren.setup(_siren_count, int(settings.get("sound", 100)) > 0)
-        _siren_count += 1
-        siren.position = Vector3(0, top - 0.2 - r * 0.12, 0)
-        siren.scale = Vector3.ONE * 1.15
-        holder.add_child(siren)
-        holder.set_meta("siren", siren)
-    holder.set_meta("top", top)
+        h = dice.randf_range(4.0, 6.5)        # a big one
+        wide = 1.65
+    return {"seed": dice.seed, "h": h, "r": r * wide, "w": dice.randf_range(0.85, 1.05)}
+
+## A rock in a holder at sea level (position it): one mesh of grey stone (see rock_shape)
+## and foam at the waterline. The holder's meta "top" is the stone's height.
+func make_rock(shape: Dictionary) -> Node3D:
+    var dice := RandomNumberGenerator.new()
+    dice.seed = int(shape.seed) + 1
+    var holder := Node3D.new()
+    var r := float(shape.r)
+    var h := float(shape.h)
+    holder.add_child(_crag(r * float(shape.w), h, dice))
+    var foam := VoyageMode.foam_ring(r * 1.2, 0.4)
+    foam.position.y = Tuning.SEA_LEVEL + 0.06
+    holder.add_child(foam)
+    holder.set_meta("top", h)
     return holder
+
+static var _stone_mat: StandardMaterial3D
+
+## One grey stone material for every rock, shaded through vertex colours.
+static func _stone_material() -> StandardMaterial3D:
+    if _stone_mat == null:
+        _stone_mat = Models.tex_material("coast_sand_rocks_02", 0.5, Color(0.8, 0.8, 0.82)).duplicate()
+        _stone_mat.vertex_color_use_as_albedo = true
+    return _stone_mat
+
+## A crag: a low heap of four to seven angular chunks of grey stone, sharp-edged, each a
+## jittered few-sided lump, built into one mesh. Dark and wet at the waterline, paler up top.
+static func _crag(radius: float, height: float, dice: RandomNumberGenerator) -> MeshInstance3D:
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    var n := dice.randi_range(4, 7)
+    for i in n:
+        var a := dice.randf_range(0.0, TAU)
+        var d := 0.0 if i == 0 else dice.randf_range(radius * 0.3, radius * 0.8)
+        var rr := radius * (dice.randf_range(0.6, 0.8) if i == 0 else dice.randf_range(0.35, 0.6))
+        var hh := height * (dice.randf_range(0.8, 1.0) if i == 0 else dice.randf_range(0.35, 0.85))
+        var size := Vector3(rr, hh, rr * dice.randf_range(0.7, 1.3))
+        _chunk(st, Vector3(cos(a) * d, 0.0, sin(a) * d), size, dice.randf_range(0.0, TAU), dice.randf_range(0.85, 1.05), dice)
+    st.generate_normals()
+    var mi := MeshInstance3D.new()
+    mi.mesh = st.commit()
+    mi.material_override = _stone_material()
+    return mi
+
+## One lump of a crag: a sphere of four rings and seven sides, every vertex pushed in or out,
+## stretched to `size`, standing with its lower third under the water. Flat faces, so the
+## light catches each facet.
+static func _chunk(st: SurfaceTool, at: Vector3, size: Vector3, yaw: float, shade: float, dice: RandomNumberGenerator) -> void:
+    const RINGS := 4
+    const SEG := 7
+    var rows: Array = []
+    var basis := Basis(Vector3.UP, yaw)
+    for j in RINGS + 1:
+        var lat := -PI / 2.0 + PI * float(j) / RINGS
+        var row: Array = []
+        var pole_jitter := dice.randf_range(0.8, 1.2)
+        for i in SEG:
+            var lon := float(i) / SEG * TAU + (0.3 * j)
+            var jitter := pole_jitter if (j == 0 or j == RINGS) else dice.randf_range(0.65, 1.3)
+            var p := Vector3(cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon)) * jitter
+            p = basis * (p * size) + at + Vector3(0, size.y * 0.3 - 0.6, 0)
+            row.append(p)
+        rows.append(row)
+    for j in RINGS:
+        var lo: Array = rows[j]
+        var hi: Array = rows[j + 1]
+        _band(st, lo, hi, _wet(lo[0].y, shade), _wet(hi[0].y, shade))
+
+## Grey, darker and wetter toward the waterline.
+static func _wet(y: float, shade: float) -> Color:
+    return Color(1, 1, 1) * shade * (0.6 + 0.4 * clampf((y + 0.2) / 1.4, 0.0, 1.0))
+
+## A band of quads between two rings of the same count, as two triangles each.
+static func _band(st: SurfaceTool, lo: Array, hi: Array, c0: Color, c1: Color) -> void:
+    var n := lo.size()
+    for i in n:
+        var k := (i + 1) % n
+        for v: Array in [[lo[i], c0], [lo[k], c0], [hi[k], c1], [lo[i], c0], [hi[k], c1], [hi[i], c1]]:
+            st.set_color(v[1])
+            st.add_vertex(v[0])
+
+## A small white arrow floating over the mast, turning to point the way to the harbour.
+func _build_port_arrow() -> void:
+    _port_arrow = Node3D.new()
+    var shape := PackedVector2Array([Vector2(0, -0.75), Vector2(0.5, -0.15), Vector2(0.2, -0.15), Vector2(0.2, 0.65), Vector2(-0.2, 0.65), Vector2(-0.2, -0.15), Vector2(-0.5, -0.15)])
+    for layer: Array in [[Color(0.1, 0.1, 0.12), 1.18, -0.02], [Color(1.0, 1.0, 1.0), 1.0, 0.0]]:
+        var st := SurfaceTool.new()
+        st.begin(Mesh.PRIMITIVE_TRIANGLES)
+        var idx := Geometry2D.triangulate_polygon(shape)
+        for i in idx:
+            var p2 := shape[i] * float(layer[1])
+            st.add_vertex(Vector3(p2.x, float(layer[2]), p2.y))
+        var mi := MeshInstance3D.new()
+        mi.mesh = st.commit()
+        var m := StandardMaterial3D.new()
+        m.albedo_color = layer[0]
+        m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        m.cull_mode = BaseMaterial3D.CULL_DISABLED
+        m.disable_fog = true
+        mi.material_override = m
+        mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        _port_arrow.add_child(mi)
+    _port_arrow.visible = false
+    add_child(_port_arrow)
+
+## The arrow rides above the ship and swings to point at the harbour (the end of the run).
+func _update_port_arrow(delta: float) -> void:
+    # Only the first voyage, to the harbour, carries it; at the quay the harbour speaks for
+    # itself.
+    var show := mode == "sail" and (phase == Phase.SAILING or phase == Phase.DOCKING)
+    _port_arrow.visible = show
+    if not show:
+        return
+    if _has_pier and root.position.z < _pier_z + 30.0:
+        # The pier in sight: the arrow leaves the mast for the berth itself, hanging over
+        # the water beside the deck, tip down, bobbing gently until she is made fast.
+        var berth := Vector3(_pier_edge + 2.0, 6.5 + sin(time * 3.0) * 0.35, _dock_z)
+        _port_arrow.position = _port_arrow.position.lerp(berth, minf(delta * 4.0, 1.0))
+        _port_arrow.basis = (Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -PI / 2.0)).scaled(Vector3.ONE * 2.2)
+        return
+    var target := Vector3(0.0, 0.0, -goal - 12.0)
+    var dir := target - root.position
+    var want := atan2(-dir.x, -dir.z)
+    _arrow_yaw = lerp_angle(_arrow_yaw, want, minf(delta * 3.0, 1.0))
+    # Over the mainmast, tipped up toward the camera astern so its face reads from behind.
+    _port_arrow.position = root.position + Vector3(0, 8.6 + sin(time * 2.0) * 0.15, 0)
+    _port_arrow.basis = Basis(Vector3.UP, _arrow_yaw) * Basis(Vector3.RIGHT, deg_to_rad(38.0))   # unit scale again
 
 ## The pier at the end of the run: a stone quay, two wooden piers, cargo and the flag.
 func _build_port() -> void:
     var zq := -goal - 12.0
+    _quay_z = zq
     var quay := MeshInstance3D.new()
     var qm := BoxMesh.new()
-    qm.size = Vector3(26, 2.2, 10)
+    qm.size = Vector3(52, 2.2, 10)
     quay.mesh = qm
     quay.material_override = Models.tex_material("large_sandstone_blocks", 0.4)
     quay.position = Vector3(0, 0.1, zq - 5.0)
     add_child(quay)
     var sand := MeshInstance3D.new()
     var bm := BoxMesh.new()
-    bm.size = Vector3(60, 1.2, 26)
+    bm.size = Vector3(120, 1.2, 26)
     sand.mesh = bm
     sand.material_override = Models.tex_material("coast_sand_01", 0.4)
     sand.position = Vector3(0, -0.4, zq - 20.0)
     add_child(sand)
-    for px: float in [-4.5, 4.5]:
-        var pier := Models.prop("modular_wooden_pier")
-        pier.position = Vector3(px, -4.6, zq + 8.0)
-        add_child(pier)
+    var pier := Models.prop("modular_wooden_pier")
+    pier.position = Vector3(4.5, -4.6, zq + 8.0)
+    add_child(pier)
+    _build_bridge(zq)
+    _build_town(zq)
     var rng := RandomNumberGenerator.new()
     rng.seed = 7
     for i in 6:
@@ -352,11 +481,182 @@ func _build_port() -> void:
         prop.position = Vector3(rng.randf_range(-9.0, 9.0), 1.25, zq - 4.0 + rng.randf_range(-2.0, 2.0))
         prop.rotation.y = rng.randf_range(0.0, TAU)
         add_child(prop)
-    for i in 5:
+    for i in 7:
         var t := Models.tree("palm_coconut", rng.randf_range(5.0, 7.5))
-        t.position = Vector3(rng.randf_range(-24.0, 24.0), 0.2, zq - 16.0 - rng.randf_range(0.0, 6.0))
+        t.position = Vector3(rng.randf_range(-52.0, 52.0), 0.2, zq - 10.0 - rng.randf_range(0.0, 3.0))
         add_child(t)
     Atmosphere.ship_flag(self, Vector3(-8.0, 1.2, zq - 3.0))
+
+## A box of `size` in `mat`, centred at `at`.
+func _block(at: Vector3, size: Vector3, mat: Material, yaw: float = 0.0) -> MeshInstance3D:
+    var mi := MeshInstance3D.new()
+    var bm := BoxMesh.new()
+    bm.size = size
+    mi.mesh = bm
+    mi.material_override = mat
+    mi.position = at
+    mi.rotation.y = yaw
+    add_child(mi)
+    return mi
+
+## The great pier: a long timber bridge on tall pilings running out from the quay beside
+## the berth, railed both sides, with a round beacon tower at its seaward head. The ship
+## makes fast alongside it at the end of the run.
+func _build_bridge(zq: float) -> void:
+    var planks := Models.tex_material("brown_planks_07", 0.6, Color(0.92, 0.8, 0.62))
+    var timber := Models.tex_material("brown_planks_07", 0.9, Color(0.6, 0.46, 0.33))
+    var x0 := -6.0        # the deck's centre line, to port of the berth
+    var w := 7.0
+    var length := 40.0
+    var z_quay := zq - 1.0    # the deck lands on the quay itself
+    _dock_z = z_quay + length / 2.0   # the berth: midway along, alongside the deck
+    var z_head := z_quay + length
+    var deck_y := 1.6
+    _block(Vector3(x0, deck_y, z_quay + length / 2.0), Vector3(w, 0.4, length), planks)
+    # Pilings and cross beams every six metres, down into the water.
+    var z := z_quay + 3.0
+    while z < z_head:
+        for sx: float in [-1.0, 1.0]:
+            var pile := MeshInstance3D.new()
+            var cm := CylinderMesh.new()
+            cm.top_radius = 0.3
+            cm.bottom_radius = 0.34
+            cm.height = 7.0
+            cm.radial_segments = 8
+            pile.mesh = cm
+            pile.material_override = timber
+            pile.position = Vector3(x0 + sx * (w / 2.0 - 0.5), deck_y - 3.6, z)
+            add_child(pile)
+        _block(Vector3(x0, deck_y - 0.4, z), Vector3(w + 0.8, 0.3, 0.3), timber)
+        z += 6.0
+    # Railings: posts every three metres and two rails, both edges.
+    for sx: float in [-1.0, 1.0]:
+        var rx := x0 + sx * (w / 2.0 - 0.12)
+        _block(Vector3(rx, deck_y + 1.1, z_quay + length / 2.0), Vector3(0.1, 0.1, length), timber)
+        _block(Vector3(rx, deck_y + 0.7, z_quay + length / 2.0), Vector3(0.08, 0.08, length), timber)
+        z = z_quay + 1.5
+        while z < z_head:
+            _block(Vector3(rx, deck_y + 0.65, z), Vector3(0.16, 1.1, 0.16), timber)
+            z += 3.0
+    # The head: a wide platform to port, clear of the berth, with a white beacon tower.
+    var head_w := 16.0
+    var head_d := 9.0
+    var hx := x0 - 5.0
+    _block(Vector3(hx, deck_y, z_head + head_d / 2.0 - 1.0), Vector3(head_w, 0.4, head_d), planks)
+    _has_pier = true
+    _pier_edge = x0 + w / 2.0
+    _pier_z = z_head + head_d
+    for cx: float in [-1.0, 1.0]:
+        for cz: float in [-1.0, 1.0]:
+            var pile := MeshInstance3D.new()
+            var cm := CylinderMesh.new()
+            cm.top_radius = 0.34
+            cm.bottom_radius = 0.38
+            cm.height = 7.0
+            cm.radial_segments = 8
+            pile.mesh = cm
+            pile.material_override = timber
+            pile.position = Vector3(hx + cx * (head_w / 2.0 - 0.6), deck_y - 3.6, z_head + head_d / 2.0 - 1.0 + cz * (head_d / 2.0 - 0.6))
+            add_child(pile)
+    var tower := MeshInstance3D.new()
+    var tm := CylinderMesh.new()
+    tm.top_radius = 1.3
+    tm.bottom_radius = 1.7
+    tm.height = 9.0
+    tm.radial_segments = 14
+    tower.mesh = tm
+    tower.material_override = Models.flat_material(Color(0.95, 0.94, 0.9), 0.8)
+    tower.position = Vector3(hx - 4.0, deck_y + 4.7, z_head + 3.0)
+    add_child(tower)
+    var lamp := MeshInstance3D.new()
+    var lm := CylinderMesh.new()
+    lm.top_radius = 1.0
+    lm.bottom_radius = 1.0
+    lm.height = 1.6
+    lm.radial_segments = 10
+    lamp.mesh = lm
+    lamp.material_override = Models.flat_material(Color(1.0, 0.85, 0.5), 0.3)
+    lamp.position = Vector3(hx - 4.0, deck_y + 10.0, z_head + 3.0)
+    add_child(lamp)
+    var cap := MeshInstance3D.new()
+    var capm := CylinderMesh.new()
+    capm.top_radius = 0.0
+    capm.bottom_radius = 1.6
+    capm.height = 1.4
+    capm.radial_segments = 14
+    cap.mesh = capm
+    cap.material_override = Models.flat_material(Color(0.6, 0.2, 0.15), 0.7)
+    cap.position = Vector3(hx - 4.0, deck_y + 11.5, z_head + 3.0)
+    add_child(cap)
+    # Cargo along the deck.
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 23
+    for i in 10:
+        var prop := Models.prop("wooden_crate_01" if i % 3 != 1 else "wine_barrel_01")
+        prop.scale = Vector3.ONE * rng.randf_range(1.0, 1.5)
+        prop.position = Vector3(x0 + rng.randf_range(-2.4, 2.4), deck_y + 0.2, z_quay + rng.randf_range(4.0, length - 4.0))
+        prop.rotation.y = rng.randf_range(0.0, TAU)
+        add_child(prop)
+
+## The town behind the quay: a row of whitewashed and stone houses with tiled roofs, a long
+## warehouse, and a round church tower over them all.
+func _build_town(zq: float) -> void:
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 11
+    var walls: Array = [Models.flat_material(Color(0.93, 0.9, 0.82), 0.9), Models.flat_material(Color(0.88, 0.8, 0.66), 0.9), Models.tex_material("large_sandstone_blocks", 0.6, Color(0.9, 0.86, 0.78))]
+    var ground := 0.2
+    var x := -50.0
+    while x < 50.0:
+        var w := rng.randf_range(4.0, 7.0)
+        var d := rng.randf_range(4.0, 6.0)
+        var h := rng.randf_range(2.8, 4.6)
+        var z := zq - 13.0 - rng.randf_range(0.0, 9.0)
+        if absf(x) > 9.0 or z < zq - 17.0:
+            _house(Vector3(x, ground, z), Vector3(w, h, d), walls[rng.randi_range(0, walls.size() - 1)], rng)
+        x += w + rng.randf_range(2.0, 5.0)
+    # The warehouse by the quay's end, long and low.
+    _house(Vector3(-32.0, ground, zq - 12.0), Vector3(16.0, 4.2, 8.0), walls[2], rng, 0.4)
+    # The church: a hall and a round tower with a red cone.
+    _house(Vector3(22.0, ground, zq - 26.0), Vector3(10.0, 5.5, 7.0), walls[0], rng, 0.7)
+    var tower := MeshInstance3D.new()
+    var tm := CylinderMesh.new()
+    tm.top_radius = 2.0
+    tm.bottom_radius = 2.2
+    tm.height = 14.0
+    tm.radial_segments = 14
+    tower.mesh = tm
+    tower.material_override = walls[0]
+    tower.position = Vector3(29.0, ground + 7.0, zq - 26.0)
+    add_child(tower)
+    var cone := MeshInstance3D.new()
+    var cm := CylinderMesh.new()
+    cm.top_radius = 0.0
+    cm.bottom_radius = 2.6
+    cm.height = 4.5
+    cm.radial_segments = 14
+    cone.mesh = cm
+    cone.material_override = Models.flat_material(Color(0.62, 0.22, 0.16), 0.7)
+    cone.position = Vector3(29.0, ground + 16.2, zq - 26.0)
+    add_child(cone)
+
+## One house: walls, a tiled gable roof, a door and windows on the seaward side.
+func _house(at: Vector3, size: Vector3, wall: Material, rng: RandomNumberGenerator, roof_k: float = 0.55) -> void:
+    _block(at + Vector3(0, size.y / 2.0, 0), size, wall)
+    var roof := MeshInstance3D.new()
+    var pm := PrismMesh.new()
+    var roof_h := size.y * roof_k
+    pm.size = Vector3(size.z + 0.8, roof_h, size.x + 0.8)
+    pm.left_to_right = 0.5
+    roof.mesh = pm
+    roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))
+    roof.position = at + Vector3(0, size.y + roof_h / 2.0, 0)
+    roof.rotation.y = PI / 2.0
+    add_child(roof)
+    var dark := Models.flat_material(Color(0.2, 0.14, 0.1), 0.8)
+    var front := at.z + size.z / 2.0 + 0.03
+    _block(Vector3(at.x + rng.randf_range(-size.x * 0.25, size.x * 0.25), at.y + 0.95, front), Vector3(0.9, 1.9, 0.06), dark)
+    for sx: float in [-1.0, 1.0]:
+        _block(Vector3(at.x + sx * size.x * 0.33, at.y + size.y * 0.6, front), Vector3(0.7, 0.8, 0.06), dark)
 
 # MARK: Waves
 
@@ -429,6 +729,7 @@ func _process(delta: float) -> void:
     if _env:
         _env.sky_rotation.y += delta * (0.022 if mode == "waves" else 0.008)
     _float_ship(delta)
+    _update_port_arrow(delta)
     _update_camera(real_delta)
     if ui:
         ui.queue_redraw()
@@ -469,11 +770,22 @@ func _tick_sailing(delta: float) -> void:
     spray.amount = int(20 + speed * 6.0)
     if mode == "sail":
         _check_rocks()
+        if _has_pier and root.position.z < _pier_z + 4.0 and root.position.x < _pier_edge + 1.9:
+            # The great pier's edge: the hull fends off it and runs alongside.
+            root.position.x = move_toward(root.position.x, _pier_edge + 1.9, delta * 8.0)
+            _lat_vel = maxf(_lat_vel, 0.0)
         if root.position.z < -(goal - 55.0) and prompt.text.find("pier") < 0:
             _say("There's the pier. Bring her in!")
-        if root.position.z < -goal:
+        # Way off in time to stop alongside the berth (or at the course's end without a pier).
+        # With a pier, only a ship brought near the berth is taken in; one that is still out
+        # in the harbour runs on and strikes the quay.
+        var stop_at := _dock_z if _has_pier else -goal
+        var near_berth := (not _has_pier) or absf(root.position.x - (_pier_edge + 2.0)) < BERTH_REACH
+        if near_berth and root.position.z < stop_at + speed * speed / (2.0 * 2.2) + 0.5:
             phase = Phase.DOCKING
             _say("Easy now...")
+        elif _has_pier and root.position.z < _quay_z + 4.6:
+            _strike_quay()
     elif mode == "waves":
         _tick_crests(delta)
     else:
@@ -483,47 +795,80 @@ func _tick_sailing(delta: float) -> void:
             Haptics.thump()
             _win()
 
+const HULL_R := 2.0   # the hull's reach round the ship's centre against a rock's radius
+
 func _check_rocks() -> void:
-    var delta := get_process_delta_time()
     for r: Dictionary in rocks:
-        if r.has("siren"):
-            _tick_siren(r, delta)
-        var dz: float = absf(float(r.z) - root.position.z)
-        if dz > float(r.r) + 2.4:
+        var off := Vector2(root.position.x - float(r.x), root.position.z - float(r.z))
+        var reach := float(r.r) + HULL_R
+        var dist := off.length()
+        if dist > reach + 2.0:
             continue
-        var dx: float = absf(float(r.x) - root.position.x)
-        if not bool(r.hit) and dx < float(r.r) + 1.5:
-            r.hit = true
-            # The hull glances off: momentum away from the rock, a lurch, the camera kicks.
-            _lat_vel = signf(root.position.x - float(r.x)) * 3.5
-            _splash_at(Vector3(float(r.x), 0.2, float(r.z)))
-            take_hit("The hull gave way on the rocks.", ["Mind the rocks, lad!", "You'll have us swimming!"][mini(hits, 1)])
-        elif not bool(r.grazed) and dx < float(r.r) + 3.4:
+        if dist < reach:
+            # Into the stone: the hull is pushed back out and glances off sideways, so she
+            # never sails through. Dead ahead, the push leans to one side so she slides round.
+            var n := off / maxf(dist, 0.01)
+            if absf(n.x) < 0.3:
+                n.x = 0.3 if n.x >= 0.0 else -0.3
+                n = n.normalized()
+            root.position.x = clampf(root.position.x + n.x * (reach - dist), -lane, lane)
+            root.position.z += n.y * (reach - dist)
+            _lat_vel = n.x * 3.5
+            if not bool(r.hit):
+                r.hit = true
+                _splash_at(Vector3(float(r.x), 0.2, float(r.z)))
+                take_hit("The hull gave way on the rocks.", ["Mind the rocks, lad!", "You'll have us swimming!"][mini(hits, 1)])
+                speed = -1.5   # a weak bounce back off the stone
+            else:
+                speed = minf(speed, 1.2)   # scraping along it: she crawls until she is round
+        elif not bool(r.grazed) and dist < reach + 1.9:
             r.grazed = true
             Haptics.detent()
             # A whisker past: a breath of slow motion to savour it.
-            if dx < float(r.r) + 2.3 and phase == Phase.SAILING:
+            if dist < reach + 0.8 and phase == Phase.SAILING:
                 Engine.time_scale = 0.55
                 var tw := create_tween()
                 tw.set_ignore_time_scale(true)
                 tw.tween_interval(0.35)
                 tw.tween_callback(func(): if phase == Phase.SAILING: Engine.time_scale = 1.0)
 
-## A mermaid's rock: she sings while the ship is coming up on her and until it is past, and
-## the hull drifts her way, faintly, so the helm must hold against it.
-func _tick_siren(r: Dictionary, delta: float) -> void:
-    var siren: Siren = r.siren
-    var ahead := root.position.z - float(r.z)    # metres until abeam (negative once past)
-    var dx := float(r.x) - root.position.x
-    var near := phase == Phase.SAILING and ahead > -8.0 and ahead < SIREN_RANGE and absf(dx) < 20.0
-    siren.set_singing(near)
-    if not near:
-        return
-    if not _siren_warned:
-        _siren_warned = true
-        _say("Mermaids on the rocks! Don't listen to them, lad!")
-    var falloff := 1.0 - clampf(ahead / SIREN_RANGE, 0.0, 1.0) * 0.5
-    _lat_vel += signf(dx) * SIREN_PULL * falloff * delta
+## Autopilot helm: the nearest row of the given rocks ahead, and the closest clear water
+## through it that is inside the lane and not in another rock's way.
+func row_target(candidates: Array) -> float:
+    var row_z := -1e9
+    for r: Dictionary in candidates:
+        var dz := float(r.z) - root.position.z
+        if dz < -55.0 or dz > -2.0:
+            continue
+        if dz > row_z:
+            row_z = dz
+    var target := root.position.x
+    if row_z < -1e8:
+        return target
+    var row: Array = []
+    for r: Dictionary in candidates:
+        if absf((float(r.z) - root.position.z) - row_z) < 6.0:
+            row.append(r)
+    var blocked := false
+    for r: Dictionary in row:
+        if absf(root.position.x - float(r.x)) < float(r.r) + 3.5:
+            blocked = true
+    if not blocked:
+        return target
+    var best_d := 1e9
+    for r: Dictionary in row:
+        for side: float in [-1.0, 1.0]:
+            var cx: float = float(r.x) + side * (float(r.r) + 4.0)
+            if absf(cx) > lane - 0.5:
+                continue
+            var clear := true
+            for o: Dictionary in row:
+                if o != r and absf(cx - float(o.x)) < float(o.r) + 3.0:
+                    clear = false
+            if clear and absf(cx - root.position.x) < best_d:
+                best_d = absf(cx - root.position.x)
+                target = cx
+    return target
 
 ## Damage to the ship: a heart gone, a lurch, the red flash. Three and she is lost.
 func take_hit(fail_reason: String, line: String) -> void:
@@ -590,11 +935,15 @@ func _cross_crest(c: Dictionary) -> void:
             _win())
 
 func _tick_docking(delta: float) -> void:
+    # She loses way so as to stop right at the berth, and eases over to the pier's side,
+    # clear of its edge by more than the hull's half beam.
+    var left := (root.position.z - _dock_z) if _has_pier else 1e9
     speed = move_toward(speed, 0.0, delta * 2.2)
+    speed = minf(speed, sqrt(2.0 * 2.2 * maxf(left, 0.0)))
     _lat_vel = move_toward(_lat_vel, 0.0, delta * 5.0)
     _yaw = lerpf(_yaw, 0.0, minf(delta * 2.0, 1.0))
     root.position.z -= speed * delta
-    root.position.x = move_toward(root.position.x, 2.6, delta * 1.4)
+    root.position.x = move_toward(root.position.x, (_pier_edge + 2.0) if _has_pier else 2.6, delta * 1.4)
     ship.set_sail(maxf(1.0 - (time - _dock_t()) * 0.6, 0.0))
     if _wind:
         _wind.volume_db = move_toward(_wind.volume_db, -22.0, delta * 8.0)
@@ -704,39 +1053,9 @@ func _autopilot(delta: float) -> void:
         return
     var target := 0.0
     if mode == "sail":
-        # The nearest row of rocks ahead; pick the closest clear water that is inside the
-        # lane and not in another rock's way.
-        var row_z := -1e9
-        for r: Dictionary in rocks:
-            var dz := float(r.z) - root.position.z
-            if dz < -55.0 or dz > -2.0:
-                continue
-            if dz > row_z:
-                row_z = dz
-        target = root.position.x
-        if row_z > -1e8:
-            var row: Array = []
-            for r: Dictionary in rocks:
-                if absf((float(r.z) - root.position.z) - row_z) < 6.0:
-                    row.append(r)
-            var blocked := false
-            for r: Dictionary in row:
-                if absf(root.position.x - float(r.x)) < float(r.r) + 3.5:
-                    blocked = true
-            if blocked:
-                var best_d := 1e9
-                for r: Dictionary in row:
-                    for side: float in [-1.0, 1.0]:
-                        var cx: float = float(r.x) + side * (float(r.r) + 4.0)
-                        if absf(cx) > LANE - 0.5:
-                            continue
-                        var clear := true
-                        for o: Dictionary in row:
-                            if o != r and absf(cx - float(o.x)) < float(o.r) + 3.0:
-                                clear = false
-                        if clear and absf(cx - root.position.x) < best_d:
-                            best_d = absf(cx - root.position.x)
-                            target = cx
+        target = row_target(rocks)
+        if "--miss-berth" in OS.get_cmdline_user_args() and root.position.z < -(goal - 45.0):
+            target = 12.0   # debug: hold off to starboard and run into the quay
     elif mode_obj:
         target = mode_obj.autopilot_target()
         if mode_obj.drives():
@@ -768,6 +1087,72 @@ func _capsize() -> void:
     tw.chain().tween_callback(func():
         Engine.time_scale = 1.0
         _fail("The white water rolled her over."))
+
+## Full tilt into the quay: the bow stoves in with a burst of splinters, she stops dead
+## and settles by the head, and the run is lost.
+func _strike_quay() -> void:
+    phase = Phase.ENDED
+    speed = 0.0
+    _lat_vel = 0.0
+    Engine.time_scale = 0.45
+    _shake = 1.4
+    Haptics.rumble(3)
+    var bow := root.position + Vector3(0, 0.6, -4.2)
+    _splash_at(bow)
+    _splinters(bow)
+    _flash(Color(0.8, 0.1, 0.05, 0.4))
+    _say("The bow! You've stove her in!")
+    # The bow crumples: broken planks tumble off it into the water, the hull pitches
+    # forward and sinks by the head.
+    var planks := Models.tex_material("brown_planks_07", 0.9, Color(0.9, 0.7, 0.5))
+    for i in 9:
+        var plank := MeshInstance3D.new()
+        var bm := BoxMesh.new()
+        bm.size = Vector3(0.25, randf_range(1.2, 2.6), 0.12)
+        plank.mesh = bm
+        plank.material_override = planks
+        plank.position = bow + Vector3(randf_range(-1.2, 1.2), randf_range(-0.4, 1.2), randf_range(-0.6, 0.6))
+        plank.rotation = Vector3(randf_range(-0.4, 0.4), randf_range(0, TAU), randf_range(-0.5, 0.5))
+        add_child(plank)
+        var pt := plank.create_tween()
+        pt.set_ignore_time_scale(true)
+        pt.set_parallel(true)
+        pt.tween_property(plank, "position", plank.position + Vector3(randf_range(-2.5, 2.5), -2.2, randf_range(-3.0, -0.5)), 1.3).set_ease(Tween.EASE_IN)
+        pt.tween_property(plank, "rotation", plank.rotation + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)), 1.3)
+    var tw := create_tween()
+    tw.set_ignore_time_scale(true)
+    tw.set_parallel(true)
+    tw.tween_property(root, "rotation:x", -0.42, 1.3).set_ease(Tween.EASE_OUT)
+    tw.tween_property(root, "position:y", root.position.y - 1.1, 1.6)
+    tw.tween_property(root, "position:z", root.position.z + 0.9, 0.5).set_ease(Tween.EASE_OUT)
+    tw.chain().tween_callback(func():
+        Engine.time_scale = 1.0
+        _fail("She ran into the quay and stove her bow in."))
+
+## A burst of plank splinters at `at`.
+func _splinters(at: Vector3) -> void:
+    var p := CPUParticles3D.new()
+    p.emitting = false
+    p.one_shot = true
+    p.amount = 40
+    p.lifetime = 1.6
+    p.explosiveness = 0.95
+    p.direction = Vector3(0, 1, -0.6)
+    p.spread = 70.0
+    p.initial_velocity_min = 3.0
+    p.initial_velocity_max = 8.0
+    p.gravity = Vector3(0, -9.8, 0)
+    p.particle_flag_align_y = true
+    p.scale_amount_min = 0.8
+    p.scale_amount_max = 1.6
+    var bm := BoxMesh.new()
+    bm.size = Vector3(0.03, 0.3, 0.04)
+    p.mesh = bm
+    p.material_override = Models.tex_material("brown_planks_07", 3.0, Color(1.1, 0.85, 0.62))
+    p.position = at
+    add_child(p)
+    p.emitting = true
+    get_tree().create_timer(2.4).timeout.connect(p.queue_free)
 
 func _fail(reason: String) -> void:
     phase = Phase.ENDED

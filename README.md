@@ -19,7 +19,8 @@ Tools/export_ios.sh                            # export to build/ios and install
 ```
 
 Debug launch arguments (after `--`): `--level=N`, `--shot=N,SECONDS,PATH`, `--fire=POWER,YAW,PITCH`,
-`--probe=N` (prints the cannon mount and quits).
+`--probe=N` (prints the cannon mount and quits), `--autopilot` (a voyage steers itself), `--miss-berth`
+(with `--autopilot` on the sail level: holds off the berth and runs into the quay).
 
 ## Layout
 

@@ -8,28 +8,39 @@ var _warned := false
 
 func build(voyage: VoyageLevel) -> void:
     super.build(voyage)
-    v.lane = 11.0
+    v.lane = 22.0
     win_title = "Clear of the reef!"
     end_line = "Clear water. Well steered, lad."
     intro_line = "Reef ahead. Watch for the boils."
     var rng := RandomNumberGenerator.new()
     rng.seed = 606
     var z := -50.0
+    var gap_x := 0.0
     while z > -(v.goal - 30.0):
-        var gap_x := rng.randf_range(-6.0, 6.0)
-        var n := 2 if rng.randf() < 0.6 else 3
+        # The gap wanders, but never further between rows than the helm can reach.
+        gap_x = clampf(gap_x + rng.randf_range(-9.0, 9.0), -12.0, 12.0)
+        var n := 3 if rng.randf() < 0.6 else 5
+        var row: Array = []
         for i in n:
             var r := rng.randf_range(1.3, 2.3)
-            var x := gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i % 2 == 0 else -1.0) + (rng.randf_range(-9.0, 9.0) if i == 2 else 0.0)
-            if absf(x) > 11.5 or absf(x - gap_x) < r + 4.0:
+            var x: float
+            if i < 2:
+                x = gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i == 0 else -1.0)
+            else:
+                x = rng.randf_range(-VoyageLevel.ROCK_SPAN, VoyageLevel.ROCK_SPAN)
+            var shape := v.rock_shape(r)
+            r = float(shape.r)
+            if not v._row_fits(row, x, r, gap_x):
                 continue
-            # Spires and mermaid rocks alternate as on the sail course; each hides under the
-            # water by its own height until it rises.
-            var m := v.make_rock("boulder_01" if rng.randf() < 0.6 else "namaqualand_boulder_02", r, rng)
+            # Sea stacks as on the sail course; each hides under the water by its own height
+            # until it rises.
+            var m := v.make_rock(shape)
             var hidden := -1.5 - float(m.get_meta("top"))
             m.position = Vector3(x, hidden, z)
             v.add_child(m)
-            _reef.append({"x": x, "z": z, "r": r, "node": m, "state": 0, "t": 0.0, "hidden": hidden})
+            var rock := {"x": x, "z": z, "r": r, "node": m, "state": 0, "t": 0.0, "hidden": hidden}
+            row.append(rock)
+            _reef.append(rock)
         z -= rng.randf_range(16.0, 24.0)
 
 func tick(delta: float) -> void:
@@ -65,10 +76,7 @@ func tick(delta: float) -> void:
                 ring.material_override.albedo_color.a = 0.75 * (1.0 - k) + 0.1
             if k >= 1.0:
                 rk.state = 2
-                var rock := {"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false}
-                if (rk.node as Node).has_meta("siren"):
-                    rock["siren"] = (rk.node as Node).get_meta("siren")
-                v.rocks.append(rock)
+                v.rocks.append({"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false})
                 v._splash_at(Vector3(float(rk.x), 0.1, float(rk.z)))
                 if rk.has("boil"):
                     (rk.boil as CPUParticles3D).emitting = false
@@ -77,22 +85,9 @@ func tick(delta: float) -> void:
     v._check_rocks()
 
 func autopilot_target() -> float:
-    # Dodge rocks that are up or coming up, like the sail level does.
-    var best := 1e9
-    var target := v.root.position.x
+    # Dodge rocks that are up or coming up, row by row like the sail level does.
+    var up: Array = []
     for rk: Dictionary in _reef:
-        if int(rk.state) == 0:
-            continue
-        var dz := float(rk.z) - v.root.position.z
-        if dz < -50.0 or dz > -2.0:
-            continue
-        if absf(dz) < best:
-            best = absf(dz)
-            var dx := v.root.position.x - float(rk.x)
-            if absf(dx) < float(rk.r) + 3.5:
-                var side := signf(dx if dx != 0.0 else 1.0)
-                var cx := float(rk.x) + side * (float(rk.r) + 4.0)
-                if absf(cx) > v.lane - 0.5:
-                    cx = float(rk.x) - side * (float(rk.r) + 4.0)
-                target = cx
-    return target
+        if int(rk.state) != 0:
+            up.append(rk)
+    return v.row_target(up)
