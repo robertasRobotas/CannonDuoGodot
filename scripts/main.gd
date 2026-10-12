@@ -514,7 +514,12 @@ func add_settings_rows(v: Control) -> void:
                 if key == "gyro":
                     _level.set_gyro(on)
                 else:
-                    _level.settings[key] = on)
+                    _level.settings[key] = on
+            elif _voyage and is_instance_valid(_voyage):
+                if key == "gyro":
+                    _voyage.set_gyro(on)
+                else:
+                    _voyage.settings[key] = on)
         v.add_child(cb)
 
 ## A settings row with a 0–100 slider: the name, the bar, the value. Volume follows the
@@ -674,6 +679,7 @@ func _build_level(id: int) -> void:
         _voyage.next_level.connect(func(): _after_level(id, func(): play_level(id + 1) if id < LEVEL_COUNT else _show_levels()))
         _voyage.replay.connect(func(): start_level(id))
         _voyage.quit.connect(func(): _after_level(id, _show_levels))
+        _voyage.paused.connect(func(on): music.duck(on))
         if loading:
             var lay := CanvasLayer.new()
             lay.layer = 20
@@ -713,3 +719,5 @@ func _notification(what: int) -> void:
     var away := what == NOTIFICATION_APPLICATION_PAUSED or (what == NOTIFICATION_APPLICATION_FOCUS_OUT and OS.has_feature("mobile"))
     if away and _hud and is_instance_valid(_hud):
         _hud.pause_for_background()
+    if away and _voyage and is_instance_valid(_voyage):
+        _voyage.pause_for_background()

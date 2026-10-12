@@ -3,7 +3,7 @@
 ## Output matches the level JSON (blocks, targets, enemy guns), so Level builds it like any
 ## designed castle.
 ##
-## A castle stands on a site: open sand (near or far back behind a wide beach), a rock plateau,
+## A castle stands on a site: open sand (near or far back behind a wide beach), a rock plateau, a hillfort mound,
 ## or the top of a sea cliff. Towers share one floor height so rope bridges can join them: bring
 ## one tower down and the bridge, its guard and often the next tower go with it.
 class_name Fortress
@@ -12,6 +12,7 @@ const FLOOR_H := 2.1
 const PLANK := 0.24
 const STEP := FLOOR_H + PLANK
 const ROCK_H := 2.4
+const MOUND_H := 4.2
 const CLIFF_H := 6.5
 
 var blocks: Array = []
@@ -71,7 +72,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "enemyCannons": f.guns,
         "lookAt": [0, look_y, z],
         "pitch": -5.5 if site == "cliff" else (-7.0 if top > 10.0 else -9.0),
-        "shore": {"far": "sand", "sand": "sand", "rock": "rocks", "cliff": "cliffs"}.get(site, "sand"),
+        "shore": {"far": "sand", "sand": "sand", "rock": "rocks", "cliff": "cliffs", "mound": "sand"}.get(site, "sand"),
         "beach": 12.0 if site == "far" else 4.2,
         "offshore": 3.0 if site == "far" else 8.0,
     }
@@ -86,6 +87,11 @@ func _site(site: String, width: float, z: float) -> void:
         "cliff":
             _blk("stone", Vector3(0, CLIFF_H / 2.0, z - 0.5), Vector3(width + 4.0, CLIFF_H, 9.0), {"isStatic": true, "style": "cliff"})
             base = CLIFF_H
+        "mound":
+            # A hillfort mound: the block is the whole hill, foot to foot; the fort stands
+            # on its level top, SKIRT in from the edge.
+            _blk("stone", Vector3(0, MOUND_H / 2.0, z), Vector3(width + 2.5 + 2.0 * Mound.SKIRT, MOUND_H, 7.0 + 2.0 * Mound.SKIRT), {"isStatic": true, "style": "mound"})
+            base = MOUND_H
         _:
             base = 0.0
 
@@ -168,55 +174,69 @@ func _harbor(z: float) -> void:
 ## (a log ground floor and a wider upper floor overhanging it, as on real frontier forts),
 ## firing steps behind the wall, and a raised lookout in the middle.
 func _stockade(z: float) -> void:
-    var front := z + 2.6
-    # Log wall with a gap for the gate.
-    for i in 22:
-        var x := -6.3 + i * 0.6
-        if absf(x) < 0.9:
-            continue
-        var h := 2.6 + (0.25 if i % 2 == 0 else 0.0)
-        _part("wood", Vector3(x, h / 2.0, front), Vector3(0.52, h, 0.5), {"style": "log"})
-    # Gate: two leaves and a lintel beam.
+    # Two square log towers of a height, joined by a log wall with the gate in it. Every
+    # wall is one solid piece of stacked logs, so a glancing ball rocks it and only a real
+    # hit breaks it; there is no powder here, it all has to be knocked down.
+    _log_tower(-4.6, z)
+    _log_tower(4.6, z)
+    var front := z + 0.5
+    var lw := 0.5
+    var leaf := 1.0     # half the gate opening
+    # The wall either side of the gate, four courses, and two courses of lintel over it.
     for side: float in [-1.0, 1.0]:
-        _part("wood", Vector3(side * 0.42, 1.2, front + 0.1), Vector3(0.78, 2.4, 0.18))
-    _part("wood", Vector3(0, 2.75, front), Vector3(2.4, 0.3, 0.6))
-    # Firing step behind the wall with pirates on it.
+        var x0 := side * leaf
+        var x1 := side * 3.1
+        _logs(Vector3((x0 + x1) / 2.0, 1.0, front), Vector3(absf(x1 - x0), 2.0, lw))
+    _logs(Vector3(0.0, 2.5, front), Vector3(6.2, 1.0, lw))
+    # Gate: two leaves under the lintel.
     for side: float in [-1.0, 1.0]:
-        _part("wood", Vector3(side * 3.3, 1.55, front - 0.7), Vector3(4.4, 0.18, 0.9))
-        _part("wood", Vector3(side * 3.3, 0.72, front - 0.9), Vector3(0.24, 1.45, 0.24))
-        _guard(Vector3(side * 3.3, 1.64, front - 0.7))
-        _blockhouse(side * 6.3, front - 0.6)
-    # Lookout tower in the yard.
-    var y := _storey(0.0, z - 0.5, 2.0, 2.0, 0.0, 0.22, false, true)
-    y = _storey(0.0, z - 0.5, 2.0, 2.0, y, 0.2, true, false)
-    _guard(Vector3(0.0, y, z - 0.5))
-    _part("tnt", Vector3(0.0, 0.35, z - 0.5), Vector3(0.6, 0.7, 0.6))
-    _tops.append([0.0, z - 0.5, 2.0])
+        _part("wood", Vector3(side * 0.5, 1.0, front + 0.1), Vector3(0.96, 2.0, 0.16))
+    # The wall walk behind the top course, two pirates on it.
+    _part("wood", Vector3(0.0, 3.1, front - 0.65), Vector3(6.2, 0.2, 0.9))
+    for side: float in [-1.0, 1.0]:
+        _guard(Vector3(side * 1.8, 3.2, front - 0.65))
+    # Two sentries on the ground before the gate.
+    for side: float in [-1.0, 1.0]:
+        _guard(Vector3(side * 1.9, 0.0, front + 1.2))
 
-## Two-storey log blockhouse, the upper floor wider than the lower, a pyramid roof.
-func _blockhouse(x: float, z: float) -> void:
-    var w := 2.2
-    for k in 5:
-        var y := 0.25 + k * 0.5
-        _part("wood", Vector3(x, y, z - w / 2.0), Vector3(w, 0.46, 0.34), {"style": "log"})
-        _part("wood", Vector3(x, y, z + w / 2.0), Vector3(w, 0.46, 0.34), {"style": "log"})
-        _part("wood", Vector3(x - w / 2.0, y, z), Vector3(0.34, 0.46, w - 0.3), {"style": "log"})
-        _part("wood", Vector3(x + w / 2.0, y, z), Vector3(0.34, 0.46, w - 0.3), {"style": "log"})
-    var y0 := 2.5
-    _part("wood", Vector3(x, y0 + 0.1, z), Vector3(w + 0.9, 0.2, w + 0.9))
-    var u := w + 0.8
+## A square tower: four walls of upright logs, each wall one piece, a heavy floor, a lookout
+## of four posts with a railing between them, and a stepped slab roof. A pirate stands in
+## the lookout. The walls split into a few big slabs of logs, but only to a hard hit.
+func _log_tower(x: float, z: float) -> void:
+    var w := 3.0
+    var lw := 0.6
+    var h := 3.5
+    var tag := "tower%.1f" % x
+    _part("timber", Vector3(x, h / 2.0, z - w / 2.0 + lw / 2.0), Vector3(w, h, lw), {"style": "palisade", "tower": tag})
+    _part("timber", Vector3(x, h / 2.0, z + w / 2.0 - lw / 2.0), Vector3(w, h, lw), {"style": "palisade", "tower": tag})
+    _part("timber", Vector3(x - w / 2.0 + lw / 2.0, h / 2.0, z), Vector3(lw, h, w - 2.0 * lw), {"style": "palisade", "tower": tag})
+    _part("timber", Vector3(x + w / 2.0 - lw / 2.0, h / 2.0, z), Vector3(lw, h, w - 2.0 * lw), {"style": "palisade", "tower": tag})
+    _part("wood", Vector3(x, h + 0.15, z), Vector3(w + 0.6, 0.3, w + 0.6))
+    var floor_y := h + 0.3
+    var post_h := 1.4
+    var px := w / 2.0 + 0.15
+    for sx: float in [-1.0, 1.0]:
+        for sz: float in [-1.0, 1.0]:
+            _part("wood", Vector3(x + sx * px, floor_y + post_h / 2.0, z + sz * px), Vector3(0.36, post_h, 0.36))
+    # The railing between the posts, one piece per side.
+    var gw := w + 0.3 - 0.36
+    var rh := 1.0
+    _part("timber", Vector3(x, floor_y + rh / 2.0, z - px), Vector3(gw, rh, 0.12), {"style": "fence"})
+    _part("timber", Vector3(x, floor_y + rh / 2.0, z + px), Vector3(gw, rh, 0.12), {"style": "fence"})
+    _part("timber", Vector3(x - px, floor_y + rh / 2.0, z), Vector3(0.12, rh, gw), {"style": "fence"})
+    _part("timber", Vector3(x + px, floor_y + rh / 2.0, z), Vector3(0.12, rh, gw), {"style": "fence"})
+    # The roof: a stepped pyramid of three heavy slabs, each square on the one below.
+    var roof := floor_y + post_h
+    var u := w + 1.0
     for k in 3:
-        var y := y0 + 0.45 + k * 0.5
-        _part("wood", Vector3(x, y, z - u / 2.0), Vector3(u, 0.46, 0.3), {"style": "log"})
-        _part("wood", Vector3(x - u / 2.0, y, z), Vector3(0.3, 0.46, u - 0.3), {"style": "log"})
-        _part("wood", Vector3(x + u / 2.0, y, z), Vector3(0.3, 0.46, u - 0.3), {"style": "log"})
-    var top := y0 + 1.7
-    _part("wood", Vector3(x, top + 0.1, z), Vector3(u + 0.3, 0.2, u + 0.3))
-    _part("wood", Vector3(x - u * 0.26, top + 0.7, z), Vector3(u * 0.62, 0.16, u + 0.4), {"rotation": [0, 0, 36]})
-    _part("wood", Vector3(x + u * 0.26, top + 0.7, z), Vector3(u * 0.62, 0.16, u + 0.4), {"rotation": [0, 0, -36]})
-    _guard(Vector3(x, y0 + 0.2, z + 0.4))
-    _part("tnt", Vector3(x, 0.35, z), Vector3(0.6, 0.7, 0.6))
+        var side: float = u * [1.0, 0.72, 0.44][k]
+        _part("wood", Vector3(x, roof + 0.15 + k * 0.3, z), Vector3(side, 0.3, side))
+    _guard(Vector3(x, floor_y, z))
     _tops.append([x, z, w])
+
+## A wall of logs laid close, as one piece (see the "logs" look in Level).
+func _logs(pos: Vector3, size: Vector3) -> void:
+    _part("timber", pos, size, {"style": "logs"})
 
 ## A Spanish-style coastal battery: a low curtain of coral stone with gun embrasures between
 ## merlons, angled bastions at both ends each with a round sentry box on its point, a stone
@@ -515,13 +535,19 @@ func _place_cages(count: int, deserters: int) -> void:
     # Beyond both ends of the fort, a little in front: prisoners kept apart from the pirates.
     var reach := 0.0
     var front := -100.0
+    var top_hw := 0.0     # a mound's level top: the cages stay up on it, inside its edge
     for b in blocks:
+        if b.get("style", "") == "mound":
+            top_hw = float(b.size[0]) / 2.0 - Mound.SKIRT
+            continue
         reach = maxf(reach, absf(float(b.position[0])) + float(b.size[0]) / 2.0)
         front = maxf(front, float(b.position[2]))
     for i in n:
         var side := -1.0 if i % 2 == 0 else 1.0
         var row: int = i / 2
         var x := side * (reach + 2.0 + row * 1.6)
+        if top_hw > 0.0:
+            x = side * (top_hw - 0.8 - row * 1.4)
         var cz := front - 0.5 - row * 0.4
         _cage_n += 1
         for dx: float in [-0.45, 0.45]:

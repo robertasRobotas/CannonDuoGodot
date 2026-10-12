@@ -210,6 +210,12 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     var sky := Sky.new()
     var sm: Material
     style = Decor.style(data, storm)
+    # A hillfort mound is its own ground: no cobbled yard under it.
+    for b in data.blocks:
+        if b.get("style", "") == "mound":
+            style["yard"] = false
+            style["flat"] = 10.0
+            style["flat_ease"] = 14.0
     var sky_kind: String = style.sky
     # The worst storms (level 1): the rain blacks out the sky.
     var tempest := float(data.get("sea", 0.0)) >= 0.95
@@ -504,6 +510,8 @@ func _spawn_block(b: Dictionary) -> void:
         blk.rotation_degrees = Vector3(float(r[0]), float(r[1]), float(r[2]))
     blk.base_position = blk.position
     blk.cage_id = int(b.get("cage", -1))
+    if b.has("tower"):
+        blk.set_meta("tower", str(b.tower))
     blk.broke.connect(_on_block_broke)
     add_child(blk)
 
@@ -678,6 +686,10 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 axis = 2
             var length: float = size[axis]
             var r := minf(size[(axis + 1) % 3], size[(axis + 2) % 3]) * 0.5
+            if tint == "tight":
+                # Logs laid close: each round a little fatter than its course, so the courses
+                # overlap and no daylight shows between them (the body stays its box).
+                r *= 1.18
             var log := MeshInstance3D.new()
             var cm := CylinderMesh.new()
             cm.top_radius = r
@@ -708,6 +720,63 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 tip.position.y = length / 2.0 - r * 0.7
                 root.add_child(tip)
             root.add_child(log)
+        "logs":
+            # A whole wall of logs as one piece: courses of rounds stacked up the box's height,
+            # each a little fatter than its course so no daylight shows between them. One
+            # heavy body, so a glancing ball rocks it rather than scattering the courses.
+            var along := 0 if size.x >= size.z else 2
+            var course := 0.5
+            var n := maxi(int(round(size.y / course)), 1)
+            course = size.y / float(n)
+            var lr := minf(course, size[2 - along]) * 0.5 * 1.18
+            _ensure_bark()
+            for i in n:
+                var lg := MeshInstance3D.new()
+                var lcm := CylinderMesh.new()
+                lcm.top_radius = lr
+                lcm.bottom_radius = lr
+                lcm.height = size[along]
+                lcm.radial_segments = 10
+                lg.mesh = lcm
+                lg.material_override = _bark
+                lg.rotation = Vector3(0, 0, PI / 2.0) if along == 0 else Vector3(PI / 2.0, 0, 0)
+                lg.position.y = -size.y / 2.0 + course * (float(i) + 0.5)
+                root.add_child(lg)
+        "palisade":
+            # A wall of upright logs side by side along the box's long side, each a little
+            # fatter than its slot so no daylight shows between them.
+            var along := 0 if size.x >= size.z else 2
+            var thin: float = size[2 - along]
+            var n := maxi(int(round(size[along] / 0.5)), 1)
+            var slot: float = size[along] / float(n)
+            var lr := minf(slot, thin) * 0.5 * 1.18
+            _ensure_bark()
+            for i in n:
+                var lg := MeshInstance3D.new()
+                var lcm := CylinderMesh.new()
+                lcm.top_radius = lr
+                lcm.bottom_radius = lr
+                lcm.height = size.y
+                lcm.radial_segments = 10
+                lg.mesh = lcm
+                lg.material_override = _bark
+                lg.position[along] = -size[along] / 2.0 + slot * (float(i) + 0.5)
+                root.add_child(lg)
+        "fence":
+            # A railing: posts along the box's long side, a top rail and a middle rail.
+            var along := 0 if size.x >= size.z else 2
+            var timber := Models.tex_material("brown_planks_07", 1.2, Color(0.6, 0.46, 0.33))
+            var n := maxi(int(round(size[along] / 0.75)), 1) + 1
+            for i in n:
+                var post := _box(Vector3(0.12, size.y, 0.12), timber)
+                post.position[along] = -size[along] / 2.0 + 0.06 + (size[along] - 0.12) * float(i) / float(n - 1)
+                root.add_child(post)
+            for k: float in [0.5, 0.95]:
+                var rail_size := Vector3(0.1, 0.1, 0.1)
+                rail_size[along] = size[along]
+                var rail := _box(rail_size, timber)
+                rail.position.y = -size.y / 2.0 + size.y * k
+                root.add_child(rail)
         "roof":
             root.add_child(_box(size, Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))))
         "crate":
@@ -748,6 +817,8 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             var cap := _box(Vector3(size.x * 0.97, 0.14, size.z * 0.95), Models.tex_material("leafy_grass", 0.35, Color(0.9, 0.95, 0.85)))
             cap.position.y = size.y / 2.0 - 0.05
             root.add_child(cap)
+        "mound":
+            root.add_child(Mound.build(size))
         "hill":
             var mi := MeshInstance3D.new()
             var bm := BoxMesh.new()
@@ -766,7 +837,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             match mat:
                 "stone":
                     root.add_child(_box(size, _stone_material(tint)))
-                "wood":
+                "wood", "timber":
                     root.add_child(_box(size, Models.wood_material()))
                 "tnt":
                     # A powder barrel (Poly Haven), painted red.
@@ -790,6 +861,13 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 _:
                     root.add_child(_box(size, Models.flat_material(Color(0.78, 0.74, 0.76), 0.9)))
     return root
+
+func _ensure_bark() -> void:
+    if _bark == null:
+        _bark = StandardMaterial3D.new()
+        _bark.albedo_texture = load("res://assets/hq/oak_trees/textures/bark1_baseColor.png")
+        _bark.uv1_scale = Vector3(1.0, 2.0, 1.0)
+        _bark.roughness = 0.95
 
 func _box(size: Vector3, material: Material) -> MeshInstance3D:
     var mi := MeshInstance3D.new()
@@ -932,7 +1010,7 @@ func _physics_process(delta: float) -> void:
         return
     for n in get_tree().get_nodes_in_group("blocks"):
         var b := n as Block
-        if b.freeze or b.material_name != "wood":
+        if b.freeze or not (b.material_name in ["wood", "timber"]):
             continue
         var p := b.global_position
         if not open_sea and p.z < Tuning.SHORE_Z + 0.5:
@@ -1239,6 +1317,7 @@ func fire(pw: float) -> void:
     add_child(p)
     p.global_position = origin
     p.setup(type, v)
+    p.power = pw
     p.spawn_time = time
     p.exploded.connect(func(at): explode(at))
     p.splashed.connect(func(at): fx.splash(at); ambience.splash(); event.emit("splash", {}))
@@ -1300,13 +1379,85 @@ func _on_block_broke(blk: Block) -> void:
         fx.dust(pos, mat)
         return
     _fragment(blk)
+    if mat == "timber" and blk.has_meta("tower"):
+        _topple_tower(str(blk.get_meta("tower")), blk)
     blk.queue_free()
     fx.dust(pos, mat)
-    if mat == "wood":
+    if mat == "wood" or mat == "timber":
         ambience.crack()
         fx.splinters(pos, 10 if blk.is_fragment else 16)
         Haptics.crack()
     event.emit("broke", {"material": mat})
+
+## How a log wall breaks: slabs along `axis`, a single log's width at the strike and each
+## one further out wider than the last, as [local centre, size]. The slab under the ball
+## is chopped short as well, so the strike is a scatter of stubs among whole bundles.
+func _timber_pieces(blk: Block, axis: int) -> Array:
+    var size := blk.size
+    var length: float = size[axis]
+    var u := 0.0
+    if blk.hit_known:
+        u = clampf(blk.to_local(blk.hit_point)[axis], -length / 2.0, length / 2.0)
+    const SLOT := 0.5
+    var edges: Array[float] = [maxf(u - SLOT / 2.0, -length / 2.0), minf(u + SLOT / 2.0, length / 2.0)]
+    var w := SLOT
+    while edges[-1] < length / 2.0 - 0.05:
+        edges.append(minf(edges[-1] + w, length / 2.0))
+        w *= 1.8
+    w = SLOT
+    while edges[0] > -length / 2.0 + 0.05:
+        edges.insert(0, maxf(edges[0] - w, -length / 2.0))
+        w *= 1.8
+    var pieces: Array = []
+    for i in edges.size() - 1:
+        var a: float = edges[i]
+        var b: float = edges[i + 1]
+        if b - a < 0.08:
+            continue
+        var ps := size
+        ps[axis] = b - a
+        var at := Vector3.ZERO
+        at[axis] = (a + b) / 2.0
+        var near := absf(at[axis] - u) < SLOT * 1.2
+        if near and size.y > 1.0:
+            # Chopped short where the ball went through.
+            var rows := 3 if size.y >= 2.4 else 2
+            var ph := ps
+            ph.y = size.y / float(rows)
+            for r in rows:
+                var hat := at
+                hat.y = -size.y / 2.0 + ph.y * (float(r) + 0.5)
+                pieces.append([hat, ph])
+        else:
+            pieces.append([at, ps])
+    return pieces
+
+## A tower that has lost a wall comes down: one after another its other walls give way
+## too, each thrown a little outward, and the lookout that stood on them falls.
+func _topple_tower(tag: String, fallen: Block) -> void:
+    var centre := Vector3.ZERO
+    var walls: Array = []
+    for n in get_tree().get_nodes_in_group("blocks"):
+        var b := n as Block
+        if b == null or b == fallen or b.is_queued_for_deletion() or not b.has_meta("tower") or str(b.get_meta("tower")) != tag:
+            continue
+        if b.material_name == "timber" and b.style == "palisade":
+            walls.append(b)
+            centre += b.global_position
+    if walls.is_empty():
+        return
+    centre /= walls.size()
+    var delay := 0.12
+    for b: Block in walls:
+        var out := b.global_position - centre
+        out.y = 0.0
+        out = out.normalized() if out.length() > 0.01 else Vector3.FORWARD
+        b.remove_meta("tower")   # so its own fall does not call the others again
+        b.set_meta("blast_v", out * 2.0 + Vector3(0, 0.6, 0))
+        get_tree().create_timer(delay).timeout.connect(func():
+            if is_instance_valid(b) and not b.is_queued_for_deletion():
+                b.break_now())
+        delay += 0.14
 
 func _fragment(blk: Block) -> void:
     if fragments_alive >= Tuning.MAX_FRAGMENTS:
@@ -1314,17 +1465,25 @@ func _fragment(blk: Block) -> void:
     var size := blk.size
     var blasted := blk.has_meta("blast_v")
     var n := Tuning.FRAGMENT_COUNT + (2 if blasted else 0)
+    var timber := blk.material_name == "timber"
     var axis := 0
     if size.y > size.x and size.y > size.z:
         axis = 1
     elif size.z > size.x and size.z > size.y:
         axis = 2
+    if timber:
+        # A log wall splits between its logs: small bits where the ball struck, and bigger
+        # bundles the further from the strike.
+        axis = 0 if size.x >= size.z else 2
     var piece := size
     piece[axis] = size[axis] / float(n)
     # Pieces as [local centre, size]. Blasted stone shatters unevenly: one big chunk and a
     # scatter of smaller ones, some of them split again across, so the rubble has every size.
     var pieces: Array = []
-    if blasted and blk.material_name == "stone":
+    if timber:
+        pieces = _timber_pieces(blk, axis)
+        n = pieces.size()
+    elif blasted and blk.material_name == "stone":
         var fractions: Array[float] = [randf_range(0.38, 0.52)]
         var small_n := 3
         var weights: Array[float] = []
@@ -1362,7 +1521,7 @@ func _fragment(blk: Block) -> void:
             pieces.append([at, piece])
     var color: Color
     match blk.material_name:
-        "wood": color = Color(0.93, 0.55, 0.40)
+        "wood", "timber": color = Color(0.93, 0.55, 0.40)
         "glass": color = Color(0.62, 0.88, 0.80, 0.6)
         "stone": color = Color(0.78, 0.74, 0.76)
         _: color = Color(0.5, 0.5, 0.5)
@@ -1370,15 +1529,21 @@ func _fragment(blk: Block) -> void:
         var local: Vector3 = pieces[i][0]
         var psize: Vector3 = pieces[i][1]
         var f := Block.new()
-        var mi := MeshInstance3D.new()
-        var bm := BoxMesh.new()
-        bm.size = psize * 0.92
-        mi.mesh = bm
-        match blk.material_name:
-            "wood": mi.material_override = Models.tex_material("brown_planks_07", 0.9, Color(0.35, 0.28, 0.24)) if blk.burning or blk.burn_time > 0.0 else Models.wood_material()
-            "stone": mi.material_override = _stone_material(blk.tint)
-            _: mi.material_override = Models.flat_material(color, 0.9)
-        f.setup(blk.material_name, psize * 0.92, "", false, {}, true, mi)
+        var visual: Node3D
+        if timber and blk.style in ["palisade", "logs", "fence"]:
+            # The slab keeps its logs (or rails), just fewer of them.
+            visual = _block_visual("timber", psize * 0.98, blk.style)
+        else:
+            var mi := MeshInstance3D.new()
+            var bm := BoxMesh.new()
+            bm.size = psize * 0.92
+            mi.mesh = bm
+            match blk.material_name:
+                "wood", "timber": mi.material_override = Models.tex_material("brown_planks_07", 0.9, Color(0.35, 0.28, 0.24)) if blk.burning or blk.burn_time > 0.0 else Models.wood_material()
+                "stone": mi.material_override = _stone_material(blk.tint)
+                _: mi.material_override = Models.flat_material(color, 0.9)
+            visual = mi
+        f.setup(blk.material_name, psize * 0.92, "", false, {}, true, visual)
         f.position = blk.to_global(local)
         f.rotation = blk.global_rotation
         var push: Vector3 = blk.get_meta("blast_v", Vector3.ZERO)
@@ -1715,7 +1880,7 @@ func _lava_hit(at: Vector3) -> void:
             continue
         var dv := 6.0 * (1.0 - dist / 2.2)
         body.apply_central_impulse((off + Vector3(0, 0.5, 0)).normalized() * dv * body.mass)
-        if body is Block and (body as Block).material_name == "wood":
+        if body is Block and (body as Block).material_name in ["wood", "timber"]:
             (body as Block).call_deferred("ignite")
 
 ## A hit on our ship leaves its mark: splinters and a blast where it struck, a charred hole in

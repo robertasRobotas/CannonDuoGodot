@@ -44,6 +44,7 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     rng.seed = level_id * 7919 + 13
     var shore: String = st.get("shore", "sand")
     _tree_cap = float(st.get("tree_max", 0.0))
+    _flat_ease = float(st.get("flat_ease", 5.0))
     if _tree_cap <= 0.0 and biome in ["tropic", "harbor"]:
         _tree_cap = PALM_MAX
     _clear = [Rect2(-13.0, ship_z - 5.5, 90.0, 11.0)]
@@ -53,7 +54,9 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
         _clear.append(Rect2(c.position.x, c.position.y, c.size.x, Tuning.SHORE_Z - c.position.y))
     _terrain_on = false
     _seed = float(level_id) * 1.37
-    _flat = castle.grow(3.0) if castle.size.x > 0.0 else Rect2()
+    # The level ground round the castle: wider for a hillfort, so the mound stands on an open
+    # field and no dune rises against its foot.
+    _flat = castle.grow(float(st.get("flat", 3.0))) if castle.size.x > 0.0 else Rect2()
     # The level yard stops at the waterline: a pier's footprint stays over the water.
     if _flat.size.x > 0.0 and _flat.end.y > Tuning.SHORE_Z - 1.5:
         _flat.size.y = maxf((Tuning.SHORE_Z - 1.5) - _flat.position.y, 0.5)
@@ -109,7 +112,7 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
             _forest(parent, rng, ["palm_coconut", "palm_coconut", "palm_plant"], 55, 5.0, 8.5)
             _trees(parent, rng, ["palm_coconut", "palm_plant"], 14, 4.5, 7.5)
             _props(parent, rng, [["shrub_02", 0.7, 1.2], ["fern_02", 1.5, 2.6], ["boulder_01", 0.6, 1.6]], 80)
-    if castle.size.x > 0.0 and biome != "opensea":
+    if castle.size.x > 0.0 and biome != "opensea" and bool(st.get("yard", true)):
         _yard(parent, castle, biome)
     if biome != "opensea":
         _shore(parent, rng, biome, shore, ship_z)
@@ -181,6 +184,7 @@ static func _clouds(parent: Node3D, rng: RandomNumberGenerator, storm: bool, nig
 ## stands. `height(x, z)` gives the ground height anywhere, for placing things on it.
 static var _seed := 0.0
 static var _flat := Rect2()
+static var _flat_ease := 5.0   # metres over which the level ground rises into the dunes
 static var _terrain_on := false
 
 static func shore_z(x: float) -> float:
@@ -209,7 +213,7 @@ static func height(x: float, z: float) -> float:
     if _flat.size.x > 0.0:
         var dx := maxf(maxf(_flat.position.x - x, x - _flat.end.x), 0.0)
         var dz := maxf(maxf(_flat.position.y - z, z - _flat.end.y), 0.0)
-        var k := smoothstep(0.0, 5.0, sqrt(dx * dx + dz * dz))
+        var k := smoothstep(0.0, _flat_ease, sqrt(dx * dx + dz * dz))
         h = lerpf(0.0, h, k)
     return h
 

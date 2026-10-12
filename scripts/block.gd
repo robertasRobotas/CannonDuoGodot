@@ -23,6 +23,8 @@ var burning := false
 var burn_time := 0.0
 var _flames: CPUParticles3D
 var smouldering := false
+var hit_point := Vector3.ZERO   # where the last ball struck (global), for the break pattern
+var hit_known := false
 
 func setup(mat: String, sz: Vector3, st: String, static_block: bool, mo: Dictionary, fragment: bool = false, visual: Node3D = null) -> void:
     material_name = mat
@@ -43,6 +45,11 @@ func setup(mat: String, sz: Vector3, st: String, static_block: bool, mo: Diction
         var s := SphereShape3D.new()
         s.radius = sz.x / 2.0
         shape.shape = s
+    elif style == "mound":
+        # A hillfort mound: its sloping sides are part of the solid.
+        var cp := ConvexPolygonShape3D.new()
+        cp.points = Mound.hull(sz)
+        shape.shape = cp
     else:
         var b := BoxShape3D.new()
         b.size = sz
@@ -70,6 +77,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         return
     var strongest := 0.0
     var ball := false
+    var ball_power := 0.0
     var settling := Time.get_ticks_msec() / 1000.0 < _settle_until
     for i in state.get_contact_count():
         var imp: float = state.get_contact_impulse(i).length()
@@ -78,6 +86,15 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         var other := state.get_contact_collider_object(i)
         if other is Node and (other as Node).is_in_group("projectile"):
             ball = true
+            ball_power = maxf(ball_power, float(other.get("power")))
+            hit_point = state.get_contact_local_position(i)
+            hit_known = true
+    if material_name == "timber":
+        # Log walls: nothing but a ball fired hard enough splits them; falls and knocks
+        # from other pieces never do.
+        if ball and ball_power >= Tuning.TIMBER_BREAK_POWER:
+            _pending_break = 1.0
+        return
     if strongest > 0.0:
         var specific := strongest / maxf(mass, 0.1)
         # Powder goes up when a cannonball hits it (or a blast reaches it, see Level.explode);
@@ -91,7 +108,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 ## Fire shot: wood smoulders, flames grow, and after BURN_TIME the piece gives way.
 func ignite() -> void:
-    if burning or material_name != "wood" or is_queued_for_deletion():
+    if burning or not (material_name in ["wood", "timber"]) or is_queued_for_deletion():
         return
     if get_tree().get_nodes_in_group("burning").size() >= Tuning.MAX_BURNING:
         return

@@ -13,6 +13,7 @@ extends Node3D
 signal next_level
 signal replay
 signal quit
+signal paused(on: bool)
 
 enum Phase { PREP, SAILING, DOCKING, ENDED }
 
@@ -51,6 +52,7 @@ var _rock_count := 0        # seeds each sea stack's own shape
 var _port_arrow: Node3D     # floats over the ship, turning to point at the harbour
 var _pier_edge := 0.0       # the great pier's starboard edge in x (sail level)
 var _pier_z := 0.0          # ...and how far out to sea it reaches
+var _pier_left := 0.0       # the pier head's port edge in x
 var _has_pier := false
 var _dock_z := 0.0          # where the hull comes to rest: midway along the pier
 var _quay_z := 0.0          # the quay's face: a ship still under way here hits it
@@ -76,13 +78,17 @@ var _press_pos := Vector2.ZERO
 var _press_time := 0.0
 var _wind: AudioStreamPlayer
 var _result_up := false
+var is_paused := false
+var _pause_menu: Control
+var _pause_panel: Control
+var _pause_settings: Control
 
 func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     data = level_data
     settings = user_settings
     mode = str(data.get("mode", "sail"))
     goal = float(data.get("dist", 260.0))
-    gyro_on = bool(settings.get("gyro", true)) and (Input.get_gyroscope().length() > 0.0 or OS.has_feature("mobile"))
+    set_gyro(bool(settings.get("gyro", true)))
     autopilot = "--autopilot" in OS.get_cmdline_user_args()
     Haptics.muted = false
     _build_sky()
@@ -146,6 +152,12 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         _say(mode_obj.intro_line)
     else:
         _say("Hoist the sail, lad!" if mode == "sail" else "Storm swell! Steer where it's green!")
+
+## The gyroscope helm, where the phone has one (the settings toggle).
+func set_gyro(on: bool) -> void:
+    settings["gyro"] = on
+    gyro_on = on and (Input.get_gyroscope().length() > 0.0 or OS.has_feature("mobile"))
+    _steer_gyro = 0.0
 
 ## Sky, sun and haze, matching the battle levels' look.
 func _build_sky() -> void:
@@ -270,19 +282,19 @@ func _build_course_rocks() -> void:
         # The safe water this row leaves open: it wanders across the wide course, but never
         # further between rows than the helm can reach.
         gap_x = clampf(gap_x + rng.randf_range(-9.0, 9.0), -12.0, 12.0)
-        var n := 2 if rng.randf() < 0.45 else 4
+        var n := 3 if rng.randf() < 0.4 else 5
         var row: Array = []
         for i in n:
             var r := rng.randf_range(1.2, 2.4)
-            var x: float
-            if i < 2:
-                # Clear water either side of the gap, whatever the rock's size.
-                x = gap_x + (r + 4.2 + rng.randf_range(0.0, 3.0)) * (1.0 if i == 0 else -1.0)
-            else:
-                x = rng.randf_range(-ROCK_SPAN, ROCK_SPAN)
             var shape := rock_shape(r)
             r = float(shape.r)
-            if not _row_fits(row, x, r, gap_x):
+            var x: float
+            if i < 2:
+                # The gap's two gateposts, close either side: a hull's width and little more.
+                x = gap_x + (r + 4.0 + rng.randf_range(0.0, 1.0)) * (1.0 if i == 0 else -1.0)
+            else:
+                x = rng.randf_range(-ROCK_SPAN, ROCK_SPAN)
+            if not _row_fits(row, x, r, gap_x, 3.6):
                 continue
             var holder := make_rock(shape)
             holder.position = Vector3(x, 0.0, z)
@@ -290,11 +302,12 @@ func _build_course_rocks() -> void:
             var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false}
             row.append(rock)
             rocks.append(rock)
-        z -= rng.randf_range(15.0, 24.0)
+        z -= rng.randf_range(12.0, 18.0)
 
-## Whether a rock at `x` keeps out of the row's gap and off the rocks already in it.
-func _row_fits(row: Array, x: float, r: float, gap_x: float) -> bool:
-    if absf(x) > ROCK_SPAN or absf(x - gap_x) < r + 5.0:
+## Whether a rock at `x` keeps out of the row's gap (by `clear` beyond its own radius) and
+## off the rocks already in it.
+func _row_fits(row: Array, x: float, r: float, gap_x: float, clear: float = 5.0) -> bool:
+    if absf(x) > ROCK_SPAN or absf(x - gap_x) < r + clear:
         return false
     for o: Dictionary in row:
         if absf(x - float(o.x)) < r + float(o.r) + 4.5:
@@ -545,6 +558,7 @@ func _build_bridge(zq: float) -> void:
     _block(Vector3(hx, deck_y, z_head + head_d / 2.0 - 1.0), Vector3(head_w, 0.4, head_d), planks)
     _has_pier = true
     _pier_edge = x0 + w / 2.0
+    _pier_left = hx - head_w / 2.0
     _pier_z = z_head + head_d
     for cx: float in [-1.0, 1.0]:
         for cz: float in [-1.0, 1.0]:
@@ -770,8 +784,12 @@ func _tick_sailing(delta: float) -> void:
     spray.amount = int(20 + speed * 6.0)
     if mode == "sail":
         _check_rocks()
-        if _has_pier and root.position.z < _pier_z + 4.0 and root.position.x < _pier_edge + 1.9:
-            # The great pier's edge: the hull fends off it and runs alongside.
+        if _has_pier and root.position.z < _pier_z + 4.2 and root.position.x < _pier_edge + 1.9:
+            if root.position.z > _pier_z + 3.0 and root.position.x < _pier_edge + 1.4:
+                # Bow on into the pier head: she stoves in just as against the quay.
+                _strike_quay("She ran into the pier head and stove her bow in.")
+                return
+            # Already past the head: the hull fends off the pier's edge and runs alongside.
             root.position.x = move_toward(root.position.x, _pier_edge + 1.9, delta * 8.0)
             _lat_vel = maxf(_lat_vel, 0.0)
         if root.position.z < -(goal - 55.0) and prompt.text.find("pier") < 0:
@@ -1054,8 +1072,12 @@ func _autopilot(delta: float) -> void:
     var target := 0.0
     if mode == "sail":
         target = row_target(rocks)
+        if _has_pier and root.position.z < -(goal - 45.0):
+            target = _pier_edge + 2.0   # past the rocks: make for the berth, as the arrow shows
         if "--miss-berth" in OS.get_cmdline_user_args() and root.position.z < -(goal - 45.0):
             target = 12.0   # debug: hold off to starboard and run into the quay
+        if "--hit-pier" in OS.get_cmdline_user_args() and root.position.z < -(goal - 45.0):
+            target = _pier_left + 8.0   # debug: run bow on into the pier head
     elif mode_obj:
         target = mode_obj.autopilot_target()
         if mode_obj.drives():
@@ -1088,9 +1110,9 @@ func _capsize() -> void:
         Engine.time_scale = 1.0
         _fail("The white water rolled her over."))
 
-## Full tilt into the quay: the bow stoves in with a burst of splinters, she stops dead
+## Full tilt into the quay or the pier head: the bow stoves in with a burst of splinters, she stops dead
 ## and settles by the head, and the run is lost.
-func _strike_quay() -> void:
+func _strike_quay(reason: String = "She ran into the quay and stove her bow in.") -> void:
     phase = Phase.ENDED
     speed = 0.0
     _lat_vel = 0.0
@@ -1127,7 +1149,7 @@ func _strike_quay() -> void:
     tw.tween_property(root, "position:z", root.position.z + 0.9, 0.5).set_ease(Tween.EASE_OUT)
     tw.chain().tween_callback(func():
         Engine.time_scale = 1.0
-        _fail("She ran into the quay and stove her bow in."))
+        _fail(reason))
 
 ## A burst of plank splinters at `at`.
 func _splinters(at: Vector3) -> void:
@@ -1221,6 +1243,117 @@ func _build_overlay() -> void:
     prompt.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
     prompt.position.y = 185
     overlay.add_child(prompt)
+    # Pause, top right, where the hearts used to be.
+    var pb := Button.new()
+    pb.text = "II"
+    pb.add_theme_font_size_override("font_size", 34)
+    pb.position = Vector2(1179 - 40 - 110, 56)
+    pb.custom_minimum_size = Vector2(110, 110)
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(0.12, 0.10, 0.14, 0.5)
+    sb.set_corner_radius_all(55)
+    pb.add_theme_stylebox_override("normal", sb)
+    pb.add_theme_stylebox_override("hover", sb)
+    pb.add_theme_stylebox_override("pressed", sb)
+    pb.add_theme_color_override("font_color", Color.WHITE)
+    pb.pressed.connect(toggle_pause)
+    overlay.add_child(pb)
+    # The pause menu, hidden until needed; it runs while the tree is paused.
+    _pause_menu = Control.new()
+    _pause_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
+    _pause_menu.visible = false
+    _pause_menu.process_mode = Node.PROCESS_MODE_ALWAYS
+    var dim := ColorRect.new()
+    dim.color = Color(0, 0, 0, 0.45)
+    dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _pause_menu.add_child(dim)
+    var center := CenterContainer.new()
+    center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    var pm := PanelContainer.new()
+    var psb := StyleBoxFlat.new()
+    psb.bg_color = Color(0.1, 0.09, 0.14, 0.93)
+    psb.set_corner_radius_all(36)
+    psb.content_margin_left = 50
+    psb.content_margin_right = 50
+    psb.content_margin_top = 40
+    psb.content_margin_bottom = 40
+    pm.add_theme_stylebox_override("panel", psb)
+    pm.custom_minimum_size = Vector2(880, 0)
+    var v := VBoxContainer.new()
+    v.add_theme_constant_override("separation", 22)
+    var head := Label.new()
+    head.text = "Paused"
+    head.add_theme_font_size_override("font_size", 60)
+    head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    v.add_child(head)
+    v.add_child(_menu_button("Resume", toggle_pause, true))
+    v.add_child(_menu_button("Restart", func(): toggle_pause(); replay.emit()))
+    v.add_child(_menu_button("Settings", func(): _pause_panel.visible = false; _pause_settings.visible = true))
+    v.add_child(_menu_button("Chart", func(): toggle_pause(); quit.emit()))
+    pm.add_child(v)
+    center.add_child(pm)
+    _pause_menu.add_child(center)
+    _pause_panel = pm
+    # Settings behind the pause menu: the same rows as the settings screen, built by Main.
+    var scenter := CenterContainer.new()
+    scenter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    var sm := PanelContainer.new()
+    sm.add_theme_stylebox_override("panel", psb)
+    sm.custom_minimum_size = Vector2(979, 0)
+    var sv := VBoxContainer.new()
+    sv.add_theme_constant_override("separation", 20)
+    var st := Label.new()
+    st.text = "Settings"
+    st.add_theme_font_size_override("font_size", 60)
+    st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    sv.add_child(st)
+    var main := get_parent()
+    if main and main.has_method("add_settings_rows"):
+        main.add_settings_rows(sv)
+    sv.add_child(_menu_button("Back", func(): _pause_settings.visible = false; _pause_panel.visible = true, true))
+    sm.add_child(sv)
+    scenter.add_child(sm)
+    scenter.visible = false
+    _pause_menu.add_child(scenter)
+    _pause_settings = scenter
+    overlay.add_child(_pause_menu)
+
+## A wide rounded menu button, orange when it is the main choice.
+func _menu_button(text: String, cb: Callable, accent: bool = false) -> Button:
+    var b := Button.new()
+    b.text = text
+    b.add_theme_font_size_override("font_size", 38)
+    b.custom_minimum_size = Vector2(0, 110)
+    var sb := StyleBoxFlat.new()
+    sb.bg_color = Color(1.0, 0.58, 0.18) if accent else Color(1, 1, 1, 0.14)
+    sb.set_corner_radius_all(55)
+    b.add_theme_stylebox_override("normal", sb)
+    b.add_theme_stylebox_override("hover", sb)
+    b.add_theme_stylebox_override("pressed", sb)
+    b.add_theme_color_override("font_color", Color.WHITE)
+    b.pressed.connect(cb)
+    return b
+
+## Pause stops the whole tree (the sea, the helm, the tweens) behind the menu.
+func toggle_pause() -> void:
+    if phase == Phase.ENDED:
+        return
+    is_paused = not is_paused
+    get_tree().paused = is_paused
+    _pause_menu.visible = is_paused
+    # The menu always opens on its first page, so settings never stay up across a resume.
+    _pause_panel.visible = true
+    _pause_settings.visible = false
+    # Any touch under way is let go, so the helm does not stick on resume.
+    _drag_id = -1
+    _steer_touch = 0.0
+    paused.emit(is_paused)
+
+## The app went to the background: pause behind the menu so Resume is one tap away.
+func pause_for_background() -> void:
+    if phase == Phase.ENDED or is_paused:
+        return
+    toggle_pause()
 
 func _say(text: String) -> void:
     prompt.text = text
@@ -1250,10 +1383,10 @@ func _draw_ui() -> void:
         ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8 * frac, 6), Color(1, 1, 1, 0.8))
         var sx := w * 0.1 + w * 0.8 * frac
         ui.draw_colored_polygon(PackedVector2Array([Vector2(sx, 62), Vector2(sx + 12, 86), Vector2(sx - 12, 86)]), Color.WHITE)
-    # Hearts (the levels where the hull takes damage).
+    # Hearts (the levels where the hull takes damage), along the bottom of the screen.
     if mode == "sail" or (mode_obj and mode_obj.has_hearts):
         var font := ThemeDB.fallback_font
-        ui.draw_string(font, Vector2(w - 220, 100), "♥".repeat(maxi(3 - hits, 0)) + "♡".repeat(mini(hits, 3)), HORIZONTAL_ALIGNMENT_LEFT, -1, 44, Color(1, 1, 1, 0.9))
+        ui.draw_string(font, Vector2(0, ui.size.y - 90), "♥".repeat(maxi(3 - hits, 0)) + "♡".repeat(mini(hits, 3)), HORIZONTAL_ALIGNMENT_CENTER, w, 56, Color(1, 1, 1, 0.9))
     if phase == Phase.PREP:
         _draw_haul(Vector2(w * 0.72, ui.size.y * 0.42))
     if mode == "waves" and phase == Phase.SAILING:
@@ -1368,19 +1501,7 @@ func _show_result(fail_reason: String) -> void:
         row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         v.add_child(row)
     for entry: Array in ([["Next island", func(): next_level.emit(), true]] if won else []) + [["Try again", func(): replay.emit(), not won], ["Chart", func(): quit.emit(), false]]:
-        var b := Button.new()
-        b.text = entry[0]
-        b.add_theme_font_size_override("font_size", 38)
-        b.custom_minimum_size = Vector2(0, 110)
-        var sb := StyleBoxFlat.new()
-        sb.bg_color = Color(1.0, 0.58, 0.18) if entry[2] else Color(1, 1, 1, 0.14)
-        sb.set_corner_radius_all(55)
-        b.add_theme_stylebox_override("normal", sb)
-        b.add_theme_stylebox_override("hover", sb)
-        b.add_theme_stylebox_override("pressed", sb)
-        b.add_theme_color_override("font_color", Color.WHITE)
-        b.pressed.connect(entry[1])
-        v.add_child(b)
+        v.add_child(_menu_button(entry[0], entry[1], entry[2]))
     pm.add_child(v)
     center.add_child(pm)
     overlay.add_child(center)

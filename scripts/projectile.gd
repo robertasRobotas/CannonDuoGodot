@@ -9,6 +9,7 @@ signal hit(body: Node)
 signal smashed(position: Vector3)
 
 var type: String = "iron"
+var power := 1.0         # the gauge it was fired at (0..1): timber only gives way to a hard hit
 var spawn_time: float = 0.0
 var origin: Vector3
 var _done := false
