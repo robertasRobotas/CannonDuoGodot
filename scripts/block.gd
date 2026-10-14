@@ -77,7 +77,6 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         return
     var strongest := 0.0
     var ball := false
-    var ball_power := 0.0
     var settling := Time.get_ticks_msec() / 1000.0 < _settle_until
     for i in state.get_contact_count():
         var imp: float = state.get_contact_impulse(i).length()
@@ -86,15 +85,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         var other := state.get_contact_collider_object(i)
         if other is Node and (other as Node).is_in_group("projectile"):
             ball = true
-            ball_power = maxf(ball_power, float(other.get("power")))
             hit_point = state.get_contact_local_position(i)
             hit_known = true
     if material_name == "timber":
-        # Log walls: nothing but a ball fired hard enough splits them; falls and knocks
-        # from other pieces never do.
-        if ball and ball_power >= Tuning.TIMBER_BREAK_POWER:
-            _pending_break = 1.0
-        return
+        return   # log walls shrug off balls and knocks; only a blast splits them (see Level.explode)
     if strongest > 0.0:
         var specific := strongest / maxf(mass, 0.1)
         # Powder goes up when a cannonball hits it (or a blast reaches it, see Level.explode);

@@ -9,6 +9,7 @@ enum Phase { LOADING, INTRO, AIMING, IN_FLIGHT, SETTLING, SLOWMO, FINISHED }
 ## Fly-in start points relative to the ship: far out, so the camera sweeps in over the water.
 const INTRO_STARTS := [Vector3(-26, 12.0, 26), Vector3(24, 10.0, 24), Vector3(-4, 18.0, 32), Vector3(12, 8.0, 34)]
 const Z_OFF := 0.0
+const TntMarker := preload("res://scripts/tnt_marker.gd")
 const SKY_TURN := {"noon": 0.0, "sunset": 0.95, "night": 0.0}
 
 var data: Dictionary
@@ -499,9 +500,28 @@ func _build_cannon() -> void:
         var rank_color: Color = Tuning.rank(upgrades)[2]
         Models.tint(cannon_barrel, Color.WHITE.lerp(rank_color * 1.4, 0.55))
 
+var _spawned: Array = []   # the Block for each entry of data.blocks (null for decorations)
+
 func _spawn_block(b: Dictionary) -> void:
-    var blk := Block.new()
     var size := _v3(b.size) - Vector3(0, 0, Z_OFF)
+    if b.has("attach"):
+        # A decoration carried by an earlier block: the brace on a lookout's leg, say. It is
+        # drawn as a child of that block, so it goes wherever the block goes, and has no
+        # body of its own, so it never has to balance.
+        var parent: Block = _spawned[int(b.attach)]
+        _spawned.append(null)
+        if parent == null:
+            return
+        var deco := _block_visual(b.material, size, b.get("style", ""))
+        var rot := Vector3.ZERO
+        if b.has("rotation"):
+            var r: Array = b.rotation
+            rot = Vector3(deg_to_rad(float(r[0])), deg_to_rad(float(r[1])), deg_to_rad(float(r[2])))
+        deco.transform = parent.transform.affine_inverse() * Transform3D(Basis.from_euler(rot), _v3(b.position))
+        parent.add_child(deco)
+        return
+    var blk := Block.new()
+    _spawned.append(blk)
     var visual := _block_visual(b.material, size, b.get("style", ""))
     blk.setup(b.material, size, b.get("style", ""), bool(b.get("isStatic", false)), b.get("motion", {}), false, visual)
     blk.position = _v3(b.position)
@@ -510,9 +530,14 @@ func _spawn_block(b: Dictionary) -> void:
         blk.rotation_degrees = Vector3(float(r[0]), float(r[1]), float(r[2]))
     blk.base_position = blk.position
     blk.cage_id = int(b.get("cage", -1))
-    if b.has("tower"):
-        blk.set_meta("tower", str(b.tower))
     blk.broke.connect(_on_block_broke)
+    var mark = b.get("marker", false)
+    if mark is Array or bool(mark):
+        # A white arrow bobbing at the block (or at an offset from it, as [x, y, z]): the
+        # level points out its powder.
+        var m := TntMarker.new()
+        m.offset = _v3(mark) if mark is Array else Vector3(0.0, size.y / 2.0 + 0.2, 0.0)
+        blk.add_child(m)
     add_child(blk)
 
 func _tint_color(tint: String) -> Color:
@@ -763,7 +788,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 lg.position[along] = -size[along] / 2.0 + slot * (float(i) + 0.5)
                 root.add_child(lg)
         "fence":
-            # A railing: posts along the box's long side, a top rail and a middle rail.
+            # A low railing: posts along the box's long side and one rail over them.
             var along := 0 if size.x >= size.z else 2
             var timber := Models.tex_material("brown_planks_07", 1.2, Color(0.6, 0.46, 0.33))
             var n := maxi(int(round(size[along] / 0.75)), 1) + 1
@@ -771,7 +796,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 var post := _box(Vector3(0.12, size.y, 0.12), timber)
                 post.position[along] = -size[along] / 2.0 + 0.06 + (size[along] - 0.12) * float(i) / float(n - 1)
                 root.add_child(post)
-            for k: float in [0.5, 0.95]:
+            for k: float in [0.95]:
                 var rail_size := Vector3(0.1, 0.1, 0.1)
                 rail_size[along] = size[along]
                 var rail := _box(rail_size, timber)
@@ -1317,7 +1342,6 @@ func fire(pw: float) -> void:
     add_child(p)
     p.global_position = origin
     p.setup(type, v)
-    p.power = pw
     p.spawn_time = time
     p.exploded.connect(func(at): explode(at))
     p.splashed.connect(func(at): fx.splash(at); ambience.splash(); event.emit("splash", {}))
@@ -1379,8 +1403,6 @@ func _on_block_broke(blk: Block) -> void:
         fx.dust(pos, mat)
         return
     _fragment(blk)
-    if mat == "timber" and blk.has_meta("tower"):
-        _topple_tower(str(blk.get_meta("tower")), blk)
     blk.queue_free()
     fx.dust(pos, mat)
     if mat == "wood" or mat == "timber":
@@ -1431,33 +1453,6 @@ func _timber_pieces(blk: Block, axis: int) -> Array:
         else:
             pieces.append([at, ps])
     return pieces
-
-## A tower that has lost a wall comes down: one after another its other walls give way
-## too, each thrown a little outward, and the lookout that stood on them falls.
-func _topple_tower(tag: String, fallen: Block) -> void:
-    var centre := Vector3.ZERO
-    var walls: Array = []
-    for n in get_tree().get_nodes_in_group("blocks"):
-        var b := n as Block
-        if b == null or b == fallen or b.is_queued_for_deletion() or not b.has_meta("tower") or str(b.get_meta("tower")) != tag:
-            continue
-        if b.material_name == "timber" and b.style == "palisade":
-            walls.append(b)
-            centre += b.global_position
-    if walls.is_empty():
-        return
-    centre /= walls.size()
-    var delay := 0.12
-    for b: Block in walls:
-        var out := b.global_position - centre
-        out.y = 0.0
-        out = out.normalized() if out.length() > 0.01 else Vector3.FORWARD
-        b.remove_meta("tower")   # so its own fall does not call the others again
-        b.set_meta("blast_v", out * 2.0 + Vector3(0, 0.6, 0))
-        get_tree().create_timer(delay).timeout.connect(func():
-            if is_instance_valid(b) and not b.is_queued_for_deletion():
-                b.break_now())
-        delay += 0.14
 
 func _fragment(blk: Block) -> void:
     if fragments_alive >= Tuning.MAX_FRAGMENTS:
@@ -1612,7 +1607,7 @@ func explode(center: Vector3) -> void:
                 # Chain reaction: the next crate goes a beat later, so the fort goes up in a
                 # rolling cascade instead of one flash.
                 var id := b.get_instance_id()
-                get_tree().create_timer(Tuning.TNT_CHAIN_DELAY).timeout.connect(func():
+                get_tree().create_timer(float(data.get("chain_delay", Tuning.TNT_CHAIN_DELAY))).timeout.connect(func():
                     var crate := instance_from_id(id) as Block
                     if crate and not crate.is_queued_for_deletion():
                         crate.break_now())

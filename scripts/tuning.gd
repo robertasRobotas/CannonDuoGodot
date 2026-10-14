@@ -73,7 +73,7 @@ const THUNDER_MAX := 10.0
 ## density, static friction, dynamic friction, bounce, break impulse (m/s of velocity change), or -1 = unbreakable
 const MATERIALS := {
     "wood": {"density": 260.0, "friction": 0.6, "bounce": 0.2, "break": 2.6},
-    "timber": {"density": 120.0, "friction": 0.7, "bounce": 0.1, "break": 2.0},   # whole log walls; see TIMBER_BREAK_POWER
+    "timber": {"density": 120.0, "friction": 0.7, "bounce": 0.1, "break": 2.0},   # whole log walls: only a blast splits them
     "glass": {"density": 700.0, "friction": 0.3, "bounce": 0.1, "break": 1.0},
     "stone": {"density": 2200.0, "friction": 0.9, "bounce": 0.03, "break": 5.5},
     "metal": {"density": 5000.0, "friction": 0.4, "bounce": 0.3, "break": -1.0},
@@ -94,7 +94,6 @@ const BURN_TIME := 2.4           # a burning wood block breaks after this
 const BURN_SPREAD := 1.2         # metres a fire jumps to the next wood block
 const MAX_BURNING := 24
 const MAX_EMBERS := 10            # blown rubble pieces that may glow and smoke at once
-const TIMBER_BREAK_POWER := 0.4   # a log wall gives way only to a ball fired at this gauge or more
 
 ## The cannon workshop: id -> name, what each level does, doubloon price per level, and stars
 ## needed to unlock each level (replaying for stars opens the better parts).

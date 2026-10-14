@@ -32,15 +32,16 @@ const LEVELS := {
         "tip": "Haul the halyard, then lean the ship past the rocks. The pier does the rest."},
     3: {"name": "Fisher's Wharf", "sub": "A pirate-held harbour", "biome": "harbor", "sky": "noon", "sea": 0.15,
         "fort": ["harbor", "sand", -11.0, {"captives": 2, "no_tnt": true}], "offshore": 7.0,
-        "tip": "No powder here. Knock the crates and cranes down onto them."},
-    4: {"mode": "waves", "name": "Wave Rider", "sub": "Storm swell", "biome": "opensea", "sky": "overcast", "sea": 0.7, "swell": 1.6, "dist": 300.0,
+        "tip": "No powder here. Shoot the legs out from under the lookouts."},
+    4: {"mode": "waves", "name": "Wave Rider", "sub": "Storm swell", "biome": "opensea", "sky": "overcast", "sea": 0.7, "swell": 2.4, "dist": 300.0,
         "tip": "Meet each wave where it is green. White water rolls a ship over."},
     5: {"name": "Rock Perch", "sub": "Pirates on the hillfort", "biome": "tropic", "sky": "sunset", "sea": 0.2,
-        "fort": ["small", "mound", -19.0, {"captives": 1}], "tip": "A pirate who falls off the hill is done for."},
+        "fort": ["perch", "mound", -19.0, {"captives": 1, "no_tnt": true}], "tip": "A pirate who falls off the hill is done for."},
     6: {"mode": "reef", "name": "Reef Run", "sub": "Rocks that rise", "biome": "opensea", "sky": "noon", "sea": 0.3, "dist": 320.0,
         "tip": "Bubbles and a ring of foam mean a rock is coming up. Steer around the boils."},
     7: {"name": "The Stockade", "sub": "A log fort in the fields", "biome": "meadow", "sky": "noon", "sea": 0.1,
-        "fort": ["stockade", "sand", -10.5, {"captives": 2, "no_tnt": true}], "tip": "No powder in this fort. Hit the towers low and let them topple."},
+        "fort": ["stockade", "sand", -10.5, {"captives": 2}], "blast_radius": 0.33, "chain_delay": 0.0,
+        "tip": "Balls bounce off those logs. Hit the kegs in a lookout: the powder inside goes too."},
     8: {"name": "Stern Chase", "sub": "Pirates astern", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "chase",
         "stern_gun": true, "sail_in": 0.0, "look": [0.0, 1.5, -40.0], "shots": 16, "par": 12,
         "tip": "They are faster than us. The stern gun is all we have: three balls each."},
@@ -120,8 +121,8 @@ const LEVELS := {
         "tip": "Every ship he has is here. Grimhorn stands on the highest tower."},
 }
 
-const SHOTS := {"small": 4, "medium": 5, "large": 6, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
-const PAR := {"small": 2, "medium": 3, "large": 3, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
+const SHOTS := {"small": 4, "perch": 4, "medium": 5, "large": 6, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
+const PAR := {"small": 2, "perch": 2, "medium": 3, "large": 3, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
 
 static func level_count() -> int:
     return LEVELS.size()
@@ -158,7 +159,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         d["offshore"] = r.offshore
     if r.has("intro_hold"):
         d["intro_hold"] = r.intro_hold
-    for key in ["fov", "intro_from", "sail_in", "sail_after"]:
+    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "chain_delay"]:
         if r.has(key):
             d[key] = r[key]
     # A voyage at the helm: no castle, no cannon; VoyageLevel reads mode and dist.

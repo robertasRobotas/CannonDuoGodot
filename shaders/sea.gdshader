@@ -30,6 +30,13 @@ uniform float wave_len = 1.0;
 // water surface is kept below the deck there, so the sea never shows inside the ship.
 uniform vec4 hull = vec4(0.0, 0.0, 0.0, 0.0);
 uniform float hull_floor = -100.0;
+// White water the player's ship makes under way (0 = none): a long wake trailing astern,
+// drawn in the water itself so it rides the swell with everything else. The ship runs
+// toward -z; wake_hull is her centre (x, z), half width and half length.
+uniform float wake = 0.0;
+uniform vec4 wake_hull = vec4(0.0, 0.0, 1.2, 4.0);
+// Light through the thin tops of the waves: the crests glow a little greener.
+uniform vec3 crest_color : source_color = vec3(0.30, 0.70, 0.72);
 
 varying float crest;
 varying vec3 world_pos;
@@ -84,10 +91,14 @@ float wave_height(vec2 q, float t) {
     float h;
     if (open_sea) {
         // Directional trains all travelling +z (the way the swell runs at the ship).
+        // The peaked profile averages -0.41, so the trains are lifted by 0.73 (their
+        // weights' sum times that) to keep the mean surface at sea level: the troughs then
+        // never drop through the flat far plane below the animated patch.
         h = pw(p.y * 0.32 - t * 1.25) * 0.95
           + pw((p.y * 0.21 + p.x * 0.07) - t * 0.9) * 0.55
           + pw((p.y * 0.55 - p.x * 0.13) - t * 2.0) * 0.28
-          + sin(p.x * 0.4 + t * 0.8) * 0.22;
+          + sin(p.x * 0.4 + t * 0.8) * 0.22
+          + 0.73;
         h *= amplitude;
     } else {
         float w1 = sin(p.x * 0.35 + t * 1.1);
@@ -125,9 +136,12 @@ uniform float ripple_strength = 0.55;
 vec3 ripple_normal(vec2 p, float t) {
     vec2 uv1 = p * 0.045 + vec2(t * 0.012, t * 0.008);
     vec2 uv2 = p * 0.11 + vec2(-t * 0.018, t * 0.014);
+    vec2 uv3 = p * 0.27 + vec2(t * 0.031, -t * 0.024);
     vec3 a = texture(normal_map, uv1).xyz * 2.0 - 1.0;
     vec3 b = texture(normal_map, uv2).xyz * 2.0 - 1.0;
-    vec3 n = a + b * 0.6;
+    vec3 c = texture(normal_map, uv3).xyz * 2.0 - 1.0;
+    // Three scales: the swell's own skin, wind ripples, and fine cat's-paws on top.
+    vec3 n = a + b * 0.6 + c * 0.3;
     // Tangent space (x, y along the surface, z up) to world (y up).
     return normalize(vec3(n.x, n.z, n.y));
 }
@@ -142,7 +156,9 @@ void fragment() {
     NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
     // Glassy look: the sky shows in the water at grazing angles.
     float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-    base = mix(base, sky_color, fres * 0.15);
+    base = mix(base, sky_color, fres * 0.22);
+    // The crests go translucent: light comes through the thin water at the top of a wave.
+    base = mix(base, crest_color, smoothstep(0.2, 0.95, crest) * 0.4);
     // Crest foam broken into streaks by the detail texture, never whole white sheets.
     float streaks = smoothstep(0.55, 0.85, texture(normal_map, world_pos.xz * 0.02 + vec2(sea_time * 0.01, 0.0)).r);
     float foam = smoothstep(0.7, 1.0, crest) * streaks * (0.25 + 0.5 * storm);
@@ -186,8 +202,23 @@ void fragment() {
     if (!open_sea) {
         foam += smoothstep(1.6, 0.0, abs(world_pos.z - sz - 0.9)) * 0.45;
     }
+    // The ship's wake: a widening road of broken foam astern that fades out over thirty
+    // metres.
+    if (wake > 0.0) {
+        float churn = texture(normal_map, world_pos.xz * 0.12 + vec2(sea_time * 0.05, -sea_time * 0.09)).g;
+        float fine = texture(normal_map, world_pos.xz * 0.3 + vec2(-sea_time * 0.08, sea_time * 0.13)).r;
+        float streak = smoothstep(0.35, 0.8, churn) * (0.5 + 0.5 * fine);   // patches, never a sheet
+        float lat = abs(world_pos.x - wake_hull.x);
+        float behind = world_pos.z - (wake_hull.y + wake_hull.w);
+        float trail = 0.0;
+        if (behind > -1.0 && behind < 30.0) {
+            float width = wake_hull.z * 0.9 + max(behind, 0.0) * 0.08;
+            trail = pow(1.0 - clamp(behind, 0.0, 30.0) / 30.0, 1.6) * smoothstep(width, width * 0.3, lat) * smoothstep(-1.0, 1.0, behind);
+        }
+        foam += wake * trail * streak * 0.45;
+    }
     ALBEDO = mix(base, foam_color, clamp(foam, 0.0, 1.0));
-    ROUGHNESS = 0.16;
+    ROUGHNESS = 0.12;
     SPECULAR = 0.4;
     METALLIC = 0.0;
 }

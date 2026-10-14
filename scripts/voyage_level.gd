@@ -1,12 +1,14 @@
 ## A voyage at the helm, no cannon: the Captain gives orders and the gunner sails.
 ##
 ## mode "sail" (level 2): a sunny morning. Haul the halyard (drag down, with the wind swelling
-## as the canvas drops), the camera swings astern, and the ship runs for port: lean her past
-## the rocks (tilt the phone, or drag) and the level ends made fast at the pier.
+## as the canvas drops), the camera swings astern, and the ship runs for port down a gorge:
+## cliffs wall the channel either side, so there is no sailing out of it. Lean her past the
+## rocks (tilt the phone, or drag) and the level ends made fast at the pier.
 ##
 ## mode "waves" (level 4): storm swell. Crests roll in with a wall of breaking white water in
 ## them; steer for the green shoulder. Take the white water and the ship rolls over. The last
-## wave is a mountain: ride it, fly off its back, done.
+## wave is a mountain: it rears up ahead, and the run is won while it is still well off, the
+## ship never touching it.
 class_name VoyageLevel
 extends Node3D
 
@@ -18,7 +20,8 @@ signal paused(on: bool)
 enum Phase { PREP, SAILING, DOCKING, ENDED }
 
 const LANE := 20.0          # how far to port or starboard the helm allows (default)
-const ROCK_SPAN := 23.0     # rocks stand out to here either side of the course
+const ROCK_SPAN := 18.0     # rocks stand out to here either side of the course, inside the gorge
+const GORGE_X := 22.5       # the gorge's cliff faces stand here either side, a hull's width past the lane
 var lane := LANE            # a mode may open the channel wider
 const CRUISE := {"sail": 8.0, "waves": 7.0, "reef": 8.0, "whirl": 7.0, "escape": 3.0, "wrecks": 6.5, "gauntlet": 8.5, "cave": 6.5}
 
@@ -46,6 +49,7 @@ var prompt: Label
 var prompt_who: Label
 var ui: Control
 var spray: CPUParticles3D
+var _dip_cool := 0.0           # seconds until the bow may throw its next sheet of water
 
 var rocks: Array = []       # {x, z, r, hit, grazed}
 var _rock_count := 0        # seeds each sea stack's own shape
@@ -66,6 +70,7 @@ var _drag_start := Vector2.ZERO
 var _hoist_buzz := 0.0
 var _next_crest := 0.0
 var _final_spawned := false
+const FINAL_CLEAR := 22.5    # the run is won with the last wave still this far ahead
 var _trim := 0.0
 var _heel := 0.0
 var _lat_vel := 0.0        # sideways speed: the helm steers momentum, not position
@@ -104,7 +109,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     ship.rotation.y = -PI / 2.0   # bow forward, down the course
     root.add_child(ship)
     ship.set_sail(0.0 if mode == "sail" else 1.0)
-    # Bow spray kicks up with speed.
+    # Spray particles: never emit on their own now; the splashes borrow this material.
     spray = CPUParticles3D.new()
     spray.amount = 60
     spray.lifetime = 0.7
@@ -137,6 +142,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     if mode == "waves":
         _build_rain()
     if mode == "sail":
+        _build_gorge()
         _build_course_rocks()
         _build_port()
     elif mode == "waves":
@@ -191,6 +197,8 @@ func _build_sky() -> void:
     # The storm sits in thick wet air; the sunny run has only a breath of haze.
     e.fog_light_color = Color(0.72, 0.8, 0.88) if sky_kind == "noon" else (Color(0.9, 0.7, 0.6) if sky_kind == "sunset" else Color(0.44, 0.49, 0.55))
     e.fog_density = 0.003 if sky_kind in ["noon", "sunset"] else (0.011 if stormy else 0.006)
+    if mode == "sail":
+        e.fog_density = 0.0014   # clear enough to see the hills behind the harbour
     e.fog_sky_affect = 0.35 if stormy else 0.2
     if night:
         e.ambient_light_energy = 0.35
@@ -293,16 +301,194 @@ func _build_course_rocks() -> void:
                 # The gap's two gateposts, close either side: a hull's width and little more.
                 x = gap_x + (r + 4.0 + rng.randf_range(0.0, 1.0)) * (1.0 if i == 0 else -1.0)
             else:
-                x = rng.randf_range(-ROCK_SPAN, ROCK_SPAN)
+                # Drawn over the old, wider span (so the course is laid out as it always
+                # was), then held inside the gorge.
+                x = clampf(rng.randf_range(-23.0, 23.0), -ROCK_SPAN, ROCK_SPAN)
             if not _row_fits(row, x, r, gap_x, 3.6):
                 continue
-            var holder := make_rock(shape)
+            var holder := make_rock(shape, false)   # bare stone: no foam ring to give it away
             holder.position = Vector3(x, 0.0, z)
             add_child(holder)
             var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false}
             row.append(rock)
             rocks.append(rock)
         z -= rng.randf_range(12.0, 18.0)
+
+## A cliff's five rings: the lower three are stone (grey as the rocks in the water; those
+## entries are unused). The stone fades into a mossy grey-green at the shoulder ring, where
+## the turf begins in that same tone, and the turf deepens to dark green at the peak.
+const CLIFF_RINGS: Array = [Color.WHITE, Color.WHITE, Color.WHITE, Color(0.52, 0.62, 0.4), Color(0.28, 0.48, 0.16)]
+## A mountain's rings, all grass: deep green in the valleys, lighter up the slopes and tops.
+const MOUNTAIN_RINGS: Array = [Color(0.6, 0.8, 0.5), Color(0.7, 0.9, 0.55), Color(0.8, 0.95, 0.65), Color(0.9, 1.0, 0.75), Color(1.0, 1.0, 0.85)]
+
+static var _turf_mat: StandardMaterial3D
+
+## Grass over the cliff tops and the mountains, shaded through vertex colours.
+static func _turf_material() -> StandardMaterial3D:
+    if _turf_mat == null:
+        _turf_mat = Models.tex_material("leafy_grass", 0.08, Color(0.85, 1.0, 0.75)).duplicate()
+        _turf_mat.vertex_color_use_as_albedo = true
+    return _turf_mat
+
+## The gorge: a wall of cliffs down either side of the course, from behind the start right
+## to the quay. Each side is one mesh of tall stone lumps (the rocks' chunks, grown big) in
+## two rows: a front row at the waterline and a taller row behind it, staggered, so the wall
+## reads as massive rock rather than a fence. Their inner faces stand at GORGE_X, so the
+## helm's limit (`lane`) is the cliff, not an invisible line. The tops are turf, and trees
+## grow from the lumps' ledges, shoulders and peaks.
+func _build_gorge() -> void:
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 4077
+    var zq := -goal - 12.0    # the quay's face: the cliffs run down to it
+    for side: float in [-1.0, 1.0]:
+        var st := SurfaceTool.new()
+        st.begin(Mesh.PRIMITIVE_TRIANGLES)
+        var turf := SurfaceTool.new()
+        turf.begin(Mesh.PRIMITIVE_TRIANGLES)
+        for row in 2:
+            var z := 40.0 + rng.randf_range(0.0, 6.0)
+            # The front row ends against the quay's end; the back row a little short of it,
+            # clear of the houses behind the quay.
+            var end := zq + (6.0 if row == 0 else 10.0)
+            while z > end:
+                var rr := rng.randf_range(5.0, 8.0) * (1.0 if row == 0 else 1.4)
+                var hh := rng.randf_range(9.0, 15.0) * (1.0 if row == 0 else 1.6)
+                # The lump's jitter reaches 1.3 of its radius: set it back so its nearest
+                # face never comes inside GORGE_X.
+                var x := side * (GORGE_X + rr * 1.3 + (0.0 if row == 0 else rr * 0.9))
+                var size := Vector3(rr, hh, rr * rng.randf_range(0.8, 1.3))
+                var rings := _chunk(st, Vector3(x, 0.0, z), size, rng.randf_range(0.0, TAU), rng.randf_range(0.8, 1.0), rng, CLIFF_RINGS, turf, 3)
+                _plant_cliff(rings, side, rng)
+                z -= size.z * rng.randf_range(0.9, 1.2)
+        st.generate_normals()
+        var mi := MeshInstance3D.new()
+        mi.mesh = st.commit()
+        mi.material_override = _stone_material()
+        add_child(mi)
+        turf.generate_normals()
+        var top := MeshInstance3D.new()
+        top.mesh = turf.commit()
+        top.material_override = _turf_material()
+        add_child(top)
+    _build_hinterland(zq, rng)
+    _flush_trees()
+
+## Trees on one lump of the gorge: a pine on most peaks, two to four trees on the upper
+## shoulder (the ring below the peak), and shrubs on the ledge at mid height on the side
+## that faces the channel. Each is sunk a little into the stone, so it grows out of the rock.
+func _plant_cliff(rings: Array, side: float, rng: RandomNumberGenerator) -> void:
+    var ledge: Array = rings[rings.size() - 3]
+    var shoulder: Array = rings[rings.size() - 2]
+    var peak: Vector3 = rings[rings.size() - 1][0]
+    if rng.randf() < 0.7:
+        _tree("pine", peak, rng.randf_range(4.5, 7.5), rng)
+    for i in rng.randi_range(2, 4):
+        var p: Vector3 = shoulder[rng.randi_range(0, shoulder.size() - 1)]
+        if p.y < 1.5:
+            continue   # too near the water
+        var kind: String = ["oak_small", "maple", "palm_plant", "pine", "oak_medium"][rng.randi_range(0, 4)]
+        var h := rng.randf_range(1.6, 2.6) if kind == "palm_plant" else rng.randf_range(3.0, 5.5)
+        _tree(kind, p, h, rng)
+    for i in rng.randi_range(1, 2):
+        var p: Vector3 = ledge[rng.randi_range(0, ledge.size() - 1)]
+        # Only ledges that face the channel show from the water.
+        if p.y < 1.2 or p.x * side > absf(peak.x):
+            continue
+        _tree("palm_plant" if rng.randf() < 0.6 else "oak_small", p, rng.randf_range(1.4, 2.4), rng)
+
+## The land behind the harbour town: green ground out to the sides and far back, a range of
+## mountains across the whole width behind it (green slopes, bare peaks), and woods between.
+func _build_hinterland(zq: float, rng: RandomNumberGenerator) -> void:
+    var grass := Models.tex_material("leafy_grass", 0.05, Color(0.8, 0.9, 0.7))
+    # Ground: the main sweep behind the town's sand, and two strips either side of the quay
+    # under the cliffs' ends.
+    _block(Vector3(0.0, -0.4, zq - 130.0), Vector3(600.0, 1.0, 200.0), grass)
+    for side: float in [-1.0, 1.0]:
+        _block(Vector3(side * 160.0, -0.4, zq - 12.0), Vector3(280.0, 1.0, 36.0), grass)
+    # The mountains: two rows of massifs, the back row higher. Each massif is a tall lump
+    # with two or three lower ones leaning on its flanks, so it has shoulders, not one spike.
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    for row in 2:
+        var x := -260.0 + rng.randf_range(0.0, 20.0)
+        while x < 260.0:
+            var rr := rng.randf_range(16.0, 26.0) * (1.0 if row == 0 else 1.5)
+            var hh := rng.randf_range(22.0, 40.0) * (1.0 if row == 0 else 1.7)
+            var z := zq - (58.0 if row == 0 else 105.0) - rng.randf_range(0.0, 15.0)
+            var rings := _chunk(st, Vector3(x, 0.0, z), Vector3(rr, hh, rr * rng.randf_range(0.7, 1.1)), rng.randf_range(0.0, TAU), rng.randf_range(0.85, 1.0), rng, MOUNTAIN_RINGS)
+            _plant_mountain(rings, z, 50, rng)
+            for k in rng.randi_range(2, 3):
+                var a := rng.randf_range(0.0, TAU)
+                var d := rr * rng.randf_range(0.6, 1.1)
+                var fr := rr * rng.randf_range(0.5, 0.8)
+                var fh := hh * rng.randf_range(0.4, 0.7)
+                var fz := z + sin(a) * d * 0.6
+                rings = _chunk(st, Vector3(x + cos(a) * d, 0.0, fz), Vector3(fr, fh, fr * rng.randf_range(0.7, 1.2)), rng.randf_range(0.0, TAU), rng.randf_range(0.85, 1.0), rng, MOUNTAIN_RINGS)
+                _plant_mountain(rings, fz, 30, rng)
+            x += rr * rng.randf_range(1.5, 1.9)
+    st.generate_normals()
+    var mi := MeshInstance3D.new()
+    mi.mesh = st.commit()
+    mi.material_override = _turf_material()
+    add_child(mi)
+    # Woods on the ground: thickest toward the mountains, thinning to the town's back.
+    for i in 220:
+        var x := rng.randf_range(-230.0, 230.0)
+        var z := zq - rng.randf_range(10.0, 60.0)
+        # Keep off the town (its houses stand within 50 either side, to 30 back) and the
+        # church on the right.
+        if absf(x) < 52.0 and z > zq - 32.0:
+            continue
+        var kind: String = ["pine", "oak_medium", "oak_large", "maple", "palm_coconut"][rng.randi_range(0, 4)]
+        _tree(kind, Vector3(x, 0.1, z), rng.randf_range(4.0, 8.0), rng)
+
+## Woods up a mountain's slopes: `count` trees scattered over the faces between the
+## waterline ring and the shoulder, on the side that looks toward the harbour (z greater
+## than the lump's centre `cz`), so the slopes the player sees are thick with forest. Each
+## tree stands on a point picked inside one face of the lump, sunk a little into it.
+func _plant_mountain(rings: Array, cz: float, count: int, rng: RandomNumberGenerator) -> void:
+    var n: int = (rings[0] as Array).size()
+    for i in count:
+        var j := rng.randi_range(1, 2)   # the band between rings j and j + 1
+        var k := rng.randi_range(0, n - 1)
+        var lo: Array = rings[j]
+        var hi: Array = rings[j + 1]
+        var u := rng.randf()
+        var a: Vector3 = (lo[k] as Vector3).lerp(lo[(k + 1) % n], u)
+        var b: Vector3 = (hi[k] as Vector3).lerp(hi[(k + 1) % n], u)
+        var p := a.lerp(b, rng.randf())
+        if p.y < 0.8 or p.z < cz:
+            continue
+        # Pines mostly, some oaks; no maples (the heaviest mesh) by the hundred. Big, so
+        # they read from the water. Their own MultiMesh group, far off, so it can drop to
+        # the meshes' coarse LODs.
+        var kind: String = ["pine", "pine", "pine", "oak_medium", "oak_large"][rng.randi_range(0, 4)]
+        _tree("far:" + kind, p - Vector3(0.0, 0.6, 0.0), rng.randf_range(7.0, 13.0), rng)
+
+var _trees: Dictionary = {}   # tree kind -> its transforms, drawn as one MultiMesh each
+
+## A tree of `kind` standing at `at`, `height` tall, turned any way: queued for _flush_trees.
+## A "group:" prefix on the kind keeps those trees in a MultiMesh of their own.
+func _tree(kind: String, at: Vector3, height: float, rng: RandomNumberGenerator) -> void:
+    var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * height)
+    if not _trees.has(kind):
+        _trees[kind] = []
+    (_trees[kind] as Array).append(Transform3D(basis, at - Vector3(0.0, 0.35, 0.0)))
+
+## Every queued tree in one MultiMesh per kind: hundreds of trees for a handful of draws.
+func _flush_trees() -> void:
+    for kind: String in _trees:
+        var list: Array = _trees[kind]
+        var mm := MultiMesh.new()
+        mm.transform_format = MultiMesh.TRANSFORM_3D
+        mm.mesh = Models.tree(kind.get_slice(":", 1) if kind.contains(":") else kind, 1.0).mesh
+        mm.instance_count = list.size()
+        for i in list.size():
+            mm.set_instance_transform(i, list[i])
+        var mmi := MultiMeshInstance3D.new()
+        mmi.multimesh = mm
+        add_child(mmi)
+    _trees.clear()
 
 ## Whether a rock at `x` keeps out of the row's gap (by `clear` beyond its own radius) and
 ## off the rocks already in it.
@@ -337,17 +523,19 @@ func rock_shape(r: float) -> Dictionary:
     return {"seed": dice.seed, "h": h, "r": r * wide, "w": dice.randf_range(0.85, 1.05)}
 
 ## A rock in a holder at sea level (position it): one mesh of grey stone (see rock_shape)
-## and foam at the waterline. The holder's meta "top" is the stone's height.
-func make_rock(shape: Dictionary) -> Node3D:
+## and, if `foam`, a ring of foam at the waterline. The hull radius `r` is the same either
+## way: the ring is only a mark. The holder's meta "top" is the stone's height.
+func make_rock(shape: Dictionary, foam: bool = true) -> Node3D:
     var dice := RandomNumberGenerator.new()
     dice.seed = int(shape.seed) + 1
     var holder := Node3D.new()
     var r := float(shape.r)
     var h := float(shape.h)
     holder.add_child(_crag(r * float(shape.w), h, dice))
-    var foam := VoyageMode.foam_ring(r * 1.2, 0.4)
-    foam.position.y = Tuning.SEA_LEVEL + 0.06
-    holder.add_child(foam)
+    if foam:
+        var ring := VoyageMode.foam_ring(r * 1.2, 0.4)
+        ring.position.y = Tuning.SEA_LEVEL + 0.06
+        holder.add_child(ring)
     holder.set_meta("top", h)
     return holder
 
@@ -381,8 +569,10 @@ static func _crag(radius: float, height: float, dice: RandomNumberGenerator) -> 
 
 ## One lump of a crag: a sphere of four rings and seven sides, every vertex pushed in or out,
 ## stretched to `size`, standing with its lower third under the water. Flat faces, so the
-## light catches each facet.
-static func _chunk(st: SurfaceTool, at: Vector3, size: Vector3, yaw: float, shade: float, dice: RandomNumberGenerator) -> void:
+## light catches each facet. With `st_upper`, the bands from ring `upper_from` up go into
+## that surface instead (turf over the rock). Returns its rings of vertices, bottom to top
+## (the top ring is the one peak point), for anything that wants to stand on the stone.
+static func _chunk(st: SurfaceTool, at: Vector3, size: Vector3, yaw: float, shade: float, dice: RandomNumberGenerator, ring_colors: Array = [], st_upper: SurfaceTool = null, upper_from: int = 2) -> Array:
     const RINGS := 4
     const SEG := 7
     var rows: Array = []
@@ -401,7 +591,19 @@ static func _chunk(st: SurfaceTool, at: Vector3, size: Vector3, yaw: float, shad
     for j in RINGS:
         var lo: Array = rows[j]
         var hi: Array = rows[j + 1]
-        _band(st, lo, hi, _wet(lo[0].y, shade), _wet(hi[0].y, shade))
+        # Grey stone, wet at the waterline, exactly as the rocks in the water; or the
+        # caller's colour for each ring. With a second surface, the stone bands keep their
+        # grey and the upper bands take the caller's colours (the turf), except that the
+        # stone band right under the turf fades up into the turf's first colour: a soft
+        # change of colour across the seam instead of a hard line.
+        var upper := st_upper != null and j >= upper_from
+        var has := ring_colors.size() > j + 1
+        var tint0 := has and (st_upper == null or upper)
+        var tint1 := has and (st_upper == null or j + 1 >= upper_from)
+        var c0 := (ring_colors[j] as Color) * shade if tint0 else _wet(lo[0].y, shade)
+        var c1 := (ring_colors[j + 1] as Color) * shade if tint1 else _wet(hi[0].y, shade)
+        _band(st_upper if upper else st, lo, hi, c0, c1)
+    return rows
 
 ## Grey, darker and wetter toward the waterline.
 static func _wet(y: float, shade: float) -> Color:
@@ -682,7 +884,7 @@ func _spawn_crest(final := false) -> void:
         "z": root.position.z - 100.0,
         "bx": rng.randf_range(-7.0, 7.0),
         "bw": rng.randf_range(5.0, 8.0),
-        "h": (4.5 if final else rng.randf_range(1.8, 2.6)),
+        "h": (11.0 if final else rng.randf_range(2.4, 3.4)),
         "final": final,
         "prev": -1.0,
     }
@@ -778,10 +980,12 @@ func _tick_sailing(delta: float) -> void:
     if absf(nx) >= lane:
         nx = clampf(nx, -lane, lane)
         _lat_vel = 0.0
+        if mode == "sail":
+            _strike_cliff(signf(nx))
+    elif absf(nx) < lane - 2.5:
+        _cliff_hit = false
     root.position.x = nx
     _yaw = lerpf(_yaw, atan2(-_lat_vel, maxf(speed, 1.0)), minf(delta * 4.0, 1.0))
-    spray.emitting = speed > 2.5
-    spray.amount = int(20 + speed * 6.0)
     if mode == "sail":
         _check_rocks()
         if _has_pier and root.position.z < _pier_z + 4.2 and root.position.x < _pier_edge + 1.9:
@@ -814,6 +1018,21 @@ func _tick_sailing(delta: float) -> void:
             _win()
 
 const HULL_R := 2.0   # the hull's reach round the ship's centre against a rock's radius
+var _cliff_hit := false   # she is against the gorge's wall: one hit until she comes clear
+var _hit_time := -10.0    # when the last heart went
+
+## Into the gorge's wall: a heart gone, and she is thrown back off the stone. One hit per
+## touch: she has to come clear of the cliff before it can hurt her again. A rock that
+## shoves her into the wall does not count twice: a second blow within a second is let go.
+func _strike_cliff(side: float) -> void:
+    if _cliff_hit or phase != Phase.SAILING:
+        return
+    _cliff_hit = true
+    if time - _hit_time < 1.0:
+        return
+    _splash_at(Vector3(side * GORGE_X, 0.2, root.position.z - 2.0))
+    take_hit("The hull broke up against the cliffs.", ["Off the cliffs, lad!", "You'll have us swimming!"][mini(hits, 1)])
+    _lat_vel = -side * 4.0
 
 func _check_rocks() -> void:
     for r: Dictionary in rocks:
@@ -893,6 +1112,7 @@ func take_hit(fail_reason: String, line: String) -> void:
     if phase != Phase.SAILING:
         return
     hits += 1
+    _hit_time = time
     speed *= 0.5
     _steer_touch = 0.0
     _shake = maxf(_shake, 0.9)
@@ -917,6 +1137,13 @@ func _tick_crests(delta: float) -> void:
         c.z = float(c.z) + 9.0 * delta
         (c.node as Node3D).position.z = float(c.z)
         var dz := float(c.z) - root.position.z
+        if bool(c.final) and dz > -FINAL_CLEAR:
+            # The mountain is still a good way off when the run is called: the ship is
+            # clear of it and stays clear, since nothing moves once the level has ended.
+            Haptics.rumble(2)
+            _say("There's the big one. We're clear of it, lad!")
+            _win()
+            return
         if float(c.prev) < 0.0 and dz >= 0.0:
             _cross_crest(c)
         c.prev = dz
@@ -989,6 +1216,16 @@ func _float_ship(delta: float) -> void:
     var star_h := sea.height(p.x + 1.1, p.z)
     var level_y := Tuning.SEA_LEVEL + (bow + stern + port_h + star_h) / 4.0 + Tuning.SHIP_FREEBOARD
     var trim := clampf(atan2(bow - stern, half_l * 2.0), -0.38, 0.38)
+    # The water foams astern as she drives.
+    sea.set_wake(clampf(speed / 6.0, 0.0, 1.0), p, 1.2, half_l + 0.3)
+    # The bow buries itself in a wave: a sheet of water comes over it.
+    _dip_cool = maxf(_dip_cool - delta, 0.0)
+    var bow_y := p.y + sin(_trim) * half_l    # the hull's bow (trim up = bow up)
+    var dip := (Tuning.SEA_LEVEL + bow) - (bow_y - Tuning.SHIP_FREEBOARD)
+    if dip > 0.55 and speed > 3.0 and _dip_cool <= 0.0 and phase == Phase.SAILING:
+        _dip_cool = 0.9
+        _bow_sheet(Vector3(p.x, p.y + 0.3, p.z - half_l), minf(dip / 1.5, 1.0))
+        Haptics.detent()
     var heel := clampf(atan2(star_h - port_h, 2.2) * 0.5, -0.2, 0.2)
     var follow := minf(delta * (4.5 if mode == "waves" else 3.5), 1.0)
     root.position.y = lerpf(root.position.y, level_y, follow) if time > 0.1 else level_y
@@ -1193,6 +1430,31 @@ func _win() -> void:
     var score := int(goal) * 10 + (3 - hits) * 500
     var gold := 25 + stars * 15
     get_parent().call_deferred("record_result", int(data.id), true, stars, score, gold, hits)
+
+## A sheet of water over the bow, thrown back along the deck: bigger for a deeper dip.
+func _bow_sheet(at: Vector3, k: float) -> void:
+    var p := CPUParticles3D.new()
+    p.emitting = false
+    p.one_shot = true
+    p.amount = int(60 + 80 * k)
+    p.lifetime = 1.0
+    p.explosiveness = 0.9
+    p.local_coords = false
+    p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    p.emission_box_extents = Vector3(1.3, 0.2, 0.5)
+    p.direction = Vector3(0, 1.0, 0.9)
+    p.spread = 40.0
+    p.initial_velocity_min = 3.0 + 3.0 * k
+    p.initial_velocity_max = 6.0 + 5.0 * k
+    p.gravity = Vector3(0, -12, 0)
+    p.scale_amount_min = 0.25
+    p.scale_amount_max = 0.6 + 0.3 * k
+    p.mesh = QuadMesh.new()
+    p.material_override = spray.material_override
+    p.position = at
+    add_child(p)
+    p.emitting = true
+    get_tree().create_timer(1.6).timeout.connect(p.queue_free)
 
 func _splash_at(at: Vector3) -> void:
     var p := CPUParticles3D.new()

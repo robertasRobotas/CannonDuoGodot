@@ -28,9 +28,10 @@ func setup(storm: float, center: Vector3, is_open_sea: bool, swell: float = 1.0)
     process_priority = -10
     var plane := PlaneMesh.new()
     plane.size = Vector2(160, 160)
-    # Open water gets a denser grid: the voyage crest walls need vertices to stand up in.
-    plane.subdivide_width = 140 if is_open_sea else 110
-    plane.subdivide_depth = 140 if is_open_sea else 110
+    # Open water gets a denser grid: the voyage crest walls need vertices to stand up in,
+    # and the peaked chop keeps its sharp tops.
+    plane.subdivide_width = 190 if is_open_sea else 110
+    plane.subdivide_depth = 190 if is_open_sea else 110
     mesh = plane
     _mat = ShaderMaterial.new()
     _mat.shader = load("res://shaders/sea.gdshader")
@@ -44,6 +45,7 @@ func setup(storm: float, center: Vector3, is_open_sea: bool, swell: float = 1.0)
         _mat.set_shader_parameter("deep_color", Color(0.10, 0.22, 0.30))
         _mat.set_shader_parameter("shallow_color", Color(0.20, 0.36, 0.42))
         _mat.set_shader_parameter("sky_color", Color(0.45, 0.47, 0.52))
+        _mat.set_shader_parameter("crest_color", Color(0.30, 0.50, 0.52))
     material_override = _mat
     position = Vector3(center.x, Tuning.SEA_LEVEL, (center.z - 14.0) if open_sea else center.z)
     # A flat far plane to the horizon so the animated patch never shows an edge.
@@ -79,6 +81,13 @@ func _process(delta: float) -> void:
     t += delta
     if _mat:
         _mat.set_shader_parameter("sea_time", t)
+
+## The wake astern, by how hard the ship is driving (0 = lying still, 1 = full speed),
+## for a hull centred at `center`, `half_w` across and `half_l` long, running toward -z.
+func set_wake(strength: float, center: Vector3, half_w: float, half_l: float) -> void:
+    if _mat:
+        _mat.set_shader_parameter("wake", clampf(strength, 0.0, 1.0))
+        _mat.set_shader_parameter("wake_hull", Vector4(center.x, center.z, half_w, half_l))
 
 ## Keeps the water below the deck inside the player's hull (see the shader).
 func set_hull(center: Vector3, half_length: float, half_width: float, floor_y: float) -> void:
@@ -137,10 +146,12 @@ func height(qx: float, qz: float) -> float:
     var z := (qz + current.y * t) / wave_len
     var h: float
     if open_sea:
+        # Lifted by 0.73 as in the shader: the peaked trains average below zero.
         h = amplitude * (_pw(z * 0.32 - t * 1.25) * 0.95
             + _pw((z * 0.21 + x * 0.07) - t * 0.9) * 0.55
             + _pw((z * 0.55 - x * 0.13) - t * 2.0) * 0.28
-            + sin(x * 0.4 + t * 0.8) * 0.22)
+            + sin(x * 0.4 + t * 0.8) * 0.22
+            + 0.73)
     else:
         var w1 := sin(x * 0.35 + t * 1.1)
         var w2 := sin((x + z) * 0.21 - t * 0.8) * 0.6

@@ -94,6 +94,25 @@ func _ready() -> void:
         elif arg.begins_with("--fire="):
             # --fire=POWER,YAW,PITCH, applied once the level is built
             _auto_fire = arg.substr(7).split(",")
+        elif arg.begins_with("--settle="):
+            # --settle=ID,SECONDS  run a level (with --fire to wake it) and list the blocks
+            # that moved from where they were built: a stability check for castles.
+            var parts := arg.substr(9).split(",")
+            start_level(int(parts[0]))
+            get_tree().create_timer(float(parts[1])).timeout.connect(func():
+                var moved := 0
+                var total := 0
+                for n in get_tree().get_nodes_in_group("blocks"):
+                    var b := n as Block
+                    if b == null or b.is_fragment:
+                        continue
+                    total += 1
+                    var d := b.global_position - b.base_position
+                    if d.length() > 0.1:
+                        moved += 1
+                        print("MOVED %s at %s by %s" % [b.material_name, b.base_position, d])
+                print("SETTLE %d of %d blocks moved" % [moved, total])
+                get_tree().quit())
         elif arg.begins_with("--probe="):
             start_level(int(arg.substr(8)))
             get_tree().create_timer(1.0).timeout.connect(func():
