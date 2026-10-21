@@ -274,7 +274,10 @@ func _stockade(z: float) -> void:
     # Gate: two leaves under the lintel.
     for side: float in [-1.0, 1.0]:
         _part("wood", Vector3(side * 0.5, 1.0, front + 0.1), Vector3(0.96, 2.0, 0.16))
-    # The wall walk behind the top course.
+    # The wall walk behind the top course, on two posts under its back edge (the lintel
+    # alone carries only a sliver of it).
+    for sx: float in [-2.4, 2.4]:
+        _part("wood", Vector3(sx, 1.5, front - 0.95), Vector3(0.24, 3.0, 0.24))
     _part("wood", Vector3(0.0, 3.1, front - 0.65), Vector3(6.2, 0.2, 0.9))
     # Two sentries on the ground before the gate.
     for side: float in [-1.0, 1.0]:
@@ -296,8 +299,8 @@ func _log_tower(x: float, z: float) -> void:
     # A stack of small kegs inside, against the seaward wall, from the ground up to just
     # under the floor: the lookout's kegs set it off, and its blast takes the seaward half
     # of the tower (the front wall and the front halves of the sides).
-    for ky: float in [0.3, 1.25, 2.2, 3.15]:
-        _part("tnt", Vector3(x, ky, z + 0.65), Vector3(0.45, 0.6, 0.45))
+    for ky: float in [0.4, 1.2, 2.0, 2.8]:
+        _part("tnt", Vector3(x, ky, z + 0.65), Vector3(0.45, 0.8, 0.45))
     _part("wood", Vector3(x, h + 0.15, z), Vector3(w + 0.6, 0.3, w + 0.6))
     var floor_y := h + 0.3
     # Two small kegs up in the lookout, at its front corners beside the pirate.
@@ -308,11 +311,13 @@ func _log_tower(x: float, z: float) -> void:
     for sx: float in [-1.0, 1.0]:
         for sz: float in [-1.0, 1.0]:
             _part("wood", Vector3(x + sx * px, floor_y + post_h / 2.0, z + sz * px), Vector3(0.36, post_h, 0.36))
-    # The railing between the posts, one piece per side.
+    # The railing between the posts, one piece per side. The seaward rail is a low one, so
+    # the kegs stand clear above it: a ball from the sea can reach them.
     var gw := w + 0.3 - 0.36
     var rh := 0.55
+    var rf := 0.28
     _part("timber", Vector3(x, floor_y + rh / 2.0, z - px), Vector3(gw, rh, 0.12), {"style": "fence"})
-    _part("timber", Vector3(x, floor_y + rh / 2.0, z + px), Vector3(gw, rh, 0.12), {"style": "fence"})
+    _part("timber", Vector3(x, floor_y + rf / 2.0, z + px), Vector3(gw, rf, 0.12), {"style": "fence"})
     _part("timber", Vector3(x - px, floor_y + rh / 2.0, z), Vector3(0.12, rh, gw), {"style": "fence"})
     _part("timber", Vector3(x + px, floor_y + rh / 2.0, z), Vector3(0.12, rh, gw), {"style": "fence"})
     # The roof: a stepped pyramid of three heavy slabs, each square on the one below.

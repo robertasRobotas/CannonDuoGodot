@@ -26,6 +26,8 @@ uniform vec3 sky_color : source_color = vec3(0.42, 0.60, 0.90);
 uniform vec3 foam_color : source_color = vec3(0.98, 0.98, 0.96);
 // Longer waves for big swells, so a ship can ride them instead of cutting through.
 uniform float wave_len = 1.0;
+// Open-sea trains run along z (0.0, at the ship) or along x (1.0, across the view).
+uniform float wave_axis = 0.0;
 // The player's hull footprint (x, z centre, half length, half width) and its waterline: the
 // water surface is kept below the deck there, so the sea never shows inside the ship.
 uniform vec4 hull = vec4(0.0, 0.0, 0.0, 0.0);
@@ -90,14 +92,16 @@ float wave_height(vec2 q, float t) {
     vec2 p = (q + current * t) / wave_len;
     float h;
     if (open_sea) {
-        // Directional trains all travelling +z (the way the swell runs at the ship).
+        // Directional trains all travelling one way: +z, at the ship, or +x across it.
         // The peaked profile averages -0.41, so the trains are lifted by 0.73 (their
         // weights' sum times that) to keep the mean surface at sea level: the troughs then
         // never drop through the flat far plane below the animated patch.
-        h = pw(p.y * 0.32 - t * 1.25) * 0.95
-          + pw((p.y * 0.21 + p.x * 0.07) - t * 0.9) * 0.55
-          + pw((p.y * 0.55 - p.x * 0.13) - t * 2.0) * 0.28
-          + sin(p.x * 0.4 + t * 0.8) * 0.22
+        float a = mix(p.y, p.x, wave_axis);
+        float b = mix(p.x, p.y, wave_axis);
+        h = pw(a * 0.32 - t * 1.25) * 0.95
+          + pw((a * 0.21 + b * 0.07) - t * 0.9) * 0.55
+          + pw((a * 0.55 - b * 0.13) - t * 2.0) * 0.28
+          + sin(b * 0.4 + t * 0.8) * 0.22
           + 0.73;
         h *= amplitude;
     } else {

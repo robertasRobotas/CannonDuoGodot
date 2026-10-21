@@ -31,6 +31,12 @@ var friendly := false            # the merchant under escort: our balls do not h
 var target_node: Node3D = null   # something other than the player to sail at (the merchant)
 var waypoint := Vector3.INF      # sail here instead, and say so on arrival
 var max_hp := 2
+var interval_jitter := 0.0       # each wait between shots varies by up to this much
+## With hits_every > 0 the gunners find the range only every so many shots: the others
+## are aimed wide on purpose, the one in `hits_every` is laid dead on `sure_target`.
+var hits_every := 0
+var sure_target := Vector3.INF   # where a sure shot goes (the player's gun), set by Level
+var _shot_n := 0
 var _rig_gone := false
 var _holes := 0
 
@@ -303,6 +309,18 @@ func tick(delta: float, now: float, sea: Sea, player_pos: Vector3) -> void:
     if has_cannon and sinking_since < 0.0 and not friendly:
         next_fire -= delta
         if next_fire <= 0.0:
-            next_fire = interval
+            next_fire = interval + randf_range(-interval_jitter, interval_jitter)
             var origin := to_global(Vector3(0.6, 0.9, 0.6) * (length / 5.5))
-            fired.emit(origin, EnemyGun.solve(origin, player_pos, Tuning.ENEMY_BALL_SPEED * 1.0))
+            if hits_every > 0:
+                _shot_n += 1
+                if _shot_n % hits_every == 0:
+                    # The one that tells: laid dead on the gun, no scatter.
+                    var sure := sure_target if sure_target != Vector3.INF else player_pos
+                    fired.emit(origin, EnemyGun.solve(origin, sure, Tuning.ENEMY_BALL_SPEED, 0.0))
+                else:
+                    # Wide on purpose: a plume well off the beam, never near the gun.
+                    var side := 1.0 if randf() < 0.5 else -1.0
+                    var wide := player_pos + Vector3(side * randf_range(6.0, 9.0), 0.0, randf_range(-2.5, 2.5))
+                    fired.emit(origin, EnemyGun.solve(origin, wide, Tuning.ENEMY_BALL_SPEED, 0.0))
+            else:
+                fired.emit(origin, EnemyGun.solve(origin, player_pos, Tuning.ENEMY_BALL_SPEED * 1.0))

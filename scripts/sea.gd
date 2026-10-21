@@ -41,11 +41,13 @@ func setup(storm: float, center: Vector3, is_open_sea: bool, swell: float = 1.0)
     _mat.set_shader_parameter("shore_z", Tuning.SHORE_Z)
     _mat.set_shader_parameter("open_sea", open_sea)
     _mat.set_shader_parameter("normal_map", load("res://assets/water/waternormals.jpg"))
+    # One dark blue for all water, shallow or deep, calm or storm; only the sky it
+    # reflects changes. The crests glow a touch lighter in the same blue.
+    _mat.set_shader_parameter("deep_color", Tuning.WATER_COLOR)
+    _mat.set_shader_parameter("shallow_color", Tuning.WATER_COLOR)
+    _mat.set_shader_parameter("crest_color", Tuning.WATER_COLOR.lightened(0.12))
     if storminess >= 0.6:
-        _mat.set_shader_parameter("deep_color", Color(0.10, 0.22, 0.30))
-        _mat.set_shader_parameter("shallow_color", Color(0.20, 0.36, 0.42))
         _mat.set_shader_parameter("sky_color", Color(0.45, 0.47, 0.52))
-        _mat.set_shader_parameter("crest_color", Color(0.30, 0.50, 0.52))
     material_override = _mat
     position = Vector3(center.x, Tuning.SEA_LEVEL, (center.z - 14.0) if open_sea else center.z)
     # A flat far plane to the horizon so the animated patch never shows an edge.
@@ -55,24 +57,19 @@ func setup(storm: float, center: Vector3, is_open_sea: bool, swell: float = 1.0)
     far.mesh = fp
     _far_mat = ShaderMaterial.new()
     _far_mat.shader = load("res://shaders/far_sea.gdshader")
-    _far_mat.set_shader_parameter("color", Color(0.10, 0.32, 0.54) if storminess < 0.6 else Color(0.10, 0.22, 0.30))
+    _far_mat.set_shader_parameter("color", Tuning.WATER_COLOR)
     far.material_override = _far_mat
     # Just below the deepest trough: any lower and the patch edge reads as a shelf at the horizon.
     far.position = Vector3(0, -0.35 - amplitude * 1.3, 0)
     add_child(far)
 
-## Recolour the water (the cave's dark pool, dusk).
-func set_colors(deep: Color, shallow: Color, sky: Color) -> void:
-    _mat.set_shader_parameter("deep_color", deep)
-    _mat.set_shader_parameter("shallow_color", shallow)
+## Recolour the sky the water reflects (the cave's dark pool, dusk). The water itself
+## keeps its one blue everywhere; `deep` and `shallow` are kept for the callers' sake.
+func set_colors(_deep: Color, _shallow: Color, sky: Color) -> void:
     _mat.set_shader_parameter("sky_color", sky)
-    if _far_mat:
-        _far_mat.set_shader_parameter("color", deep)
 
 ## Dark water under the moon.
 func set_night() -> void:
-    _mat.set_shader_parameter("deep_color", Color(0.02, 0.05, 0.10))
-    _mat.set_shader_parameter("shallow_color", Color(0.05, 0.12, 0.18))
     _mat.set_shader_parameter("sky_color", Color(0.12, 0.16, 0.28))
     if _far_mat:
         _far_mat.set_shader_parameter("color", Color(0.02, 0.05, 0.10))
@@ -81,6 +78,12 @@ func _process(delta: float) -> void:
     t += delta
     if _mat:
         _mat.set_shader_parameter("sea_time", t)
+
+## Open-sea waves run along x (across the view) instead of z.
+func set_wave_axis(along_x: bool) -> void:
+    wave_x = along_x
+    if _mat:
+        _mat.set_shader_parameter("wave_axis", 1.0 if along_x else 0.0)
 
 ## The wake astern, by how hard the ship is driving (0 = lying still, 1 = full speed),
 ## for a hull centred at `center`, `half_w` across and `half_l` long, running toward -z.
@@ -107,6 +110,7 @@ func set_wave_crests(list: Array[Vector4]) -> void:
             _mat.set_shader_parameter("wave_crests", _crests)
 
 ## Water streaming past (m/s): the wave pattern slides, so a ship at anchor reads as under way.
+var wave_x := false   # open-sea trains run along x instead of z (see set_wave_axis)
 var current := Vector2.ZERO:
     set(v):
         current = v
@@ -147,10 +151,12 @@ func height(qx: float, qz: float) -> float:
     var h: float
     if open_sea:
         # Lifted by 0.73 as in the shader: the peaked trains average below zero.
-        h = amplitude * (_pw(z * 0.32 - t * 1.25) * 0.95
-            + _pw((z * 0.21 + x * 0.07) - t * 0.9) * 0.55
-            + _pw((z * 0.55 - x * 0.13) - t * 2.0) * 0.28
-            + sin(x * 0.4 + t * 0.8) * 0.22
+        var a := x if wave_x else z
+        var b := z if wave_x else x
+        h = amplitude * (_pw(a * 0.32 - t * 1.25) * 0.95
+            + _pw((a * 0.21 + b * 0.07) - t * 0.9) * 0.55
+            + _pw((a * 0.55 - b * 0.13) - t * 2.0) * 0.28
+            + sin(b * 0.4 + t * 0.8) * 0.22
             + 0.73)
     else:
         var w1 := sin(x * 0.35 + t * 1.1)

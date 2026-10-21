@@ -10,6 +10,19 @@ var size: Vector3 = Vector3.ONE
 var style: String = ""
 var tint: String = ""
 var is_static_block: bool = false
+## Whether a hard knock (a fall from a height, a plank landing on it, a wall shoved by a
+## ball) can set powder off. A level may turn it off. Set by Level from "tnt_knock".
+static var powder_knocks := true
+## Whether a ball striking close by (not touching) sets powder off. A level may turn it
+## off, so its kegs go only to a ball that touches them, a knock, or another blast. Set
+## by Level from "tnt_spark".
+static var powder_sparks := true
+## Powder that goes off from a fall: when set (metres per second, from the level's
+## "tnt_fall" drop height), a keg explodes on any solid contact while it, or whatever
+## strikes it, is moving at least this fast, as after a drop from that height. A slow
+## shove (a wall pushed by a ball) does nothing. Below zero, the old impulse rule holds.
+static var powder_fall_speed := -1.0
+var _prev_speed := 0.0   # last frame's speed, so a landing is judged by the fall before it
 var motion: Dictionary = {}
 var base_position: Vector3
 var break_threshold: float = -1.0
@@ -89,6 +102,17 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
             hit_known = true
     if material_name == "timber":
         return   # log walls shrug off balls and knocks; only a blast splits them (see Level.explode)
+    if material_name == "tnt" and not ball and powder_fall_speed > 0.0 and powder_knocks and not is_static_block:
+        # The fall rule: a landing, or something landing on it, fast enough.
+        var fast := _prev_speed >= powder_fall_speed
+        for i in state.get_contact_count():
+            if state.get_contact_collider_velocity_at_position(i).length() >= powder_fall_speed:
+                fast = true
+        _prev_speed = state.linear_velocity.length()
+        if fast and strongest / maxf(mass, 0.1) > 0.6 and not settling:
+            _pending_break = strongest / maxf(mass, 0.1)
+        return
+    _prev_speed = state.linear_velocity.length()
     if strongest > 0.0:
         var specific := strongest / maxf(mass, 0.1)
         # Powder goes up when a cannonball hits it (or a blast reaches it, see Level.explode);
@@ -96,6 +120,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
         var needed := break_threshold if (material_name != "tnt" or ball) else Tuning.TNT_KNOCK_BREAK
         # Just woken: pieces press into place against each other; only a ball breaks them yet.
         if settling and not ball:
+            return
+        if material_name == "tnt" and not ball and not powder_knocks:
             return
         if specific > needed:
             _pending_break = specific

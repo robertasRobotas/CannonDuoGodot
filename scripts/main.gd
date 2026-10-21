@@ -111,7 +111,7 @@ func _ready() -> void:
                     if d.length() > 0.1:
                         moved += 1
                         print("MOVED %s at %s by %s" % [b.material_name, b.base_position, d])
-                print("SETTLE %d of %d blocks moved" % [moved, total])
+                print("SETTLE %d of %d blocks moved, %d targets left" % [moved, total, _level.targets_remaining])
                 get_tree().quit())
         elif arg.begins_with("--probe="):
             start_level(int(arg.substr(8)))

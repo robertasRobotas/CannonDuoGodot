@@ -62,12 +62,18 @@ func set_frozen(value: bool) -> void:
     freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 
 ## Ballistic solve on the high arc so the ball can be seen and hit.
-static func solve(origin: Vector3, target: Vector3, speed: float) -> Vector3:
-    var scatter := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * Tuning.ENEMY_AIM_ERROR
+static func solve(origin: Vector3, target: Vector3, speed: float, error: float = Tuning.ENEMY_AIM_ERROR) -> Vector3:
+    var scatter := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * error
     var d := target + scatter - origin
     var flat := Vector2(d.x, d.z)
     var dx := flat.length()
     var dy := d.y
+    if error == 0.0:
+        # A sure shot: a 45-degree lob whose speed is found by flying it, with the air drag
+        # the balls really have, so it comes down on the mark whatever the range.
+        var dir0 := flat / maxf(dx, 0.001)
+        var v0 := _speed_for(dx, dy, PI / 4.0)
+        return Vector3(dir0.x * cos(PI / 4.0), sin(PI / 4.0), dir0.y * cos(PI / 4.0)) * v0
     var g := Tuning.GRAVITY
     var v := speed
     var angle: float
@@ -75,7 +81,42 @@ static func solve(origin: Vector3, target: Vector3, speed: float) -> Vector3:
     if disc > 0.0:
         angle = atan((v * v + sqrt(disc)) / (g * dx))
     else:
+        # Out of range: a 45-degree lob, a shade over the exact speed so most fall just
+        # beyond; a sure shot (no error) takes the exact speed and lands on the mark.
         angle = PI / 4.0
-        v = sqrt(g * dx * dx / maxf(dx - dy, 0.5)) * 1.05
+        v = sqrt(g * dx * dx / maxf(dx - dy, 0.5)) * (1.0 if error == 0.0 else 1.05)
     var dir := flat / maxf(dx, 0.001)
     return Vector3(dir.x * cos(angle), sin(angle), dir.y * cos(angle)) * v
+
+## How far a ball flies before coming down `dy` below (or above) its start, at `angle`
+## and `speed`, stepped the way the physics steps it, drag and all.
+static func _range_of(speed: float, angle: float, dy: float) -> float:
+    var damp: float = ProjectSettings.get_setting("physics/3d/default_linear_damp", 0.1)
+    var dt := 1.0 / 60.0
+    var vx := speed * cos(angle)
+    var vy := speed * sin(angle)
+    var x := 0.0
+    var y := 0.0
+    for i in 1200:
+        vy -= Tuning.GRAVITY * dt
+        var k := maxf(1.0 - damp * dt, 0.0)
+        vx *= k
+        vy *= k
+        x += vx * dt
+        y += vy * dt
+        if vy < 0.0 and y <= dy:
+            return x
+    return x
+
+## The speed that lands a ball `dx` out and `dy` up at `angle`: found by bisection on the
+## flown range.
+static func _speed_for(dx: float, dy: float, angle: float) -> float:
+    var lo := 1.0
+    var hi := 60.0
+    for i in 40:
+        var mid := (lo + hi) / 2.0
+        if _range_of(mid, angle, dy) < dx:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0

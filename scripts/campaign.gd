@@ -37,14 +37,15 @@ const LEVELS := {
         "tip": "Meet each wave where it is green. White water rolls a ship over."},
     5: {"name": "Rock Perch", "sub": "Pirates on the hillfort", "biome": "tropic", "sky": "sunset", "sea": 0.2,
         "fort": ["perch", "mound", -19.0, {"captives": 1, "no_tnt": true}], "tip": "A pirate who falls off the hill is done for."},
-    6: {"mode": "reef", "name": "Reef Run", "sub": "Rocks that rise", "biome": "opensea", "sky": "noon", "sea": 0.3, "dist": 320.0,
-        "tip": "Bubbles and a ring of foam mean a rock is coming up. Steer around the boils."},
+    6: {"mode": "sail", "name": "Night Run", "sub": "The gorge in fog", "biome": "harbor", "sky": "night", "sea": 0.15, "dist": 260.0, "rock_seed": 6061,
+        "light": 3.2, "fog_dist": 45.0,
+        "tip": "The same channel, by night and in fog. The rocks have shifted, and they show forty-five metres out. Lean her past them."},
     7: {"name": "The Stockade", "sub": "A log fort in the fields", "biome": "meadow", "sky": "noon", "sea": 0.1,
-        "fort": ["stockade", "sand", -10.5, {"captives": 2}], "blast_radius": 0.33, "chain_delay": 0.0,
-        "tip": "Balls bounce off those logs. Hit the kegs in a lookout: the powder inside goes too."},
-    8: {"name": "Stern Chase", "sub": "Pirates astern", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "chase",
-        "stern_gun": true, "sail_in": 0.0, "look": [0.0, 1.5, -40.0], "shots": 16, "par": 12,
-        "tip": "They are faster than us. The stern gun is all we have: three balls each."},
+        "fort": ["stockade", "sand", -10.5, {"captives": 2}], "blast_radius": 0.8, "chain_delay": 0.0, "tnt_spark": false, "tnt_fall": 0.4,
+        "tip": "Balls bounce off those logs. Hit a keg up in a lookout, or knock one down: the powder inside goes too, and the sentries with it."},
+    8: {"name": "Sea Duel", "sub": "Gunboats abeam", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "gunboats",
+        "look": [0.0, 1.5, -14.0], "shots": 18, "par": 5, "hull": 3, "wave_axis": "x",
+        "tip": "Three gunboats, one at a time, running alongside. One ball sinks one. Their fifth shot is the one that hits you: three of those and we are done."},
     9: {"name": "Bay of Gulls", "sub": "Pirate ships in the bay", "biome": "tropic", "sky": "noon", "sea": 0.35, "shore": "cliffs",
         "fort": ["coastal", "sand", -11.5, {"guns": 2}], "ships": [[-9.0, 3.6, 0.0, 2, true], [8.5, 3.9, 0.0, 2, true]],
         "ammo": [], "tip": "Stone walls shrug off iron. The powder magazine behind them does not."},
@@ -159,7 +160,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         d["offshore"] = r.offshore
     if r.has("intro_hold"):
         d["intro_hold"] = r.intro_hold
-    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "chain_delay"]:
+    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall"]:
         if r.has(key):
             d[key] = r[key]
     # A voyage at the helm: no castle, no cannon; VoyageLevel reads mode and dist.
@@ -199,7 +200,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
     # The pod: orcas instead of a fort, handled by OrcaDirector inside the level.
     if r.has("orcas"):
         d["orcas"] = int(r.orcas)
-    for key in ["scenario", "stern_gun"]:
+    for key in ["scenario", "stern_gun", "hull", "wave_axis"]:
         if r.has(key):
             d[key] = r[key]
     # Ships.

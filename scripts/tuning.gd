@@ -5,6 +5,7 @@ const GRAVITY := 9.8
 const LAUNCH_SPEED_BASE := 12.0   # raised with SHIP_OFFSHORE so low shots still reach
 const LAUNCH_SPEED_SCALE := 16.0
 const SEA_LEVEL := -0.12
+const WATER_COLOR := Color(0.04, 0.11, 0.30)   # every sea in the game: one dark blue
 const SHORE_Z := 2.5
 const CALM_AMPLITUDE := 0.07
 const STORM_AMPLITUDE := 0.32

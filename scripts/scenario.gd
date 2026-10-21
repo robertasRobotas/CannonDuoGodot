@@ -18,6 +18,7 @@ static func make(kind: String) -> Scenario:
         "bridge": return ScnBridge.new()
         "sharks": return ScnSharks.new()
         "balloons": return ScnBalloons.new()
+        "gunboats": return preload("res://scripts/scn_gunboats.gd").new()
     return null
 
 func setup(lv: Level) -> void:

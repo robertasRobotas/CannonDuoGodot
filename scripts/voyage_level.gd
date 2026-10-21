@@ -204,6 +204,21 @@ func _build_sky() -> void:
         e.ambient_light_energy = 0.35
         e.fog_light_color = Color(0.05, 0.07, 0.13)
         e.fog_density = 0.006
+    # A level may turn the lights up (`light`, a multiplier on the ambient and the
+    # sun or moon) and close the world in with fog: `fog_dist` is how far past the ship
+    # anything can be seen, the camera's own distance behind her allowed for.
+    var light_k := float(data.get("light", 1.0))
+    e.ambient_light_energy *= light_k
+    if data.has("fog_dist"):
+        var from_ship := 11.0
+        e.fog_mode = Environment.FOG_MODE_DEPTH
+        e.fog_depth_begin = from_ship * 0.8
+        e.fog_depth_end = from_ship + float(data.fog_dist)
+        e.fog_depth_curve = 1.0
+        e.fog_sky_affect = 1.0
+        if night:
+            # The fog itself glows with the level's light, so a bright night stays bright.
+            e.fog_light_color = Color(0.13, 0.17, 0.26) * minf(light_k / 2.2, 1.6)
     env.environment = e
     _env = e
     add_child(env)
@@ -215,11 +230,14 @@ func _build_sky() -> void:
         sun.light_energy = 1.2
         sun.rotation_degrees = Vector3(-14, 70, 0)
     elif night:
+        # The moon high: low, it lit every crest of the cross swell in the harbour channel
+        # into a bright bar across the water.
         sun.light_color = Color(0.58, 0.68, 1.0)
         sun.light_energy = 0.3
-        sun.rotation_degrees = Vector3(-38, -35, 0)
+        sun.rotation_degrees = Vector3(-62, -35, 0)
     else:
         sun.rotation_degrees = Vector3(-50, 40, 0)
+    sun.light_energy *= float(data.get("light", 1.0))
     sun.shadow_enabled = true
     sun.directional_shadow_max_distance = 30.0
     _sun = sun
@@ -283,7 +301,7 @@ func _sounds() -> void:
 ## with the course this wide a few more stand further out.
 func _build_course_rocks() -> void:
     var rng := RandomNumberGenerator.new()
-    rng.seed = 2024
+    rng.seed = int(data.get("rock_seed", 2024))   # a level may lay the rocks out its own way
     var z := -45.0
     var gap_x := 0.0
     while z > -(goal - 50.0):

@@ -138,6 +138,7 @@ func level_time() -> float:
 
 ## Debug: aim and fire once the level is ready.
 var auto_fire: float = -1.0
+var _settle_probe := false   # the --settle debug run: say what each ball strikes
 var auto_fire_yaw: float = 0.0
 var auto_fire_pitch: float = 8.0
 var _auto_fired := false
@@ -184,6 +185,13 @@ func sea_description() -> String:
 # MARK: Build
 
 func build(level_data: Dictionary, user_settings: Dictionary) -> void:
+    Block.powder_knocks = bool(level_data.get("tnt_knock", true))
+    Block.powder_sparks = bool(level_data.get("tnt_spark", true))
+    # "tnt_fall": the drop, in metres, that sets powder off: speed at the bottom of it.
+    Block.powder_fall_speed = sqrt(2.0 * Tuning.GRAVITY * float(level_data.tnt_fall)) if level_data.has("tnt_fall") else -1.0
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--settle="):
+            _settle_probe = true
     Haptics.muted = false
     data = level_data
     settings = user_settings
@@ -199,6 +207,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
                 specials[kind] = int(upgrades[kind])
     powder_scale = 1.0 + 0.12 * int(upgrades.get("powder", 0))
     max_hull = Tuning.MAX_HULL_HITS + int(upgrades.get("hull", 0))
+    if level_data.has("hull"):
+        max_hull = int(level_data.hull)   # a level that sets its own lives, upgrades or no
     power_scale = 0.8 if old_cannon else 1.0 + 0.07 * int(upgrades.get("barrel", 0))
     targets_remaining = data.targets.size()
     ships_remaining = data.get("enemyShips", []).size()
@@ -324,6 +334,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     sea = Sea.new()
     add_child(sea)
     sea.setup(float(data.get("sea", 0.0)), ship_pos, open_sea, float(data.get("swell", 1.0)))
+    sea.set_wave_axis(str(data.get("wave_axis", "z")) == "x")
     if sky_kind == "night":
         sea.set_night()
     add_child(ship)
@@ -1362,8 +1373,11 @@ func fire(pw: float) -> void:
     _shot_start_targets = targets_remaining
     _shot_blasts = 0
     p.smashed.connect(_smash_around)
-    p.hit.connect(func(_b):
+    p.hit.connect(func(b):
         _end_follow()
+        if _settle_probe:
+            var what := (b as Block).material_name if b is Block else str(b)
+            print("BALLHIT %s at %s" % [what, p.global_position])
         _spark_near(p))
     # The shot that may win it: a touch of slow motion while it flies.
     if targets_remaining + ships_remaining <= 1 or (projectiles_remaining == 0 and specials_left() == 0):
@@ -1769,6 +1783,7 @@ func _update_enemies(delta: float) -> void:
                 g.tick(delta, target)
     for s in enemy_ships.duplicate():
         if is_instance_valid(s):
+            s.sure_target = target
             s.tick(delta, time, sea, ship.global_position)
     if phase != Phase.SLOWMO and not silent:
         for n in get_tree().get_nodes_in_group("enemies"):
@@ -1786,6 +1801,8 @@ func _update_enemies(delta: float) -> void:
             enemy_balls.erase(b)
             continue
         var p: Vector3 = b.global_position
+        if _settle_probe:
+            b.set_meta("closest", minf(float(b.get_meta("closest", INF)), p.distance_to(target)))
         if p.distance_to(target) < Tuning.ENEMY_HIT_RADIUS:
             enemy_balls.erase(b)
             b.queue_free()
@@ -1793,6 +1810,8 @@ func _update_enemies(delta: float) -> void:
             fx.pop(p, Color(1, 0.6, 0.2))
             _hull_hit(p)
         elif p.y < Tuning.SEA_LEVEL + 0.1 or time - float(b.get_meta("spawn")) > 9.0:
+            if _settle_probe:
+                print("ENEMYBALL done at %s, closest to the gun %.2f m" % [p, float(b.get_meta("closest", INF))])
             if open_sea or p.z > Tuning.SHORE_Z:
                 fx.splash(Vector3(p.x, Tuning.SEA_LEVEL, p.z))
             enemy_balls.erase(b)
@@ -1835,9 +1854,10 @@ func _smash_around(at: Vector3) -> void:
                 return
 
 ## A ball striking right next to powder sets it off (sparks, splinters), even if it does not
-## touch the barrel itself; hits further away leave the powder alone.
+## touch the barrel itself; hits further away leave the powder alone. Not on a level that
+## turns it off: see Block.powder_sparks.
 func _spark_near(ball: Projectile) -> void:
-    if not is_instance_valid(ball):
+    if not is_instance_valid(ball) or not Block.powder_sparks:
         return
     var at := ball.global_position
     var reach := 2.2 * (1.3 if float(data.get("blast_radius", 1.0)) > 1.0 else 1.0)
