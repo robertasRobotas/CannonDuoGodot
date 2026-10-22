@@ -6,21 +6,26 @@ signal fired(from: Vector3, velocity: Vector3)
 signal destroyed(gun: EnemyGun)
 
 var interval: float = 6.0
+var interval_jitter: float = 0.0   # each wait varies by up to this much
+var miss := false                  # fires wild on purpose: close to the ship, never on it
 var power: float = 0.5
+var _scale := 1.0
 var next_fire: float = Tuning.ENEMY_FIRST_SHOT_DELAY
 var frozen := false
 var _pending_break := false
 
-func setup(iv: float, pw: float) -> void:
+## `scale` makes a bigger piece (a beach gun in a sandbag nest) of the same model.
+func setup(iv: float, pw: float, scale: float = 1.0) -> void:
     interval = iv
     power = pw
+    _scale = scale
     next_fire = Tuning.ENEMY_FIRST_SHOT_DELAY + 1.5 + randf() * 4.0
-    mass = 60.0
+    mass = 60.0 * scale * scale
     var shape := CollisionShape3D.new()
     var b := BoxShape3D.new()
-    b.size = Vector3(0.6, 0.55, 0.9)
+    b.size = Vector3(0.6, 0.55, 0.9) * scale
     shape.shape = b
-    shape.position = Vector3(0, 0.28, 0.05)
+    shape.position = Vector3(0, 0.28, 0.05) * scale
     add_child(shape)
     angular_damp = 0.6
     contact_monitor = true
@@ -29,8 +34,8 @@ func setup(iv: float, pw: float) -> void:
     add_to_group("enemy_guns")
     # The Poly Haven cannon, like the player's; it faces +z, the sea, as modelled.
     var model := Models.instance("res://assets/hq/cannon/cannon_01_1k.gltf")
-    Models.fit(model, Vector3(0.6, 0.55, 0.95), true)
-    model.position.y += 0.28
+    Models.fit(model, Vector3(0.6, 0.55, 0.95) * scale, true)
+    model.position.y += 0.28 * scale
     Models.tint(model, Color(0.7, 0.65, 0.65))
     add_child(model)
 
@@ -51,8 +56,14 @@ func _physics_process(_delta: float) -> void:
 func tick(delta: float, target: Vector3) -> void:
     next_fire -= delta
     if next_fire <= 0.0:
-        next_fire = interval
-        var origin := to_global(Vector3(0, 0.45, 0.6))
+        next_fire = interval + randf_range(-interval_jitter, interval_jitter)
+        var origin := to_global(Vector3(0, 0.45, 0.6) * _scale)
+        if miss:
+            # A plume off the beam, laid exactly there: never near the gun.
+            var side := 1.0 if randf() < 0.5 else -1.0
+            var wide := target + Vector3(side * randf_range(5.0, 8.0), 0.0, randf_range(-2.5, 2.5))
+            fired.emit(origin, EnemyGun.solve(origin, wide, Tuning.ENEMY_BALL_SPEED, 0.0))
+            return
         var v := EnemyGun.solve(origin, target, Tuning.ENEMY_BALL_SPEED * (0.85 + 0.3 * power))
         fired.emit(origin, v)
 

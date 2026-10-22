@@ -11,6 +11,7 @@ var _level: Level
 var _hud: Hud
 var _current_id := 1
 var _auto_fire: PackedStringArray = []
+var _auto_fires: PackedStringArray = []
 var _auto_arm := ""
 var _loading: LoadingScreen
 var _last_won := -1
@@ -92,8 +93,10 @@ func _ready() -> void:
         elif arg.begins_with("--arm="):
             _auto_arm = arg.substr(6)
         elif arg.begins_with("--fire="):
-            # --fire=POWER,YAW,PITCH, applied once the level is built
+            # --fire=POWER,YAW,PITCH[;POWER,YAW,PITCH...], applied once the level is built,
+            # one shot after another as the gun can be loaded
             _auto_fire = arg.substr(7).split(",")
+            _auto_fires = arg.substr(7).split(";")
         elif arg.begins_with("--settle="):
             # --settle=ID,SECONDS  run a level (with --fire to wake it) and list the blocks
             # that moved from where they were built: a stability check for castles.
@@ -111,7 +114,7 @@ func _ready() -> void:
                     if d.length() > 0.1:
                         moved += 1
                         print("MOVED %s at %s by %s" % [b.material_name, b.base_position, d])
-                print("SETTLE %d of %d blocks moved, %d targets left" % [moved, total, _level.targets_remaining])
+                print("SETTLE %d of %d blocks moved, %d targets left, %d shots used" % [moved, total, _level.targets_remaining, _level.shots_used])
                 get_tree().quit())
         elif arg.begins_with("--probe="):
             start_level(int(arg.substr(8)))
@@ -720,10 +723,11 @@ func _build_level(id: int) -> void:
     music.play("boss" if bool(data.get("boss", false)) else "level")
     if _auto_arm != "":
         _level.arm_special(_auto_arm)
-    if _auto_fire.size() == 3:
-        _level.auto_fire = float(_auto_fire[0])
-        _level.auto_fire_yaw = float(_auto_fire[1])
-        _level.auto_fire_pitch = float(_auto_fire[2])
+    if _auto_fires.size() > 0:
+        for shot in _auto_fires:
+            var parts := shot.split(",")
+            if parts.size() == 3:
+                _level.auto_fires.append([float(parts[0]), float(parts[1]), float(parts[2])])
     _hud = Hud.new()
     add_child(_hud)
     _hud.setup(_level, loading)

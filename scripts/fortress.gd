@@ -23,21 +23,25 @@ var rng := RandomNumberGenerator.new()
 var _tops: Array = []   # [x, z, width] of each tower, for guns and cages
 var captives: Array = []
 var no_tnt := false
+var nest := false   # the wharf: a sandbag gun nest in the middle, before the lookouts
 var _cage_n := 0
 
 ## kind: small, medium, large, huge, boss, mega, harbor, battery, or daily (random).
 ## opts: guns (enemy cannons), armed (pirates with blunderbusses), captives (caged islanders),
-## deserters (caged pirates who want to quit), grimhorn (the boss on the top).
+## deserters (caged pirates who want to quit), grimhorn (the boss on the top), no_tnt (plain
+## crates where the powder would be), pirates (keep only this many, spread over the fort),
+## props (odds and ends of timber scattered about the fort, touching nothing).
 static func generate(seed_value: int, kind: String, site: String = "sand", z: float = -9.5, opts: Dictionary = {}) -> Dictionary:
     var f := Fortress.new()
     f.rng.seed = seed_value
     f.no_tnt = bool(opts.get("no_tnt", false))
+    f.nest = bool(opts.get("nest", false))
     if kind == "daily":
         kind = ["small", "medium", "large", "large"][f.rng.randi_range(0, 3)]
         site = ["sand", "rock", "cliff", "far"][f.rng.randi_range(0, 3)]
         z = -16.0 if site == "far" else -10.5
     var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "huge": 18.0, "boss": 18.0,
-        "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0, "perch": 7.0,
+        "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0, "perch": 7.0, "sandbags": 16.0,
         "keyhole": 12.0, "lighthouse": 6.0, "ropebridge": 16.0, "pier": 8.0}.get(kind, 10.0) as float
     f._site(site, width, z)
     match kind:
@@ -49,6 +53,7 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "mega": f._mega(z)
         "harbor": f._harbor(z)
         "perch": f._perch(z)
+        "sandbags": f._sandbags(z)
         "battery": f._battery(z)
         "keyhole": f._keyhole(z)
         "lighthouse": f._lighthouse(z)
@@ -56,6 +61,10 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "pier": f._pier(z)
         "stockade": f._stockade(z)
         "coastal": f._coastal_battery(z)
+    if bool(opts.get("props", false)):
+        f._props(z, width)
+    if opts.has("pirates"):
+        f._thin_pirates(int(opts.pirates))
     f._place_guns(int(opts.get("guns", 0)))
     f._place_cages(int(opts.get("captives", 0)), int(opts.get("deserters", 0)))
     f._arm_pirates(int(opts.get("armed", 0)))
@@ -110,14 +119,14 @@ func _medium(z: float) -> void:
     _tower(0.0, z, 3, 3.0)
     for side: float in [-1.0, 1.0]:
         var x := side * 3.7
-        _tower(x, z + 0.3, 2, 2.3)
+        _tower(x, z + 0.3, 2, 2.3, -side)
         _bridge(side * 1.5, x - side * 1.15, 2, z + 0.1)
 
 func _large(z: float) -> void:
     _tower(0.0, z, 4, 3.2)
     for side: float in [-1.0, 1.0]:
         var x := side * 4.3
-        _tower(x, z + 0.3, 3, 2.4)
+        _tower(x, z + 0.3, 3, 2.4, -side)
         _bridge(side * 1.6, x - side * 1.2, 3, z + 0.1)
         if rng.randf() < 0.6:
             _watch_post(side * 6.6, z + 0.9)
@@ -129,8 +138,8 @@ func _huge(z: float) -> void:
     for side: float in [-1.0, 1.0]:
         var x1 := side * 4.8
         var x2 := side * 8.7
-        _tower(x1, z + 0.3, 4, 2.6)
-        _tower(x2, z + 0.6, 3, 2.2)
+        _tower(x1, z + 0.3, 4, 2.6, -side)
+        _tower(x2, z + 0.6, 3, 2.2, -side)
         _bridge(side * 1.8, x1 - side * 1.3, 4, z + 0.1)
         _bridge(x1 + side * 1.3, x2 - side * 1.1, 3, z + 0.4)
         _stone_tower(side * 2.8, z - 2.2, 9.0)
@@ -141,7 +150,7 @@ func _boss(z: float) -> void:
     _tower(0.0, z, 5, 3.4)
     for side: float in [-1.0, 1.0]:
         var x := side * 4.6
-        _tower(x, z + 0.4, 4, 2.6)
+        _tower(x, z + 0.4, 4, 2.6, -side)
         _bridge(side * 1.7, x - side * 1.3, 4, z + 0.2)
         _stone_tower(side * 7.6, z + 0.8, 8.0)
         _watch_post(side * 9.4, z + 1.4)
@@ -153,8 +162,8 @@ func _mega(z: float) -> void:
     for side: float in [-1.0, 1.0]:
         var x1 := side * 5.0
         var x2 := side * 9.2
-        _tower(x1, z + 0.3, 5, 2.8)
-        _tower(x2, z + 0.6, 4, 2.4)
+        _tower(x1, z + 0.3, 5, 2.8, -side)
+        _tower(x2, z + 0.6, 4, 2.4, -side)
         _bridge(side * 1.9, x1 - side * 1.4, 5, z + 0.1)
         _bridge(x1 + side * 1.4, x2 - side * 1.2, 4, z + 0.4)
         _stone_tower(side * 2.9, z - 2.4, 11.0)
@@ -165,12 +174,78 @@ func _mega(z: float) -> void:
 ## Port Alder's quay taken by pirates: a warehouse, two cranes with crates on their booms,
 ## stacks of crates and barrels (powder among them), pirates on top of everything.
 ## The wharf: two raised lookouts (hunters' stands on splayed legs) in the middle, stacked
-## cargo either side with nobody on it, and barrels out front.
+## cargo either side with nobody on it, and barrels out front; or, with `nest`, a sandbag
+## gun nest out front in the barrels' place.
 func _harbor(z: float) -> void:
     for side: float in [-1.0, 1.0]:
         _lookout(side * 3.6, z)
         _crate_stack(side * 7.8, z + 0.6, false)
-        _barrel_stack(side * 2.6, z + 2.6)
+        if not nest:
+            _barrel_stack(side * 2.6, z + 2.6)
+    if nest:
+        _nest(0.0, z + 6.6, 1.0)
+
+## Two guns dug in on the beach, each in a nest of sandbags open to the land: three courses
+## of bags across the front and down both sides, the gun inside with a crate and a barrel
+## of shot, and a pirate standing by outside. The guns fire wild (see the scenario).
+func _sandbags(z: float) -> void:
+    for side: float in [-1.0, 1.0]:
+        _nest(side * 5.5, z, side)
+    _beach_props(z)
+
+## Odds and ends about the battery: a stack of crates and barrels between the nests, a
+## bench before them, planks, crates and a coil of rope on the sand in front, and barrels
+## out past the gunners. None of it touches a nest.
+func _beach_props(z: float) -> void:
+    var s := 0.9
+    for row in 3:
+        for i in 3 - row:
+            _part("wood", Vector3((i - (2 - row) / 2.0) * s, s / 2.0 + row * s, z + 0.2), Vector3(s * 0.96, s * 0.96, s * 0.96), {"style": "crate"})
+    _part("wood", Vector3(-2.3, 0.4, z - 0.8), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _part("wood", Vector3(2.2, 0.4, z - 1.2), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _part("wood", Vector3(2.6, 0.4, z - 0.3), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    for dx: float in [-0.55, 0.55]:
+        _part("wood", Vector3(dx, 0.2, z + 2.4), Vector3(0.1, 0.4, 0.1))
+    _part("wood", Vector3(0.0, 0.44, z + 2.4), Vector3(1.4, 0.08, 0.4))
+    for i in 3:
+        _part("wood", Vector3(-3.6 + (i % 2) * 0.1, 0.05 + i * 0.1, z + 3.6), Vector3(1.7, 0.1, 0.32))
+    _part("wood", Vector3(3.6, 0.4, z + 3.4), Vector3(0.8, 0.8, 0.8), {"style": "crate"})
+    _part("wood", Vector3(4.5, 0.35, z + 3.5), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+    _part("wood", Vector3(-6.0, 0.08, z + 3.2), Vector3(0.5, 0.16, 0.5), {"style": "barrel"})   # a coil of rope
+    for side: float in [-1.0, 1.0]:
+        _part("wood", Vector3(side * 10.2, 0.4, z - 1.6), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+        _part("wood", Vector3(side * 10.7, 0.4, z - 0.9), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+        _part("wood", Vector3(side * 9.6, 0.35, z + 1.4), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+
+func _nest(x: float, z: float, side: float) -> void:
+    var bag := Vector3(1.0, 0.36, 0.6)
+    var front := z + 1.3
+    for course in 3:
+        var y := bag.y / 2.0 + course * bag.y
+        var stagger := 0.5 * (course % 2)
+        # Across the front, four bags, staggered course to course; two courses only, so
+        # the gun's barrel shows over them.
+        if course < 2:
+            for i in 4:
+                var bx := x - 1.5 + i * 1.0 + stagger
+                if bx > x + 1.75:
+                    continue
+                _part("timber", Vector3(bx, y, front), bag, {"style": "sandbag"})
+        # Down both sides, three bags each, lying along z.
+        for sx: float in [-1.0, 1.0]:
+            for i in 3:
+                var bz := front - 0.9 - i * 1.0 - stagger
+                _part("timber", Vector3(x + sx * 2.1, y, bz), Vector3(0.6, bag.y, 1.0), {"style": "sandbag"})
+    # A big beach gun inside on a low plank platform, its barrel over the front bags,
+    # facing the sea; its stores stand behind the nest's open back.
+    _part("wood", Vector3(x, 0.15, z - 1.0), Vector3(2.2, 0.3, 3.2))
+    guns.append({"position": [x, base + 0.32, z - 1.0], "interval": 4.0, "jitter": 1.0, "miss": true, "power": 0.5, "scale": 3.2})
+    _part("wood", Vector3(x - 0.8, 0.35, z - 3.3), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+    _part("wood", Vector3(x + 0.8, 0.4, z - 3.4), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    # The pirate, just outside the nest's side wall: close enough that the nest's blast
+    # takes him with it.
+    _guard(Vector3(x + side * 2.7, 0.0, z - 0.4))
+    _tops.append([x, z, 4.0])
 
 ## One lookout on the hilltop, the wharf's size, with its odds and ends about its feet: a
 ## water butt under the floor, crates and barrels, a coil of rope, a bench, and a vane on
@@ -560,8 +635,9 @@ func _storey(x: float, z: float, w: float, d: float, y: float, post: float, wall
     return top + PLANK
 
 ## A tower of `floors` storeys with a peaked roof. Pirates stand at the open front of every
-## other floor and on the ridge; powder at the foot and part way up.
-func _tower(x: float, z: float, floors: int, w: float) -> void:
+## other floor and on the ridge; powder at the foot and part way up. `bridge_dir` (-1, 0
+## or 1) says from which side a bridge lands on the top floor: the roof makes room for it.
+func _tower(x: float, z: float, floors: int, w: float, bridge_dir: float = 0.0) -> void:
     var y := 0.0
     for k in floors:
         var guard_here := k > 0 and (k % 2 == 1 or k == floors - 1)
@@ -570,14 +646,46 @@ func _tower(x: float, z: float, floors: int, w: float) -> void:
         if guard_here:
             _guard(Vector3(x, y, z + w * 0.46 - 0.3))
         if k == 1 or (k == 3 and floors > 4) or (k == 5 and floors > 6):
-            _part("tnt", Vector3(x, y + 0.35, z - 0.3), Vector3(0.55, 0.7, 0.55))
+            _part("tnt", Vector3(x, y + 0.35, z - 0.62), Vector3(0.55, 0.7, 0.55))
     _tops.append([x, z, w])
-    _part("wood", Vector3(x - w * 0.27, y + 0.7, z), Vector3(w * 0.66, 0.18, w + 0.2), {"rotation": [0, 0, 38]})
-    _part("wood", Vector3(x + w * 0.27, y + 0.7, z), Vector3(w * 0.66, 0.18, w + 0.2), {"rotation": [0, 0, -38]})
-    _part("wood", Vector3(x, y + 1.3, z), Vector3(0.3, 0.3, w + 0.2))
-    _guard(Vector3(x, y + 1.4, z))
+    var ridge := _roof(x, y, z, w, bridge_dir)
+    _guard(Vector3(x, ridge, z))
     for side: float in [-1.0, 1.0]:
         _part("tnt", Vector3(x + side * w * 0.17, 0.4, z + w * 0.24), Vector3(0.6, 0.8, 0.6))
+
+## A gabled roof that stands up to physics: a king post in the middle carries the ridge
+## beam; each slope is one board whose foot sits on the floor just inside a low eave
+## stop (so it cannot slide out) and whose head rests on the beam's top edge (so it
+## cannot slide in). Nothing overlaps, so nothing jumps when the castle wakes. On the
+## side a bridge lands from (`bridge_dir`), there is no stop: the board starts further in
+## and the bridge's end, lying on the floor there, is what stops it. Returns the ridge's
+## height, for the lookout on top.
+func _roof(x: float, y: float, z: float, w: float, bridge_dir: float = 0.0) -> float:
+    const T := 0.18          # a board's thickness
+    var depth := w + 0.2
+    var run := w / 2.0 - 0.36                      # from the foot of a board to the beam's edge
+    # The king post and the ridge beam on it: never so low that a keg under it would not fit.
+    var post_h := maxf(run - 0.3, 0.75)
+    _part("wood", Vector3(x, y + post_h / 2.0, z), Vector3(0.3, post_h, 0.3))
+    _part("wood", Vector3(x, y + post_h + 0.15, z), Vector3(0.4, 0.3, depth))
+    var top := y + post_h + 0.3
+    for side: float in [-1.0, 1.0]:
+        var bridged := side == bridge_dir
+        if not bridged:
+            # The eave stop, on the floor's edge.
+            _part("wood", Vector3(x + side * (w / 2.0 + 0.125), y + 0.15, z), Vector3(0.25, 0.3, depth))
+        # The board: its underside runs from its foot on the floor (a hand inside the stop,
+        # or inside the bridge's end) up to the beam's top edge and a little past it. The
+        # block is that line lifted by half the thickness along the board's normal.
+        var foot := Vector2(side * (w / 2.0 - (0.55 if bridged else 0.16)), 0.0)
+        var head := Vector2(side * 0.2, post_h + 0.3)
+        var d := (head - foot).normalized()
+        head += d * 0.08
+        var n := Vector2(-d.y, d.x) * (-side)   # up and outward, above the underside
+        var a := foot + n * (T / 2.0)
+        var b := head + n * (T / 2.0)
+        _strut(Vector3(x + a.x, y + a.y, z), Vector3(x + b.x, y + b.y, z), T, depth)
+    return top
 
 ## A plank bridge between two towers resting on their floor `floor_n` (1 = first floor),
 ## with a pirate halfway across.
@@ -586,7 +694,7 @@ func _bridge(x0: float, x1: float, floor_n: int, z: float) -> void:
     var a := minf(x0, x1) - 0.35
     var b := maxf(x0, x1) + 0.35
     _part("wood", Vector3((a + b) / 2.0, y + 0.1, z), Vector3(b - a, 0.2, 1.0))
-    _part("wood", Vector3((a + b) / 2.0, y + 0.45, z + 0.45), Vector3(b - a - 0.7, 0.12, 0.08))
+    _part("wood", Vector3((a + b) / 2.0, y + 0.26, z + 0.45), Vector3(b - a - 0.7, 0.12, 0.08))   # on the plank, not above it
     _guard(Vector3((a + b) / 2.0, y + 0.2, z))
 
 ## A round stone tower with a pirate on top and powder at its foot.
@@ -658,6 +766,55 @@ func _place_cages(count: int, deserters: int) -> void:
                 _part("wood", Vector3(x + dx, 0.62, cz + dz), Vector3(0.1, 1.24, 0.1), {"cage": _cage_n})
         _part("wood", Vector3(x, 1.3, cz), Vector3(1.1, 0.12, 1.1), {"cage": _cage_n})
         captives.append({"position": [x, base + 0.45, cz], "cage": _cage_n, "deserter": i >= count})
+
+## Keep only `keep` pirates, taken evenly from the fort's full crew so every part of it
+## still has someone.
+func _thin_pirates(keep: int) -> void:
+    if keep < 0 or targets.size() <= keep:
+        return
+    var kept: Array = []
+    var step := float(targets.size()) / float(maxi(keep, 1))
+    for i in keep:
+        kept.append(targets[int(floor(i * step + step / 2.0))])
+    targets = kept
+
+## Timber odds and ends about the fort, clear of it on both sides: a stack of crates, a
+## pair of barrels, a lean-to on four posts with stores under it, a bit of fence, a bench
+## and a signpost. None of it touches the fort, so it falls only when hit.
+func _props(z: float, width: float) -> void:
+    var r := width / 2.0 + 1.4     # the nearest a prop stands to the fort's middle line
+    # Left: crates and barrels.
+    var s := 0.9
+    for row in 3:
+        for i in 3 - row:
+            var cx := -r - 1.0 + (i - (2 - row) / 2.0) * s
+            _part("wood", Vector3(cx, s / 2.0 + row * s, z + 0.6), Vector3(s * 0.96, s * 0.96, s * 0.96), {"style": "crate"})
+    _part("wood", Vector3(-r - 3.4, 0.4, z - 0.8), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _part("wood", Vector3(-r - 2.7, 0.4, z - 1.1), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _part("wood", Vector3(-r - 3.05, 1.2, z - 0.95), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    # Right: a lean-to, stores under its roof.
+    var sx := r + 1.6
+    for dx: float in [-1.0, 1.0]:
+        for dz: float in [-0.9, 0.9]:
+            _part("wood", Vector3(sx + dx, 1.0, z + dz), Vector3(0.2, 2.0, 0.2))
+    _part("wood", Vector3(sx, 2.07, z), Vector3(2.6, 0.14, 2.3))
+    _part("wood", Vector3(sx - 0.35, 0.4, z + 0.1), Vector3(0.8, 0.8, 0.8), {"style": "crate"})
+    _part("wood", Vector3(sx + 0.5, 0.4, z - 0.3), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    # A bit of fence beyond the lean-to.
+    for i in 5:
+        _part("wood", Vector3(sx + 2.2 + i * 0.55, 0.5, z + 1.6), Vector3(0.14, 1.0, 0.14))
+    _part("wood", Vector3(sx + 3.3, 1.05, z + 1.6), Vector3(2.5, 0.1, 0.1))
+    # In front: a bench on the left, a signpost on the right.
+    for dx: float in [-0.55, 0.55]:
+        _part("wood", Vector3(-r - 0.5 + dx, 0.2, z + 3.2), Vector3(0.1, 0.4, 0.1))
+    _part("wood", Vector3(-r - 0.5, 0.44, z + 3.2), Vector3(1.4, 0.08, 0.4))
+    _part("wood", Vector3(r + 0.6, 0.9, z + 3.2), Vector3(0.12, 1.8, 0.12))
+    _part("wood", Vector3(r + 0.6, 1.88, z + 3.2), Vector3(0.7, 0.16, 0.06))
+    # Before the fort, on the sand: two crates side by side and a stack of planks.
+    _part("wood", Vector3(1.6, 0.4, z + 3.6), Vector3(0.8, 0.8, 0.8), {"style": "crate"})
+    _part("wood", Vector3(2.5, 0.35, z + 3.5), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+    for i in 3:
+        _part("wood", Vector3(-2.6 + (i % 2) * 0.1, 0.05 + i * 0.1, z + 3.7), Vector3(1.7, 0.1, 0.32))
 
 ## Hand blunderbusses to some pirates, preferring the high ones who can see the ship.
 func _arm_pirates(count: int) -> void:

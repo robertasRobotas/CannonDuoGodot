@@ -19,6 +19,7 @@ static func make(kind: String) -> Scenario:
         "sharks": return ScnSharks.new()
         "balloons": return ScnBalloons.new()
         "gunboats": return preload("res://scripts/scn_gunboats.gd").new()
+        "sandbags": return preload("res://scripts/scn_sandbags.gd").new()
     return null
 
 func setup(lv: Level) -> void:
@@ -62,6 +63,14 @@ func on_friendly_hit(_s: EnemyShip, _at: Vector3) -> void:
     pass
 
 func on_block_broke(_blk: Block) -> void:
+    pass
+
+## An enemy gun is about to go (knocked over or blown up).
+func on_gun_destroyed(_gun: EnemyGun) -> void:
+    pass
+
+## A ball of ours struck `body` (a block, a gun, the ground...) going `speed` metres a second.
+func on_ball_hit(_body: Node, _speed: float) -> void:
     pass
 
 ## After every shot has come to rest; `nothing` = it broke, popped or blew nothing.

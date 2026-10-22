@@ -4,6 +4,7 @@
 extends Node3D
 
 var offset := Vector3(0.0, 1.0, 0.0)   # from the block's centre to the arrow's tip
+var amp := 0.12                         # how high it bobs
 var _t := randf() * TAU  # each arrow bobs on its own beat
 var _base: Node3D
 
@@ -43,7 +44,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
     _t += delta * 3.2
-    _place(0.12 * (0.5 + 0.5 * sin(_t)))
+    _place(amp * (0.5 + 0.5 * sin(_t)))
 
 func _place(bob: float) -> void:
     if _base == null or not is_instance_valid(_base):

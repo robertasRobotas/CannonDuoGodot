@@ -138,7 +138,9 @@ func level_time() -> float:
 
 ## Debug: aim and fire once the level is ready.
 var auto_fire: float = -1.0
+var auto_fires: Array = []   # debug: [power, yaw, pitch] shots fired one after another
 var _settle_probe := false   # the --settle debug run: say what each ball strikes
+var _scripted := false       # a --shot or --settle run: only scripted shots, no touch input
 var auto_fire_yaw: float = 0.0
 var auto_fire_pitch: float = 8.0
 var _auto_fired := false
@@ -192,6 +194,8 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--settle="):
             _settle_probe = true
+        if arg.begins_with("--settle=") or arg.begins_with("--shot="):
+            _scripted = true
     Haptics.muted = false
     data = level_data
     settings = user_settings
@@ -381,7 +385,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         _castle_top = maxf(_castle_top, float(b.position[1]) + float(b.size[1]) / 2.0)
 
     # Life: flags on the towers; at night torches, stars and a deck lantern; gulls by day.
-    Atmosphere.flags(self, 3, 1.0 + float(data.get("sea", 0.0)))
+    Atmosphere.flags(self, 3, 1.0 + float(data.get("sea", 0.0)), 2.4)
     Atmosphere.ship_flag(ship, Vector3(5.9, 2.3, 0.0))
     if sky_kind == "night":
         Atmosphere.torches(self, 6)
@@ -575,6 +579,18 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
     var tint_color := _tint_color(tint)
     var root := Node3D.new()
     match style:
+        "sandbag":
+            # A filled sack: a squashed ball of coarse sand-coloured cloth.
+            var bag := MeshInstance3D.new()
+            var sm := SphereMesh.new()
+            sm.radius = 0.5
+            sm.height = 1.0
+            sm.radial_segments = 14
+            sm.rings = 7
+            bag.mesh = sm
+            bag.scale = Vector3(size.x, size.y * 1.2, size.z)
+            bag.material_override = Models.tex_material("coast_sand_01", 0.9, Color(0.92, 0.88, 0.8), 1.0)
+            root.add_child(bag)
         "tower":
             # Round brick tower with a tiled cone roof (Atmosphere puts cloth flags on top).
             var body := MeshInstance3D.new()
@@ -952,7 +968,9 @@ func _spawn_target(t: Dictionary, index: int) -> void:
 
 func _spawn_gun(g: Dictionary) -> void:
     var gun := EnemyGun.new()
-    gun.setup(float(g.get("interval", 6.0)), float(g.get("power", 0.5)))
+    gun.setup(float(g.get("interval", 6.0)), float(g.get("power", 0.5)), float(g.get("scale", 1.0)))
+    gun.interval_jitter = float(g.get("jitter", 0.0))
+    gun.miss = bool(g.get("miss", false))
     gun.position = _v3(g.position)
     gun.fired.connect(_on_enemy_fired)
     gun.destroyed.connect(_on_gun_destroyed)
@@ -1007,6 +1025,10 @@ func _process(delta: float) -> void:
         _auto_fired = true
         set_aim(auto_fire_yaw, auto_fire_pitch)
         fire(auto_fire)
+    if not auto_fires.is_empty() and time >= intro_end + sail_after and can_load() and (phase == Phase.AIMING or time - last_shot_time >= 2.5):
+        var shot: Array = auto_fires.pop_front()
+        set_aim(float(shot[1]), float(shot[2]))
+        fire(float(shot[0]))
     # Aim and camera follow the phone in real time, even while slow motion runs.
     var real_delta := delta / maxf(Engine.time_scale, 0.05)
     _update_gyro(real_delta)
@@ -1201,6 +1223,8 @@ func _update_trajectory() -> void:
 func _input(ev: InputEvent) -> void:
     if phase == Phase.LOADING or phase == Phase.INTRO or phase == Phase.FINISHED or is_paused:
         return
+    if _scripted:
+        return   # a debug run (--shot, --settle): stray window events must not fire the gun
     var vp := get_viewport().get_visible_rect().size
     var drag_aim := not (gyro_enabled and gyro_available)
     if ev is InputEventScreenTouch:
@@ -1378,6 +1402,8 @@ func fire(pw: float) -> void:
         if _settle_probe:
             var what := (b as Block).material_name if b is Block else str(b)
             print("BALLHIT %s at %s" % [what, p.global_position])
+        if scenario and b is Node:
+            scenario.on_ball_hit(b, p.linear_velocity.length() if is_instance_valid(p) else 0.0)
         _spark_near(p))
     # The shot that may win it: a touch of slow motion while it flies.
     if targets_remaining + ships_remaining <= 1 or (projectiles_remaining == 0 and specials_left() == 0):
@@ -1607,7 +1633,9 @@ func explode(center: Vector3) -> void:
         var falloff := 1.0 - dist / radius
         # Thrown out in every direction and up, with a random twist so pieces scatter wide.
         var dir := Vector3.UP if dist < 0.05 else (off.normalized() + Vector3(randf_range(-0.35, 0.35), 0.55, randf_range(-0.35, 0.35))).normalized()
-        var dv := Tuning.TNT_BLAST_SPEED * (0.35 + 0.65 * falloff)
+        # "blast_power" scales how hard a level's blasts throw things (a sandbag nest going
+        # up need not wreck the lookouts behind it).
+        var dv := Tuning.TNT_BLAST_SPEED * (0.35 + 0.65 * falloff) * float(data.get("blast_power", 1.0))
         if body is Block and (body as Block).frozen:
             (body as Block).set_frozen(false)
         if body is Enemy and (body as Enemy).frozen:
@@ -1668,6 +1696,8 @@ func target_down(pos: Vector3) -> void:
 func _on_gun_destroyed(gun: EnemyGun) -> void:
     if not is_instance_valid(gun) or gun.is_queued_for_deletion():
         return
+    if scenario:
+        scenario.on_gun_destroyed(gun)
     fx.dust(gun.global_position, "metal")
     fx.pop(gun.global_position, Color(0.98, 0.78, 0.32))
     enemy_guns.erase(gun)

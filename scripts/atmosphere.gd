@@ -3,8 +3,9 @@
 class_name Atmosphere
 
 ## Pirate flags on poles on the highest blocks, one per tower cluster, riding the block down.
-static func flags(level: Level, max_flags: int, wind: float) -> void:
-    var tops := _highest_blocks(level, max_flags, 1.6)
+static func flags(level: Level, max_flags: int, wind: float, spacing: float = 1.6) -> void:
+    # Only on something tower-high: a sandbag nest or a stack of crates flies no colours.
+    var tops := _highest_blocks(level, max_flags, spacing, 3.0)
     var shader: Shader = load("res://shaders/flag.gdshader")
     var i := 0
     for b in tops:
@@ -203,6 +204,8 @@ static func _highest_blocks(level: Level, count: int, spacing: float, min_y: flo
         var b := n as Block
         if b.is_fragment or b.material_name == "tnt" or b.material_name == "glass":
             continue
+        if not b.rotation.is_zero_approx():
+            continue   # a leaning board or strut: a pole on it would lean too
         var top := b.position.y + b.size.y / 2.0
         if top < min_y or top > max_y:
             continue

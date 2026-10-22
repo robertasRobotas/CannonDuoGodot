@@ -43,17 +43,18 @@ const LEVELS := {
     7: {"name": "The Stockade", "sub": "A log fort in the fields", "biome": "meadow", "sky": "noon", "sea": 0.1,
         "fort": ["stockade", "sand", -10.5, {"captives": 2}], "blast_radius": 0.8, "chain_delay": 0.0, "tnt_spark": false, "tnt_fall": 0.4,
         "tip": "Balls bounce off those logs. Hit a keg up in a lookout, or knock one down: the powder inside goes too, and the sentries with it."},
-    8: {"name": "Sea Duel", "sub": "Gunboats abeam", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "gunboats",
+    8: {"name": "Driftwood Camp", "sub": "A fort among its stores", "biome": "tropic", "sky": "sunset", "sea": 0.25, "file": 10,
+        "fort": ["medium", "far", -16.0, {"no_tnt": true, "pirates": 4, "props": true}], "shots": 8, "par": 4, "ammo": [],
+        "tip": "No powder here. Knock the towers down onto them; the stores about the fort are just timber."},
+    9: {"name": "Sandbag Battery", "sub": "Two guns dug in on the beach", "biome": "tropic", "sky": "noon", "sea": 0.35,
+        "fort": ["sandbags", "sand", -11.5, {}], "scenario": "sandbags", "shots": 10, "par": 4,
+        "ammo": [], "tip": "Two guns behind sandbags, firing wild. One ball sets a nest alight; the second blows it, gun and gunner."},
+    10: {"name": "Sea Duel", "sub": "Gunboats abeam", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "gunboats", "file": 8,
         "look": [0.0, 1.5, -14.0], "shots": 18, "par": 5, "hull": 3, "wave_axis": "x",
         "tip": "Three gunboats, one at a time, running alongside. One ball sinks one. Their fifth shot is the one that hits you: three of those and we are done."},
-    9: {"name": "Bay of Gulls", "sub": "Pirate ships in the bay", "biome": "tropic", "sky": "noon", "sea": 0.35, "shore": "cliffs",
-        "fort": ["coastal", "sand", -11.5, {"guns": 2}], "ships": [[-9.0, 3.6, 0.0, 2, true], [8.5, 3.9, 0.0, 2, true]],
-        "ammo": [], "tip": "Stone walls shrug off iron. The powder magazine behind them does not."},
-    10: {"name": "Longboats", "sub": "Boats off the beach", "biome": "tropic", "sky": "sunset", "sea": 0.25, "scenario": "landing",
-        "fort": ["medium", "far", -16.0, {"armed": 1}], "shots": 15, "par": 11,
-        "tip": "For a minute the boats keep coming. One ball each. Then the fort."},
-    11: {"name": "Port Alder", "sub": "The harbour", "biome": "harbor", "sky": "noon", "sea": 0.15,
-        "fort": ["harbor", "sand", -11.0, {"captives": 2, "armed": 1}], "tip": "Cranes and crates fall hard. Mind the people in cages."},
+    11: {"name": "Port Alder", "sub": "The harbour", "biome": "harbor", "sky": "noon", "sea": 0.15, "scenario": "sandbags",
+        "fort": ["harbor", "sand", -11.0, {"captives": 2, "no_tnt": true, "nest": true}], "blast_radius": 0.65, "blast_power": 0.5, "nest_markers": false,
+        "tip": "A gun dug in on the quay, firing wild: one ball sets it alight, the second blows it. Then the lookouts. Mind the people in cages."},
     12: {"mode": "whirl", "name": "Maelstrom Lane", "sub": "Whirlpools in the channel", "biome": "opensea", "sky": "overcast", "sea": 0.35, "dist": 300.0,
         "tip": "The funnels pull. Give every throat a wide berth."},
     13: {"name": "Eagle's Nest", "sub": "High on the cliff", "biome": "highlands", "sky": "overcast", "sea": 0.3,
@@ -122,8 +123,8 @@ const LEVELS := {
         "tip": "Every ship he has is here. Grimhorn stands on the highest tower."},
 }
 
-const SHOTS := {"small": 4, "perch": 4, "medium": 5, "large": 6, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
-const PAR := {"small": 2, "perch": 2, "medium": 3, "large": 3, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
+const SHOTS := {"small": 4, "perch": 4, "sandbags": 10, "medium": 5, "large": 6, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
+const PAR := {"small": 2, "perch": 2, "sandbags": 4, "medium": 3, "large": 3, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
 
 static func level_count() -> int:
     return LEVELS.size()
@@ -160,7 +161,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         d["offshore"] = r.offshore
     if r.has("intro_hold"):
         d["intro_hold"] = r.intro_hold
-    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall"]:
+    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "blast_power", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall", "nest_markers"]:
         if r.has(key):
             d[key] = r[key]
     # A voyage at the helm: no castle, no cannon; VoyageLevel reads mode and dist.
