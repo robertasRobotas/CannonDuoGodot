@@ -1,5 +1,9 @@
-## Maelstrom Lane: whirlpools in the channel, real funnels in the water that pull at the hull.
-## Skirt them. Get drawn into the throat and the ship goes round and down.
+## Maelstrom Lane: whirlpools in a storm, real funnels in the water that pull at the hull.
+## They open in the ship's own path, 20 to 25 m ahead and a little toward the nearer side
+## of the channel, one at a time: the next opens two to four seconds after the last is
+## astern. Skirt them. Get drawn into the throat and the ship goes round and down. The sea
+## sets gently toward the middle of the channel, so the centre is always the slightly
+## easier water. The only wreckage afloat is what goes round in the funnels.
 class_name VmWhirl
 extends VoyageMode
 
@@ -11,27 +15,34 @@ func build(voyage: VoyageLevel) -> void:
     win_title = "Through the maelstroms!"
     end_line = "Open water. Breathe, lad."
     intro_line = "Whirlpools ahead! Keep clear of the throats."
-    v.lane = 22.0
-    var rng := RandomNumberGenerator.new()
-    rng.seed = 1212
-    var z := -55.0
-    while z > -(v.goal - 25.0):
-        var r := rng.randf_range(6.0, 8.0)
-        var x := rng.randf_range(-7.0, 7.0)
-        _pool(x, z, r, rng)
-        if rng.randf() < 0.4:
-            # A second pool across the lane, leaving a gap between them.
-            var x2 := x + (r + rng.randf_range(10.0, 13.0)) * (1.0 if x < 0.0 else -1.0)
-            if absf(x2) < 17.0:
-                _pool(x2, z + rng.randf_range(-6.0, 6.0), rng.randf_range(5.5, 7.0), rng)
-        z -= rng.randf_range(32.0, 44.0)
+    v.lane = 33.0
+    has_hearts = false   # no hearts here: the maelstrom takes her whole or not at all
+    _rng.seed = int(v.data.get("rock_seed", 1212))   # a level may lay its funnels out its own way
+    _next_in = 3.0
+
+var _rng := RandomNumberGenerator.new()
+var _next_in := -1.0     # seconds until the next funnel opens (< 0: waiting to pass the last)
+var _last: Dictionary = {}
+const GROW := 6.0        # seconds a funnel takes to open from a small eddy to its full size
+
+## A funnel opens in the ship's path: 25 to 35 m ahead, and 3 to 5 m from her line toward
+## the nearer side of the channel, so the open water is always back toward the middle.
+func _spawn_ahead() -> void:
+    var sp := v.root.position
+    var side := signf(sp.x) if absf(sp.x) > 0.5 else (1.0 if _rng.randf() < 0.5 else -1.0)
+    var x := clampf(sp.x + side * _rng.randf_range(3.0, 5.0), -v.lane + 4.0, v.lane - 4.0)
+    var z := sp.z - _rng.randf_range(20.0, 25.0)
+    _pool(x, z, _rng.randf_range(6.0, 8.0) * 1.25, _rng)
+    _last = pools[pools.size() - 1]
+    if "--settle" in " ".join(OS.get_cmdline_user_args()) or "--autopilot" in OS.get_cmdline_user_args():
+        print("WHIRL funnel at x=%.1f z=%.1f r=%.1f (ship x=%.1f z=%.1f)" % [x, z, _last.r, sp.x, sp.z])
 
 func _pool(x: float, z: float, r: float, rng: RandomNumberGenerator) -> void:
-    var p := {"x": x, "z": z, "r": r, "depth": 2.4 + r * 0.12, "debris": []}
-    # Wreckage going round in it.
-    for i in 4:
+    var p := {"x": x, "z": z, "r": r, "depth": 2.4 + r * 0.12, "age": 0.0, "debris": []}
+    # Wreckage going round in it: planks and a couple of barrels.
+    for i in 8:
         var d := Debris.new()
-        d.setup(v.sea, i == 0, 0.9)
+        d.setup(v.sea, i % 4 == 0, 0.9)
         v.add_child(d)
         d.set_process(false)
         d.set_meta("ang", rng.randf() * TAU)
@@ -41,28 +52,53 @@ func _pool(x: float, z: float, r: float, rng: RandomNumberGenerator) -> void:
 
 func tick(delta: float) -> void:
     var sp := v.root.position
-    # The water knows the four nearest funnels.
+    var sailing := v.phase == VoyageLevel.Phase.SAILING
+    # The set toward the middle: gentle, stronger the further out she is.
+    if sailing:
+        v._lat_vel += -signf(sp.x) * minf(absf(sp.x) / v.lane, 1.0) * 1.4 * delta
+    # The next funnel: a few seconds after the last one is astern (or at the start).
+    if sailing and sp.z > -(v.goal - 40.0):
+        if _next_in >= 0.0:
+            _next_in -= delta
+            if _next_in < 0.0:
+                _spawn_ahead()
+                _next_in = -1.0
+        elif _last.is_empty() or float(_last.z) > sp.z + float(_last.r):
+            _next_in = _rng.randf_range(2.0, 4.0)
+    # Funnels well astern close and their wreckage goes.
+    for p: Dictionary in pools.duplicate():
+        if float(p.z) > sp.z + 70.0:
+            for n: Node3D in p.debris:
+                n.queue_free()
+            pools.erase(p)
+    # The water knows the four nearest funnels, each as open as it has had time to get.
     var near: Array = pools.filter(func(p): return absf(float(p.z) - sp.z) < 85.0)
     near.sort_custom(func(a, b): return absf(float(a.z) - sp.z) < absf(float(b.z) - sp.z))
     var packed: Array[Vector4] = []
     for p: Dictionary in near.slice(0, 4):
-        packed.append(Vector4(float(p.x), float(p.z), float(p.r), float(p.depth)))
+        p.age = float(p.age) + delta
+        var open := clampf(float(p.age) / GROW, 0.0, 1.0)
+        # It starts as a small eddy and widens and deepens as it opens.
+        var grow := 0.2 + 0.8 * open
+        packed.append(Vector4(float(p.x), float(p.z), float(p.r) * grow, float(p.depth) * (0.25 + 0.75 * open)))
     v.sea.set_sinks(packed)
     for p: Dictionary in near:
         var c := Vector2(float(p.x), float(p.z))
         var d := Vector2(sp.x, sp.z).distance_to(c)
         var r := float(p.r)
+        var open := clampf(float(p.age) / GROW, 0.0, 1.0)
+        var grow := 0.2 + 0.8 * open
         # The wreckage goes round, faster near the throat.
         for n: Node3D in p.debris:
             var rad := float(n.get_meta("rad"))
-            var ang := float(n.get_meta("ang")) + delta * (6.0 / maxf(rad, 1.0))
+            var ang := float(n.get_meta("ang")) + delta * (6.0 / maxf(rad, 1.0)) * open
             n.set_meta("ang", ang)
-            var pos := Vector3(c.x + cos(ang) * rad, 0, c.y + sin(ang) * rad)
+            var pos := Vector3(c.x + cos(ang) * rad * grow, 0, c.y + sin(ang) * rad * grow)
             pos.y = Tuning.SEA_LEVEL + v.sea.height(pos.x, pos.z) + 0.05
             n.position = pos
             n.rotation.y = -ang
-        if d < r * 1.9 and v.phase == VoyageLevel.Phase.SAILING:
-            var pull := pow(1.0 - d / (r * 1.9), 2.0) * 9.5
+        if d < r * grow * 1.9 and sailing:
+            var pull := pow(1.0 - d / (r * grow * 1.9), 2.0) * 9.5 * (0.3 + 0.7 * open)
             var toward := signf(c.x - sp.x)
             v._lat_vel += toward * pull * delta
             v.speed = maxf(v.speed - pull * 0.25 * delta, 2.5)
@@ -70,7 +106,7 @@ func tick(delta: float) -> void:
                 _said = true
                 v._say("She's being drawn in! Hard over!")
                 Haptics.rumble(1)
-            if d < r * 0.42:
+            if d < r * grow * 0.42:
                 _sink_in(p)
 
 ## Round and down.

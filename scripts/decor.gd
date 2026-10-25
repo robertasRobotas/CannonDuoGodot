@@ -21,7 +21,8 @@ static func style(data: Dictionary, storm: bool) -> Dictionary:
         sky = "storm"
     elif float(data.get("sea", 0.0)) >= 0.4 and sky == "noon":
         sky = "overcast"
-    return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2)), "tree_max": float(terrain.get("tree_max", 0.0))}
+    return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2)), "tree_max": float(terrain.get("tree_max", 0.0)),
+        "islets": bool(data.get("islets", true))}
 
 ## Areas nothing may be placed in (x, z rectangles): the castle and the view in front of it,
 ## and the sea lane the ship sails in along, far out to the right where it comes from.
@@ -66,8 +67,9 @@ static func build(parent: Node3D, level_id: int, biome: String, storm: bool, st:
     # One kind of island per biome: its own trees, hills and ground. Trees never mix.
     match biome:
         "opensea":
-            # Distant rocky islets around the open water.
-            for i in 9:
+            # Distant rocky islets around the open water (unless the level wants nothing
+            # but sea to the horizon).
+            for i in (9 if bool(st.get("islets", true)) else 0):
                 var m := Models.prop("coastal_cliff_01" if i % 3 == 0 else "namaqualand_cliff_01")
                 var k := rng.randf_range(0.3, 0.6) if i % 3 == 0 else rng.randf_range(2.0, 4.0)
                 m.scale = Vector3(k, k, k)

@@ -33,8 +33,11 @@ var waypoint := Vector3.INF      # sail here instead, and say so on arrival
 var max_hp := 2
 var interval_jitter := 0.0       # each wait between shots varies by up to this much
 ## With hits_every > 0 the gunners find the range only every so many shots: the others
-## are aimed wide on purpose, the one in `hits_every` is laid dead on `sure_target`.
+## are aimed wide on purpose, the one in `hits_every` is laid dead on `sure_target`. With
+## hits_every_max above it, each count is drawn anew between the two.
 var hits_every := 0
+var hits_every_max := 0
+var _next_sure := 0
 var sure_target := Vector3.INF   # where a sure shot goes (the player's gun), set by Level
 var _shot_n := 0
 var _rig_gone := false
@@ -98,14 +101,110 @@ static func _split_mesh() -> void:
 func hit(at: Vector3) -> void:
     _list += 0.08 if length < 9.0 else 0.045
     _hole(at)
-    if _fires.size() < 3:
+    if _fires.size() < (5 if length >= 9.0 else 3):
         var f := _flames(1.0)
         add_child(f)
         f.global_position = at
         f.position.y = maxf(f.position.y, 0.4)
         _fires.append(f)
     if length >= 9.0 and hit_points <= max_hp / 2 and not _rig_gone:
-        _topple_rig()
+        if sails_burn:
+            _light_sails()
+        else:
+            _topple_rig()
+
+## Dress a big ship as the pirate galleon: a small black flag on a staff at the stern, and
+## two guns run out on the deck on the side that faces the player (+z), each standing on
+## the deck as the model has it there. Her fire comes from the two guns in turn.
+func dress_galleon() -> void:
+    var s := length / HULL_LEN
+    # Model space (bow +z, up y) to ship space: the model is turned a quarter back, so
+    # model z lands on -x and model x on z.
+    # The flag: a short staff on the taffrail, right aft and on the centreline.
+    var stern := Vector3(18.6 * s, _deck_height(0.0, -18.5) * s + _model.position.y, 0.0)
+    Atmosphere.ship_flag(self, stern, 0, 0.7)
+    for mz in [4.0, -8.0]:
+        var gun := Models.instance("res://assets/hq/cannon/cannon_01_1k.gltf")
+        Models.fit(gun, Vector3(0.6, 0.55, 0.95) * 1.5, true)
+        Models.tint(gun, Color(0.7, 0.65, 0.65))
+        gun.position = Vector3(-mz * s, _deck_height(2.6, mz) * s + _model.position.y, 2.6 * s)
+        _model.get_parent().add_child(gun)
+        gun.owner = null
+        _guns_deco.append(gun)
+        _gun_dead.append(false)
+        for arg in OS.get_cmdline_user_args():
+            if arg.begins_with("--settle="):
+                print("GALLEON gun %d at local %s" % [_guns_deco.size() - 1, gun.position])
+
+## The deck's height in the model at (x, z): the top of the deck surface's vertices within
+## a metre or so, so a gun stands on the planking, over a hatch or a step alike.
+static var _deck_verts := PackedVector3Array()
+static func _deck_height(mx: float, mz: float) -> float:
+    if _deck_verts.is_empty():
+        var src: Mesh = Models.prop("pinnace").mesh
+        for i in src.get_surface_count():
+            var mat := src.surface_get_material(i)
+            if mat and mat.resource_name == "ship_pinnace_deck":
+                _deck_verts = src.surface_get_arrays(i)[Mesh.ARRAY_VERTEX]
+    var best := -INF
+    for v in _deck_verts:
+        if absf(v.x - mx) < 1.2 and absf(v.z - mz) < 1.2:
+            best = maxf(best, v.y)
+    return best if best > -INF else 8.0
+
+var _guns_deco: Array = []
+var _gun_dead: Array = []     # per deck gun: knocked out by a ball, fires no more
+var _gun_i := 0               # which of the two deck guns fires next
+var sails_burn := false       # half way down, the sails catch fire instead of the masts falling
+var _sails_lit := false
+
+## The sails catch: fire up every mast where the canvas hangs, the rig scorched dark.
+func _light_sails() -> void:
+    if _sails_lit:
+        return
+    _sails_lit = true
+    var s := length / HULL_LEN
+    for mz in [9.0, -3.0, -13.0]:
+        for my in [13.0, 21.0]:
+            var f := _flames(1.3)
+            add_child(f)
+            f.position = Vector3(-mz * s, my * s + _model.position.y, 0.0)
+            _fires.append(f)
+    if _rig:
+        Models.tint(_rig, Color(0.42, 0.36, 0.33))
+
+## The deck gun nearest `at` (world), within reach of a ball, that still works; -1 if none.
+## A ball stops at the hull's side, a little outboard of the guns, so the reach is measured
+## along the hull and in height only, and the ball must come in at deck height.
+func gun_near(at: Vector3) -> int:
+    var best := -1
+    var best_d := 1.6
+    var lp := to_local(at)
+    for i in _guns_deco.size():
+        if _gun_dead[i] or not is_instance_valid(_guns_deco[i]):
+            continue
+        var g := (_guns_deco[i] as Node3D).position
+        if lp.y < g.y - 0.6:
+            continue
+        var d := Vector2(lp.x - g.x, lp.y - g.y).length()
+        if d < best_d:
+            best_d = d
+            best = i
+    return best
+
+## A ball into a deck gun: it is thrown over on its side, smokes, and fires no more.
+func hit_gun(i: int) -> void:
+    if i < 0 or i >= _guns_deco.size() or _gun_dead[i]:
+        return
+    _gun_dead[i] = true
+    var g := _guns_deco[i] as Node3D
+    g.rotation.z += 1.2
+    g.position.y += 0.1
+    var smoke := _smoke(0.9)
+    smoke.position = g.position + Vector3(0, 0.4, 0)
+    add_child(smoke)
+var debris_scale := 1.0       # the wreckage's size, over the hull's own scale
+var _rig_extras: Array = []   # the flag and its pole: they go over the side with the masts
 
 ## A black shot hole with splintered planking round it, kept in ship space.
 func _hole(at: Vector3) -> void:
@@ -149,6 +248,10 @@ func _topple_rig() -> void:
     _model.remove_child(_rig)
     world.add_child(_rig)
     _rig.global_transform = rig_xf
+    for n in _rig_extras:
+        if is_instance_valid(n):
+            (n as Node3D).reparent(_rig, true)   # the flag falls with the mast it flies from
+    _rig_extras.clear()
     var side := 1.0 if randf() < 0.5 else -1.0
     var tw := _rig.create_tween()
     tw.set_parallel(true)
@@ -216,7 +319,7 @@ func break_apart(sea: Sea, fx: Fx) -> void:
     var n := int(16 + 10 * (k - 1.0))
     for i in n:
         var d := Debris.new()
-        d.setup(sea, i % 6 == 0, k)
+        d.setup(sea, i % 6 == 0, k * debris_scale)
         world.add_child(d)
         d.global_position = center + Vector3(randf_range(-1, 1) * length * 0.3, randf_range(0, 0.6), randf_range(-0.6, 0.6))
         d.velocity = Vector3(randf_range(-5, 5), randf_range(4, 10), randf_range(-5, 5)) * (0.8 + 0.3 * k)
@@ -311,9 +414,30 @@ func tick(delta: float, now: float, sea: Sea, player_pos: Vector3) -> void:
         if next_fire <= 0.0:
             next_fire = interval + randf_range(-interval_jitter, interval_jitter)
             var origin := to_global(Vector3(0.6, 0.9, 0.6) * (length / 5.5))
+            if not _guns_deco.is_empty():
+                # The deck guns fire in turn, each from its own muzzle; a knocked-out gun
+                # is skipped, and with both gone she is silent.
+                var live := 0
+                for dead in _gun_dead:
+                    if not dead:
+                        live += 1
+                if live == 0:
+                    return
+                while _gun_dead[_gun_i % _guns_deco.size()]:
+                    _gun_i += 1
+                var g := _guns_deco[_gun_i % _guns_deco.size()] as Node3D
+                _gun_i += 1
+                if is_instance_valid(g):
+                    origin = g.global_position + Vector3(0, 0.5, 0.9)
             if hits_every > 0:
                 _shot_n += 1
-                if _shot_n % hits_every == 0:
+                if _next_sure == 0:
+                    _next_sure = randi_range(hits_every, maxi(hits_every, hits_every_max))
+                var sure_now := _shot_n >= _next_sure
+                if sure_now:
+                    _shot_n = 0
+                    _next_sure = 0
+                if sure_now:
                     # The one that tells: laid dead on the gun, no scatter.
                     var sure := sure_target if sure_target != Vector3.INF else player_pos
                     fired.emit(origin, EnemyGun.solve(origin, sure, Tuning.ENEMY_BALL_SPEED, 0.0))

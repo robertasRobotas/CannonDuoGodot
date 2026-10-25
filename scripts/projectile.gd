@@ -12,6 +12,10 @@ var type: String = "iron"
 var spawn_time: float = 0.0
 var origin: Vector3
 var _done := false
+var last_speed := 0.0   # the speed at the start of the last physics step: the speed it struck with
+
+func _physics_process(_delta: float) -> void:
+    last_speed = linear_velocity.length()
 
 func setup(t: String, velocity: Vector3) -> void:
     type = t

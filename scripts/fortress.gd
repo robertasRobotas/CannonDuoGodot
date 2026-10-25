@@ -14,6 +14,7 @@ const STEP := FLOOR_H + PLANK
 const ROCK_H := 2.4
 const MOUND_H := 4.2
 const CLIFF_H := 6.5
+const CRAG_H := 6.5   # a stone crag: the mound's shape at the cliff's height
 
 var blocks: Array = []
 var targets: Array = []
@@ -24,6 +25,7 @@ var _tops: Array = []   # [x, z, width] of each tower, for guns and cages
 var captives: Array = []
 var no_tnt := false
 var nest := false   # the wharf: a sandbag gun nest in the middle, before the lookouts
+var log_share := 0.0   # this share of the plain planks and posts are built of logs instead (looks only)
 var _cage_n := 0
 
 ## kind: small, medium, large, huge, boss, mega, harbor, battery, or daily (random).
@@ -36,11 +38,12 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
     f.rng.seed = seed_value
     f.no_tnt = bool(opts.get("no_tnt", false))
     f.nest = bool(opts.get("nest", false))
+    f.log_share = float(opts.get("log_share", 0.0))
     if kind == "daily":
         kind = ["small", "medium", "large", "large"][f.rng.randi_range(0, 3)]
         site = ["sand", "rock", "cliff", "far"][f.rng.randi_range(0, 3)]
         z = -16.0 if site == "far" else -10.5
-    var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "huge": 18.0, "boss": 18.0,
+    var width := {"small": 5.0, "medium": 10.0, "large": 13.0, "keep": 6.0, "castle": 14.0, "huge": 18.0, "boss": 18.0,
         "mega": 21.0, "harbor": 17.0, "battery": 5.0, "stockade": 14.0, "coastal": 17.0, "perch": 7.0, "sandbags": 16.0,
         "keyhole": 12.0, "lighthouse": 6.0, "ropebridge": 16.0, "pier": 8.0}.get(kind, 10.0) as float
     f._site(site, width, z)
@@ -48,6 +51,8 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "small": f._small(z)
         "medium": f._medium(z)
         "large": f._large(z)
+        "keep": f._keep(z)
+        "castle": f._castle(z)
         "huge": f._huge(z)
         "boss": f._boss(z)
         "mega": f._mega(z)
@@ -63,6 +68,8 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "coastal": f._coastal_battery(z)
     if bool(opts.get("props", false)):
         f._props(z, width)
+    if bool(opts.get("logs", false)):
+        f._log_works(z)
     if opts.has("pirates"):
         f._thin_pirates(int(opts.pirates))
     f._place_guns(int(opts.get("guns", 0)))
@@ -81,8 +88,8 @@ static func generate(seed_value: int, kind: String, site: String = "sand", z: fl
         "captives": f.captives,
         "enemyCannons": f.guns,
         "lookAt": [0, look_y, z],
-        "pitch": -5.5 if site == "cliff" else (-7.0 if top > 10.0 else -9.0),
-        "shore": {"far": "sand", "sand": "sand", "rock": "rocks", "cliff": "cliffs", "mound": "sand"}.get(site, "sand"),
+        "pitch": -5.5 if site in ["cliff", "crag"] else (-7.0 if top > 10.0 else -9.0),
+        "shore": {"far": "sand", "sand": "sand", "rock": "rocks", "cliff": "cliffs", "mound": "sand", "knoll": "sand", "crag": "cliffs"}.get(site, "sand"),
         "beach": 12.0 if site == "far" else 4.2,
         "offshore": 3.0 if site == "far" else 8.0,
     }
@@ -102,6 +109,17 @@ func _site(site: String, width: float, z: float) -> void:
             # on its level top, SKIRT in from the edge.
             _blk("stone", Vector3(0, MOUND_H / 2.0, z), Vector3(width + 2.5 + 2.0 * Mound.SKIRT, MOUND_H, 7.0 + 2.0 * Mound.SKIRT), {"isStatic": true, "style": "mound"})
             base = MOUND_H
+        "knoll":
+            # The hillfort mound at half its size: half the height, half the skirt, the
+            # same level top for the fort.
+            var sk := Mound.SKIRT * 0.5
+            _blk("stone", Vector3(0, MOUND_H / 4.0, z), Vector3(width + 2.5 + 2.0 * sk, MOUND_H / 2.0, 7.0 + 2.0 * sk), {"isStatic": true, "style": "mound:small"})
+            base = MOUND_H / 2.0
+        "crag":
+            # A crag: the hillfort mound's shape in bare rock, cliff-high, with a top wide
+            # and deep enough for the whole fort and the cages beyond its ends.
+            _blk("stone", Vector3(0, CRAG_H / 2.0, z), Vector3(width + 6.5 + 2.0 * Mound.SKIRT, CRAG_H, 9.0 + 2.0 * Mound.SKIRT), {"isStatic": true, "style": "mound:stone"})
+            base = CRAG_H
         _:
             base = 0.0
 
@@ -121,6 +139,58 @@ func _medium(z: float) -> void:
         var x := side * 3.7
         _tower(x, z + 0.3, 2, 2.3, -side)
         _bridge(side * 1.5, x - side * 1.15, 2, z + 0.1)
+
+## A great round tower of red brick, as on the hill above the old town: three storeys,
+## near-straight sides, a flat top with a low parapet, a gun up there laid on the ship,
+## and wooden works either side of its foot with a store of powder in each. The tower
+## itself is solid: no ball and no blast moves it.
+func _castle(z: float) -> void:
+    var H := 2.6
+    var y := 0.0
+    for storey in 3:
+        var w := lerpf(4.2, 3.8, float(storey) / 2.0)
+        _part("stone", Vector3(0, y + H / 2.0, z), Vector3(w, H, w), {"style": "drum", "isStatic": true})
+        y += H
+    _part("stone", Vector3(0, y + 0.15, z), Vector3(4.0, 0.3, 4.0), {"style": "drum", "isStatic": true})
+    y += 0.3
+    # The parapet: merlons round the rim.
+    for i in 10:
+        var a := float(i) / 10.0 * TAU
+        _part("stone", Vector3(cos(a) * 1.75, y + 0.3, z + sin(a) * 1.75), Vector3(0.5, 0.6, 0.4), {"rotation": [0, -rad_to_deg(a), 0]})
+    # The gun on a plinth in the middle, its crew either side.
+    _part("stone", Vector3(0, y + 0.3, z + 0.2), Vector3(1.6, 0.6, 1.8), {"style": ":grey"})
+    # A big piece with its own powder beside it: hit, it blows with two kegs' force.
+    guns.append({"position": [0.0, base + y + 0.62, z + 0.2], "interval": 5.5, "jitter": 1.0, "power": 0.5, "scale": 2.1, "blast": 2.0})
+    for sx: float in [-1.0, 1.0]:
+        _guard(Vector3(sx * 1.4, y, z + 1.2))
+    _tops.append([0.0, z, 4.0])
+    # Wooden works either side, each with its store of powder.
+    var left := -(2.1 + 2.4)
+    for dx: float in [-1.0, 1.0]:
+        for dz: float in [-0.9, 0.9]:
+            _part("wood", Vector3(left + dx, 1.0, z + dz), Vector3(0.2, 2.0, 0.2))
+    _part("wood", Vector3(left, 2.07, z), Vector3(2.6, 0.14, 2.3))
+    _part("tnt", Vector3(left - 0.3, 0.4, z + 0.1), Vector3(0.6, 0.8, 0.6))
+    _part("wood", Vector3(left + 0.5, 0.4, z - 0.3), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _guard(Vector3(left - 2.0, 0.0, z + 0.6))
+    var right := 2.1 + 1.8
+    _watch_post(right, z + 0.4)
+    _crate_stack(right + 2.6, z + 0.6, true)   # its middle crate is a keg
+    # In front: a bit of fence, a barrel and a crate.
+    for i in 4:
+        _part("wood", Vector3(-1.5 + i * 1.0, 0.5, z + 3.8), Vector3(0.14, 1.0, 0.14))
+    _part("wood", Vector3(0.0, 1.05, z + 3.8), Vector3(3.3, 0.1, 0.1))
+    _part("wood", Vector3(-3.4, 0.4, z + 3.5), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
+    _part("wood", Vector3(3.0, 0.4, z + 3.5), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+
+## The keep: the large fort's great tower with a wooden tower either side (no bridges),
+## and, with `nest`, a gun dug in before it behind walls of logs.
+func _keep(z: float) -> void:
+    _tower(0.0, z, 4, 3.2)
+    for side: float in [-1.0, 1.0]:
+        _tower(side * 4.3, z + 0.3, 3, 2.4)
+    if nest:
+        _nest(0.0, z + 5.6, 1.0, "logs")
 
 func _large(z: float) -> void:
     _tower(0.0, z, 4, 3.2)
@@ -217,10 +287,18 @@ func _beach_props(z: float) -> void:
         _part("wood", Vector3(side * 10.7, 0.4, z - 0.9), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
         _part("wood", Vector3(side * 9.6, 0.35, z + 1.4), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
 
-func _nest(x: float, z: float, side: float) -> void:
+## `wall`: "sandbag" (courses of bags) or "logs" (three walls of stacked logs, the fort's
+## own timber). Either way the walls are timber: balls bounce, only a blast throws them.
+func _nest(x: float, z: float, side: float, wall: String = "sandbag") -> void:
     var bag := Vector3(1.0, 0.36, 0.6)
     var front := z + 1.3
-    for course in 3:
+    if wall == "logs":
+        # Log walls in the bags' place: a low one across the front, taller ones down the
+        # sides. Tagged "nest" so the scenario knows them for the nest's.
+        _part("timber", Vector3(x, 0.36, front), Vector3(3.6, 0.72, 0.6), {"style": "logs:nest"})
+        for sx: float in [-1.0, 1.0]:
+            _part("timber", Vector3(x + sx * 2.1, 0.54, front - 2.0), Vector3(0.6, 1.08, 3.0), {"style": "logs:nest"})
+    for course in (0 if wall == "logs" else 3):
         var y := bag.y / 2.0 + course * bag.y
         var stagger := 0.5 * (course % 2)
         # Across the front, four bags, staggered course to course; two courses only, so
@@ -489,21 +567,31 @@ func _keyhole(z: float) -> void:
 ## A square lighthouse in red and white bands on its rock, the lantern at the top, a keeper's
 ## hut with powder at its foot. The lantern is the point of the level (see ScnLighthouse).
 func _lighthouse(z: float) -> void:
+    # The tower: white stone, flared wide at the foot and tapering to the gallery. The
+    # lower half is one solid piece, part of the rock: no ball rocks it, and it stands when
+    # the top goes. The upper half is loose courses, for the blast in the lantern to throw.
     var rows := 9
-    for row in rows:
-        var w := 1.7 - row * 0.05
-        var tint := ":red" if (row / 3) % 2 == 1 else ":white"
-        _part("stone", Vector3(0, 0.5 + row, z), Vector3(w, 0.98, w), {"style": tint})
-    _part("wood", Vector3(0, rows + 0.1, z), Vector3(2.6, 0.2, 2.6))
-    for side: float in [-1.0, 1.0]:
-        _part("wood", Vector3(side * 1.2, rows + 0.5, z), Vector3(0.1, 0.6, 2.4))
-    _part("wood", Vector3(0, rows + 0.75, z), Vector3(0.9, 1.0, 0.9), {"style": "lamp"})
-    _guard(Vector3(0.95, rows + 0.2, z + 0.9))
-    # The keeper's hut and his powder, and two pirates on the rock.
+    var half := 5
+    _part("stone", Vector3(0, half / 2.0, z), Vector3(2.6, half, 1.9), {"style": "shaft:white", "isStatic": true})
+    for row in range(half, rows):
+        var k := float(row) / float(rows - 1)
+        var w := lerpf(2.6, 1.5, pow(k, 0.55))
+        _part("stone", Vector3(0, 0.5 + row, z), Vector3(w, 0.98, w), {"style": "drum:white"})
+    # The gallery: a stone slab with a railing of posts round it.
+    _part("stone", Vector3(0, rows + 0.1, z), Vector3(2.9, 0.2, 2.9), {"style": "drum:white"})
+    for i in 8:
+        var a := float(i) / 8.0 * TAU
+        _part("metal", Vector3(cos(a) * 1.3, rows + 0.55, z + sin(a) * 1.3), Vector3(0.08, 0.7, 0.08))
+    # The lantern room: the light, and the keg of powder that feeds it. One ball up here
+    # and the top of the tower goes.
+    _part("tnt", Vector3(0, rows + 0.85, z), Vector3(1.1, 1.3, 1.1), {"style": "lamp"})
+    _guard(Vector3(1.0, rows + 0.2, z + 1.0))
+    # The keeper's hut, with two crates by it, and two pirates on the rock. The only
+    # powder is up in the lantern.
     var y := _storey(-2.6, z + 0.4, 1.5, 1.5, 0.0, 0.2, true, false)
     _part("wood", Vector3(-2.6, y + 0.3, z + 0.4), Vector3(1.9, 0.5, 1.9), {"style": "roof"})
-    _part("tnt", Vector3(-1.5, 0.4, z + 1.6), Vector3(0.6, 0.8, 0.6))
-    _part("tnt", Vector3(1.6, 0.4, z + 1.5), Vector3(0.6, 0.8, 0.6))
+    _part("wood", Vector3(-1.5, 0.4, z + 1.6), Vector3(0.7, 0.7, 0.7), {"style": "crate"})
+    _part("wood", Vector3(1.6, 0.4, z + 1.5), Vector3(0.58, 0.8, 0.58), {"style": "barrel"})
     _guard(Vector3(1.6, 0.0, z + 2.3))
     _guard(Vector3(-2.6, y + 0.55, z + 0.4))
 
@@ -605,6 +693,10 @@ func _blk(mat: String, pos: Vector3, size: Vector3, extra: Dictionary = {}) -> v
         # A castle without powder: the barrel spots hold plain cargo crates.
         mat = "wood"
         extra = {"style": "crate"}
+    if mat == "wood" and log_share > 0.0 and not (extra.has("style") or extra.has("cage") or extra.has("attach")) and rng.randf() < log_share:
+        # Built of logs: the same breakable wood, drawn as stacked rounds.
+        extra = extra.duplicate()
+        extra["style"] = "logs"
     var b := {"material": mat, "position": [pos.x, pos.y, pos.z], "size": [size.x, size.y, size.z]}
     b.merge(extra)
     blocks.append(b)
@@ -742,8 +834,8 @@ func _place_cages(count: int, deserters: int) -> void:
     var top_hw := 0.0     # a mound's level top: the cages stay up on it, inside its edge
     var mound_z := 0.0
     for b in blocks:
-        if b.get("style", "") == "mound":
-            top_hw = float(b.size[0]) / 2.0 - Mound.SKIRT
+        if str(b.get("style", "")).begins_with("mound"):
+            top_hw = float(b.size[0]) / 2.0 - Mound.skirt_of(str(b.style).get_slice(":", 1))
             mound_z = float(b.position[2])
             continue
         reach = maxf(reach, absf(float(b.position[0])) + float(b.size[0]) / 2.0)
@@ -766,6 +858,13 @@ func _place_cages(count: int, deserters: int) -> void:
                 _part("wood", Vector3(x + dx, 0.62, cz + dz), Vector3(0.1, 1.24, 0.1), {"cage": _cage_n})
         _part("wood", Vector3(x, 1.3, cz), Vector3(1.1, 0.12, 1.1), {"cage": _cage_n})
         captives.append({"position": [x, base + 0.45, cz], "cage": _cage_n, "deserter": i >= count})
+
+## Timber for a fort: a low wall of logs across the front either side of the way in, and a
+## stack of logs behind. Logs shrug off balls; a blast throws them.
+func _log_works(z: float) -> void:
+    for side: float in [-1.0, 1.0]:
+        _logs(Vector3(side * 3.4, 0.5, z + 2.8), Vector3(5.0, 1.0, 0.6))
+    _logs(Vector3(0.0, 0.5, z - 2.6), Vector3(3.0, 1.0, 0.7))
 
 ## Keep only `keep` pirates, taken evenly from the fort's full crew so every part of it
 ## still has someone.

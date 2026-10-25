@@ -14,6 +14,8 @@ var _ammo: HBoxContainer
 var _ammo_shown := -1
 var _stats: Label
 var _hearts: Label
+var _duel_fill: ColorRect
+var _duel_label: Label
 var _power_fill: ColorRect
 var _power_label: Label
 var _hint: Label
@@ -94,6 +96,24 @@ func _build() -> void:
     col.add_child(_stats)
     _gold = _label("", FONT_SIZE, Color(1.0, 0.84, 0.36))
     col.add_child(_gold)
+    if level.scenario and "progress" in level.scenario:
+        # A duel: how far gone the enemy ship is, 0 to 100 percent.
+        var row := HBoxContainer.new()
+        row.add_theme_constant_override("separation", 14)
+        var track := Control.new()
+        track.custom_minimum_size = Vector2(420, 22)
+        var bg := ColorRect.new()
+        bg.color = Color(1, 1, 1, 0.18)
+        bg.size = Vector2(420, 22)
+        track.add_child(bg)
+        _duel_fill = ColorRect.new()
+        _duel_fill.color = Color(0.95, 0.35, 0.25)
+        _duel_fill.size = Vector2(0, 22)
+        track.add_child(_duel_fill)
+        row.add_child(track)
+        _duel_label = _label("0%", FONT_SIZE)
+        row.add_child(_duel_label)
+        col.add_child(row)
     top.add_child(col)
     add_child(top)
 
@@ -388,6 +408,10 @@ func _refresh() -> void:
         _ammo_shown = level.shots_used
         _build_ammo()
     _power_label.text = "%d%%" % int(level.power * 100)
+    if _duel_fill and level.scenario:
+        var k: float = float(level.scenario.get("progress"))
+        _duel_fill.size.x = 420.0 * k
+        _duel_label.text = "%d%%" % int(round(k * 100.0))
     _power_fill.size.y = maxf(4, 416 * level.power)
     _power_fill.position.y = 420 - _power_fill.size.y
     var hint := ""

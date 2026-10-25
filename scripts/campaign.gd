@@ -49,29 +49,32 @@ const LEVELS := {
     9: {"name": "Sandbag Battery", "sub": "Two guns dug in on the beach", "biome": "tropic", "sky": "noon", "sea": 0.35,
         "fort": ["sandbags", "sand", -11.5, {}], "scenario": "sandbags", "shots": 10, "par": 4,
         "ammo": [], "tip": "Two guns behind sandbags, firing wild. One ball sets a nest alight; the second blows it, gun and gunner."},
-    10: {"name": "Sea Duel", "sub": "Gunboats abeam", "biome": "opensea", "sky": "sunset", "sea": 0.4, "offshore": 0.0, "scenario": "gunboats", "file": 8,
-        "look": [0.0, 1.5, -14.0], "shots": 18, "par": 5, "hull": 3, "wave_axis": "x",
-        "tip": "Three gunboats, one at a time, running alongside. One ball sinks one. Their fifth shot is the one that hits you: three of those and we are done."},
+    10: {"name": "Broadside", "sub": "A galleon, gun to gun", "biome": "opensea", "sky": "noon", "sea": 0.3, "offshore": 0.0, "scenario": "duel", "file": 8,
+        "look": [0.0, 2.5, -24.0], "shots": 14, "par": 8, "hull": 4, "islets": false, "ammo": [],
+        "tip": "A galleon, thirty metres off, and nothing but sea. Six balls sink her. Every third or fourth of hers finds us: four and we go down."},
     11: {"name": "Port Alder", "sub": "The harbour", "biome": "harbor", "sky": "noon", "sea": 0.15, "scenario": "sandbags",
         "fort": ["harbor", "sand", -11.0, {"captives": 2, "no_tnt": true, "nest": true}], "blast_radius": 0.65, "blast_power": 0.5, "nest_markers": false,
         "tip": "A gun dug in on the quay, firing wild: one ball sets it alight, the second blows it. Then the lookouts. Mind the people in cages."},
-    12: {"mode": "whirl", "name": "Maelstrom Lane", "sub": "Whirlpools in the channel", "biome": "opensea", "sky": "overcast", "sea": 0.35, "dist": 300.0,
-        "tip": "The funnels pull. Give every throat a wide berth."},
-    13: {"name": "Eagle's Nest", "sub": "High on the cliff", "biome": "highlands", "sky": "overcast", "sea": 0.3,
-        "fort": ["large", "cliff", -15.5, {"captives": 1}], "ammo": ["stone", "stone", "iron", "stone", "stone", "iron"], "tip": "The fort is on the cliff top. Aim high and pull hard."},
-    14: {"name": "The Lighthouse", "sub": "Put out the light", "biome": "tropic", "sky": "night", "sea": 0.25, "shore": "rocks", "scenario": "lighthouse",
-        "fort": ["lighthouse", "rock", -9.0, {}], "offshore": 6.0, "shots": 9, "par": 3,
-        "tip": "The pirate ship steers by the lantern. Shoot it out and the reef does the rest."},
-    15: {"name": "Night Watch", "sub": "By torchlight", "biome": "tropic", "sky": "night", "sea": 0.2,
-        "fort": ["medium", "sand", -10.0, {"captives": 2, "armed": 1}], "tip": "Torches show the towers. The one with a gun shoots back."},
-    16: {"name": "Broadside", "sub": "Ship against ship", "biome": "opensea", "sky": "noon", "sea": 0.4, "offshore": 0.0,
-        "ships": [[-3.0, -15.0, 0.0, 7, true, 10.5], [10.0, -11.0, 0.0, 2, true]], "look": [0.0, 2.0, -15.0], "shots": 15, "par": 10,
-        "tip": "Her masts come down at half. Keep hitting the hull."},
-    17: {"name": "Twin Keeps", "sub": "Red Bjorn's stronghold", "biome": "meadow", "sky": "overcast", "sea": 0.4,
-        "fort": ["boss", "rock", -13.0, {"guns": 1, "captives": 2, "armed": 2}], "ships": [[-9.5, 3.6, 0.0, 2, true]],
-        "tip": "Red Bjorn, Grimhorn's right hand. Powder under every keep."},
-    18: {"mode": "escape", "name": "The Eye", "sub": "Caught in the maelstrom", "biome": "opensea", "sky": "overcast", "sea": 0.6, "dist": 0.0,
-        "tip": "Hold the rudder in the white window and she climbs out. Let it wander and she goes down."},
+    12: {"mode": "whirl", "name": "Maelstrom Lane", "sub": "Whirlpools in the storm", "biome": "opensea", "sky": "night", "sea": 1.0, "swell": 1.8, "storm": true, "dist": 300.0,
+        "tip": "A storm, and the funnels pull. Give every throat a wide berth; the sea runs easiest down the middle."},
+    13: {"name": "Eagle's Nest", "sub": "High on the crag", "biome": "highlands", "sky": "overcast", "sea": 0.3,
+        "fort": ["large", "crag", -21.0, {"captives": 1, "logs": true, "log_share": 1.0}], "ammo": ["stone", "stone", "iron", "stone", "stone", "iron"], "tip": "The fort is on the crag's top. Aim high and pull hard; the logs only fall to a blast."},
+    14: {"name": "The Lighthouse", "sub": "Put out the light", "biome": "tropic", "sky": "night", "sea": 0.25, "scenario": "beacon",
+        "fort": ["lighthouse", "knoll", -9.0, {}], "offshore": 6.0, "shots": 9, "par": 3, "blast_radius": 1.0, "torches": false,
+        "tip": "The powder is up in the lantern. One ball there and the top of the tower comes down."},
+    15: {"name": "Night Watch", "sub": "By firelight", "biome": "tropic", "sky": "night", "sea": 0.2, "torches": false, "scenario": "sandbags", "nest_markers": false,
+        "fort": ["keep", "sand", -10.0, {"captives": 2, "no_tnt": true, "log_share": 1.0, "nest": true}], "shots": 9, "par": 5,
+        "ammo": ["iron", "tnt", "iron", "iron", "tnt", "iron", "iron", "iron", "iron"],
+        "bonfires": [[-7.5, -7.5], [7.5, -7.5]], "blast_radius": 0.65, "blast_power": 0.5,
+        "tip": "A gun dug in before the log keep: one ball sets it alight, the second blows it. Then the towers. Two of your balls are powder."},
+    16: {"mode": "whirl", "name": "Fog Lane", "sub": "Whirlpools in the fog", "biome": "opensea", "sky": "night", "sea": 1.0, "swell": 1.8, "storm": true, "dist": 300.0,
+        "light": 3.2, "fog_dist": 45.0, "rock_seed": 1616,
+        "tip": "The storm again, and fog with it: the funnels show forty-five metres out. Keep to the middle."},
+    17: {"name": "Brick Tower", "sub": "The old tower on the hill", "biome": "meadow", "sky": "overcast", "sea": 0.4, "scenario": "twin_powder",
+        "fort": ["castle", "sand", -13.0, {"captives": 2}], "ammo": [],
+        "tip": "The tower will not fall. Powder in the works either side of it: blow both, and the gun on top shoots back."},
+    18: {"mode": "escape", "name": "The Eye", "sub": "Caught in the maelstrom", "biome": "opensea", "sky": "night", "sea": 1.0, "swell": 1.8, "storm": true, "dist": 0.0,
+        "tip": "Keep the rudder in the white window and she climbs out. The window never stops moving."},
     19: {"json": true, "file": 11, "name": "Open Water", "sub": "Boats across the sea", "biome": "opensea", "tip": "Sink every boat before it reaches the hull."},
     20: {"mode": "wrecks", "name": "Graveyard of Ships", "sub": "The sea after a battle", "biome": "opensea", "sky": "sunset", "sea": 0.3, "dist": 300.0,
         "tip": "Burning oil takes the rigging. Wreckage takes the hull. Thread between them."},
@@ -123,8 +126,8 @@ const LEVELS := {
         "tip": "Every ship he has is here. Grimhorn stands on the highest tower."},
 }
 
-const SHOTS := {"small": 4, "perch": 4, "sandbags": 10, "medium": 5, "large": 6, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
-const PAR := {"small": 2, "perch": 2, "sandbags": 4, "medium": 3, "large": 3, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
+const SHOTS := {"small": 4, "perch": 4, "sandbags": 10, "medium": 5, "large": 6, "keep": 6, "castle": 8, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
+const PAR := {"small": 2, "perch": 2, "sandbags": 4, "medium": 3, "large": 3, "keep": 3, "castle": 4, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
 
 static func level_count() -> int:
     return LEVELS.size()
@@ -161,7 +164,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         d["offshore"] = r.offshore
     if r.has("intro_hold"):
         d["intro_hold"] = r.intro_hold
-    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "blast_power", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall", "nest_markers"]:
+    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "blast_power", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall", "nest_markers", "storm", "torches", "bonfires"]:
         if r.has(key):
             d[key] = r[key]
     # A voyage at the helm: no castle, no cannon; VoyageLevel reads mode and dist.
@@ -201,7 +204,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
     # The pod: orcas instead of a fort, handled by OrcaDirector inside the level.
     if r.has("orcas"):
         d["orcas"] = int(r.orcas)
-    for key in ["scenario", "stern_gun", "hull", "wave_axis"]:
+    for key in ["scenario", "stern_gun", "hull", "wave_axis", "islets"]:
         if r.has(key):
             d[key] = r[key]
     # Ships.

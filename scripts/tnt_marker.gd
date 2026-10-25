@@ -5,6 +5,7 @@ extends Node3D
 
 var offset := Vector3(0.0, 1.0, 0.0)   # from the block's centre to the arrow's tip
 var amp := 0.12                         # how high it bobs
+var size := 1.0                         # the arrow's scale
 var _t := randf() * TAU  # each arrow bobs on its own beat
 var _base: Node3D
 
@@ -49,4 +50,4 @@ func _process(delta: float) -> void:
 func _place(bob: float) -> void:
     if _base == null or not is_instance_valid(_base):
         return
-    global_transform = Transform3D(Basis(), _base.global_position + offset + Vector3(0.0, bob, 0.0))
+    global_transform = Transform3D(Basis().scaled(Vector3.ONE * size), _base.global_position + offset + Vector3(0.0, bob, 0.0))

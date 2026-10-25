@@ -227,7 +227,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     style = Decor.style(data, storm)
     # A hillfort mound is its own ground: no cobbled yard under it.
     for b in data.blocks:
-        if b.get("style", "") == "mound":
+        if str(b.get("style", "")).begins_with("mound"):
             style["yard"] = false
             style["flat"] = 10.0
             style["flat_ease"] = 14.0
@@ -386,9 +386,13 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 
     # Life: flags on the towers; at night torches, stars and a deck lantern; gulls by day.
     Atmosphere.flags(self, 3, 1.0 + float(data.get("sea", 0.0)), 2.4)
-    Atmosphere.ship_flag(ship, Vector3(5.9, 2.3, 0.0))
+    # Our colours: a small flag on a short staff on the taffrail, right aft on the
+    # centreline, the same as the pirate galleon wears hers. The rail is found with rays
+    # once the hull's collider is up, so the staff stands on the wood, not in the air.
+    ship.deck_found.connect(_place_stern_flag, CONNECT_ONE_SHOT)
     if sky_kind == "night":
-        Atmosphere.torches(self, 6)
+        if bool(data.get("torches", true)):
+            Atmosphere.torches(self, 6)
         Atmosphere.stars(self, 320)
         Atmosphere.deck_lantern(ship, ship.cannon_mount)
 
@@ -517,6 +521,36 @@ func _build_cannon() -> void:
 
 var _spawned: Array = []   # the Block for each entry of data.blocks (null for decorations)
 
+## The stern flag's staff: planted on the taffrail at the aftmost point of the centreline
+## where the hull's top runs level (the lantern, a little higher, is passed over).
+func _place_stern_flag() -> void:
+    var space := get_world_3d().direct_space_state
+    var hits: Array = []   # [x, y] along the centreline, aft to forward
+    var x := Ship.LENGTH * 0.5
+    while x > Ship.LENGTH * 0.3:
+        var from := ship.to_global(Vector3(x, 8.0, 0.0))
+        var to := ship.to_global(Vector3(x, -1.0, 0.0))
+        var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, Ship.HULL_LAYER))
+        if hit:
+            var ly := ship.to_local(hit.position).y
+            if ly > 0.5:
+                hits.append([x, ly])
+        x -= 0.1
+    var at := Vector3(Ship.LENGTH * 0.4, 2.3, 0.0)
+    if hits.size() >= 3:
+        var ys: Array = []
+        for h in hits:
+            ys.append(float(h[1]))
+        ys.sort()
+        var rail: float = ys[ys.size() / 2]
+        for h in hits:   # aft to forward: the first point down on the rail itself
+            if float(h[1]) <= rail + 0.25:
+                at = Vector3(float(h[0]) - 0.1, float(h[1]) - 0.03, 0.0)
+                break
+    Atmosphere.ship_flag(ship, at, 1, 0.7, 1.0 / 1.5)
+    if _settle_probe:
+        print("FLAG staff at %s from %d rail hits" % [at, hits.size()])
+
 func _spawn_block(b: Dictionary) -> void:
     var size := _v3(b.size) - Vector3(0, 0, Z_OFF)
     if b.has("attach"):
@@ -591,6 +625,19 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             bag.scale = Vector3(size.x, size.y * 1.2, size.z)
             bag.material_override = Models.tex_material("coast_sand_01", 0.9, Color(0.92, 0.88, 0.8), 1.0)
             root.add_child(bag)
+        "drum", "shaft":
+            # A plain round course of stone: a lighthouse's shaft, whitewashed (tint "white")
+            # or bare. A hair wider than its box so the courses meet without a seam. A
+            # "shaft" tapers: its box's x is the width at the foot, z the width at the top.
+            var drum := MeshInstance3D.new()
+            var dm := CylinderMesh.new()
+            dm.top_radius = (size.z if style == "shaft" else size.x) * 0.5
+            dm.bottom_radius = size.x * 0.5
+            dm.height = size.y * 1.02
+            dm.radial_segments = 24
+            drum.mesh = dm
+            drum.material_override = Models.flat_material(Color(0.93, 0.92, 0.88), 0.85) if tint == "white" else _stone_material(tint)
+            root.add_child(drum)
         "tower":
             # Round brick tower with a tiled cone roof (Atmosphere puts cloth flags on top).
             var body := MeshInstance3D.new()
@@ -773,27 +820,40 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
                 root.add_child(tip)
             root.add_child(log)
         "logs":
-            # A whole wall of logs as one piece: courses of rounds stacked up the box's height,
-            # each a little fatter than its course so no daylight shows between them. One
-            # heavy body, so a glancing ball rocks it rather than scattering the courses.
-            var along := 0 if size.x >= size.z else 2
-            var course := 0.5
-            var n := maxi(int(round(size.y / course)), 1)
-            course = size.y / float(n)
-            var lr := minf(course, size[2 - along]) * 0.5 * 1.18
+            # A piece built wholly of logs: rounds laid along the box's longest side, packed
+            # in rows and columns across the other two, each a little fatter than its slot so
+            # no daylight shows between them. A wall is courses of logs, a floor a raft of
+            # them, a post one upright log. One body, so a glancing ball rocks it whole.
+            var along := 0
+            if size.y > size.x and size.y >= size.z:
+                along = 1
+            elif size.z > size.x:
+                along = 2
+            var a := (along + 1) % 3
+            var b := (along + 2) % 3
+            var na := maxi(int(round(size[a] / 0.5)), 1)
+            var nb := maxi(int(round(size[b] / 0.5)), 1)
+            var pa := size[a] / float(na)
+            var pb := size[b] / float(nb)
+            var lr := maxf(pa, pb) * 0.5 * 1.12
             _ensure_bark()
-            for i in n:
-                var lg := MeshInstance3D.new()
-                var lcm := CylinderMesh.new()
-                lcm.top_radius = lr
-                lcm.bottom_radius = lr
-                lcm.height = size[along]
-                lcm.radial_segments = 10
-                lg.mesh = lcm
-                lg.material_override = _bark
-                lg.rotation = Vector3(0, 0, PI / 2.0) if along == 0 else Vector3(PI / 2.0, 0, 0)
-                lg.position.y = -size.y / 2.0 + course * (float(i) + 0.5)
-                root.add_child(lg)
+            for i in na:
+                for j in nb:
+                    var lg := MeshInstance3D.new()
+                    var lcm := CylinderMesh.new()
+                    lcm.top_radius = lr
+                    lcm.bottom_radius = lr
+                    lcm.height = size[along]
+                    lcm.radial_segments = 10
+                    lg.mesh = lcm
+                    lg.material_override = _bark
+                    # The cylinder stands along y; lay it along the long axis.
+                    lg.rotation = Vector3(0, 0, PI / 2.0) if along == 0 else (Vector3.ZERO if along == 1 else Vector3(PI / 2.0, 0, 0))
+                    var pos := Vector3.ZERO
+                    pos[a] = -size[a] / 2.0 + pa * (float(i) + 0.5)
+                    pos[b] = -size[b] / 2.0 + pb * (float(j) + 0.5)
+                    lg.position = pos
+                    root.add_child(lg)
         "palisade":
             # A wall of upright logs side by side along the box's long side, each a little
             # fatter than its slot so no daylight shows between them.
@@ -870,7 +930,7 @@ func _block_visual(mat: String, size: Vector3, style_raw: String) -> Node3D:
             cap.position.y = size.y / 2.0 - 0.05
             root.add_child(cap)
         "mound":
-            root.add_child(Mound.build(size))
+            root.add_child(Mound.build(size, tint == "stone", Mound.skirt_of(tint)))
         "hill":
             var mi := MeshInstance3D.new()
             var bm := BoxMesh.new()
@@ -971,6 +1031,7 @@ func _spawn_gun(g: Dictionary) -> void:
     gun.setup(float(g.get("interval", 6.0)), float(g.get("power", 0.5)), float(g.get("scale", 1.0)))
     gun.interval_jitter = float(g.get("jitter", 0.0))
     gun.miss = bool(g.get("miss", false))
+    gun.blast = float(g.get("blast", 0.0))
     gun.position = _v3(g.position)
     gun.fired.connect(_on_enemy_fired)
     gun.destroyed.connect(_on_gun_destroyed)
@@ -1379,7 +1440,10 @@ func fire(pw: float) -> void:
     p.setup(type, v)
     p.spawn_time = time
     p.exploded.connect(func(at): explode(at))
-    p.splashed.connect(func(at): fx.splash(at); ambience.splash(); event.emit("splash", {}))
+    p.splashed.connect(func(at):
+        if _settle_probe:
+            print("OURBALL splashed at %s" % at)
+        fx.splash(at); ambience.splash(); event.emit("splash", {}))
     active_projectile = p
     if special:
         specials[type] = int(specials[type]) - 1
@@ -1403,7 +1467,7 @@ func fire(pw: float) -> void:
             var what := (b as Block).material_name if b is Block else str(b)
             print("BALLHIT %s at %s" % [what, p.global_position])
         if scenario and b is Node:
-            scenario.on_ball_hit(b, p.linear_velocity.length() if is_instance_valid(p) else 0.0)
+            scenario.on_ball_hit(b, p.last_speed if is_instance_valid(p) else 0.0)
         _spark_near(p))
     # The shot that may win it: a touch of slow motion while it flies.
     if targets_remaining + ships_remaining <= 1 or (projectiles_remaining == 0 and specials_left() == 0):
@@ -1593,7 +1657,8 @@ func _fragment(blk: Block) -> void:
         if blasted and randf() < float(data.get("embers", 0.0)):
             f.smoulder()
 
-func explode(center: Vector3) -> void:
+## `kegs`: the blast's strength, in powder kegs (1 = one keg; reach grows with it).
+func explode(center: Vector3, kegs: float = 1.0) -> void:
     blast_count += 1
     _shot_blasts += 1
     _register_combo()
@@ -1603,7 +1668,7 @@ func explode(center: Vector3) -> void:
     blast_shake = minf(1.0 + 0.25 * (combo - 1), 1.8)
     if big:
         blast_shake = 2.0
-    fx.blast(center, 1.8 if big else 1.0)
+    fx.blast(center, (1.8 if big else 1.0) * maxf(sqrt(kegs), 1.0))
     fx.blast_light(center, 9.0 if style.get("sky", "") == "night" else 3.5)
     fx.smoke_column(center + Vector3(0, 0.5, 0))
     ambience.blast()
@@ -1625,7 +1690,7 @@ func explode(center: Vector3) -> void:
         var body := n as RigidBody3D
         var off := body.global_position - center
         var dist := off.length()
-        var radius := Tuning.TNT_RADIUS * powder_scale * float(data.get("blast_radius", 1.0))
+        var radius := Tuning.TNT_RADIUS * powder_scale * float(data.get("blast_radius", 1.0)) * kegs
         # Powder catches from further away than a blast can break wood: chains carry on.
         var catches := body is Block and (body as Block).material_name == "tnt" and not (body as Block).is_fragment
         if dist >= radius * (1.5 if catches else 1.0):
@@ -1635,7 +1700,7 @@ func explode(center: Vector3) -> void:
         var dir := Vector3.UP if dist < 0.05 else (off.normalized() + Vector3(randf_range(-0.35, 0.35), 0.55, randf_range(-0.35, 0.35))).normalized()
         # "blast_power" scales how hard a level's blasts throw things (a sandbag nest going
         # up need not wreck the lookouts behind it).
-        var dv := Tuning.TNT_BLAST_SPEED * (0.35 + 0.65 * falloff) * float(data.get("blast_power", 1.0))
+        var dv := Tuning.TNT_BLAST_SPEED * (0.35 + 0.65 * falloff) * float(data.get("blast_power", 1.0)) * sqrt(kegs)
         if body is Block and (body as Block).frozen:
             (body as Block).set_frozen(false)
         if body is Enemy and (body as Enemy).frozen:
@@ -1698,12 +1763,20 @@ func _on_gun_destroyed(gun: EnemyGun) -> void:
         return
     if scenario:
         scenario.on_gun_destroyed(gun)
-    fx.dust(gun.global_position, "metal")
-    fx.pop(gun.global_position, Color(0.98, 0.78, 0.32))
+    var at := gun.global_position
+    var blast := gun.blast
+    if _settle_probe:
+        print("GUNDOWN at %s blast %.1f" % [at, blast])
+    fx.dust(at, "metal")
+    fx.pop(at, Color(0.98, 0.78, 0.32))
     enemy_guns.erase(gun)
     gun.queue_free()
     blocks_broken += 1
     event.emit("broke", {"material": "metal"})
+    if blast > 0.0:
+        # A gun with its own powder: it goes up like so many kegs (the gun is already
+        # gone, so the blast cannot set it off again).
+        explode(at, blast)
 
 func _on_enemy_fired(from: Vector3, velocity: Vector3) -> void:
     var ball := RigidBody3D.new()
@@ -1834,6 +1907,8 @@ func _update_enemies(delta: float) -> void:
         if _settle_probe:
             b.set_meta("closest", minf(float(b.get_meta("closest", INF)), p.distance_to(target)))
         if p.distance_to(target) < Tuning.ENEMY_HIT_RADIUS:
+            if _settle_probe:
+                print("ENEMYBALL struck our hull, lives left %d" % (max_hull - hull_hits - 1))
             enemy_balls.erase(b)
             b.queue_free()
             fx.dust(p, "wood")
@@ -1863,7 +1938,22 @@ func _update_projectiles() -> void:
             p.check_lifetime(time, Tuning.SEA_LEVEL, open_sea, cp)
             # Enemy ship hits.
             for s in enemy_ships:
-                if is_instance_valid(s) and p.global_position.distance_to(s.global_position + Vector3(0, 0.4, 0)) < 2.2 and not p.is_queued_for_deletion():
+                if not is_instance_valid(s) or p.is_queued_for_deletion():
+                    continue
+                var struck := false
+                if s.length >= 9.0:
+                    # A big hull is long: test the ball against her box, not a ball round her middle.
+                    var k := s.length / 5.5
+                    var lp := s.to_local(p.global_position)
+                    struck = absf(lp.x) < 2.3 * k + 0.2 and absf(lp.z) < 1.1 * k + 0.2 and lp.y > -0.4 * k and lp.y < 1.3 * k
+                else:
+                    struck = p.global_position.distance_to(s.global_position + Vector3(0, 0.4, 0)) < 2.2
+                if struck:
+                    var gi := s.gun_near(p.global_position)
+                    if gi >= 0:
+                        s.hit_gun(gi)   # a deck gun knocked out, on top of the hull hit
+                    if _settle_probe:
+                        print("SHIPHIT local %s gun %d" % [s.to_local(p.global_position), gi])
                     damage_ship(s, p.global_position)
                     p.queue_free()
                     if active_projectile == p:

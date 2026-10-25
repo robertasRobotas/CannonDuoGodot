@@ -139,7 +139,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     add_child(camera)
     camera.make_current()
     _build_port_arrow()
-    if mode == "waves":
+    if mode == "waves" or bool(data.get("storm", false)):
         _build_rain()
     if mode == "sail":
         _build_gorge()
@@ -168,12 +168,18 @@ func set_gyro(on: bool) -> void:
 ## Sky, sun and haze, matching the battle levels' look.
 func _build_sky() -> void:
     var sky_kind := str(data.get("terrain", {}).get("sky", "noon"))
-    var stormy := mode == "waves"
+    var stormy := mode == "waves" or bool(data.get("storm", false))   # a level may ask for the storm
     var night := sky_kind == "night"
     var env := WorldEnvironment.new()
     var e := Environment.new()
     var sky := Sky.new()
-    if night:
+    if night and stormy:
+        # A clouded night: the overcast dome, barely lit, and no stars behind it.
+        var cloud := PanoramaSkyMaterial.new()
+        cloud.panorama = load("res://assets/sky/overcast.hdr")
+        cloud.energy_multiplier = 0.07
+        sky.sky_material = cloud
+    elif night:
         var ps := ProceduralSkyMaterial.new()
         ps.sky_top_color = Color(0.01, 0.02, 0.06)
         ps.sky_horizon_color = Color(0.06, 0.09, 0.18)

@@ -20,6 +20,9 @@ static func make(kind: String) -> Scenario:
         "balloons": return ScnBalloons.new()
         "gunboats": return preload("res://scripts/scn_gunboats.gd").new()
         "sandbags": return preload("res://scripts/scn_sandbags.gd").new()
+        "duel": return preload("res://scripts/scn_duel.gd").new()
+        "beacon": return preload("res://scripts/scn_beacon.gd").new()
+        "twin_powder": return preload("res://scripts/scn_twin_powder.gd").new()
     return null
 
 func setup(lv: Level) -> void:

@@ -225,28 +225,32 @@ static func _highest_blocks(level: Level, count: int, spacing: float, min_y: flo
     return out
 
 ## The Spanish flag flying from the stern of our ship.
-static func ship_flag(ship: Node3D, at: Vector3) -> void:
+## Returns the pole and the flag, for anyone who needs to move them with a mast. `at` is
+## where the staff's foot stands; `pole_k` shortens or lengthens the staff alone.
+static func ship_flag(ship: Node3D, at: Vector3, kind: int = 1, size: float = 1.0, pole_k: float = 1.0) -> Array:
     var pole := MeshInstance3D.new()
     var cm := CylinderMesh.new()
     cm.top_radius = 0.03
     cm.bottom_radius = 0.04
-    cm.height = 2.4
+    var pole_h := 2.4 * size * pole_k
+    cm.height = pole_h
     pole.mesh = cm
     pole.material_override = Models.tex_material("brown_planks_07", 2.0, Color(0.55, 0.4, 0.3))
-    pole.position = at + Vector3(0, 1.2, 0)
+    pole.position = at + Vector3(0, pole_h / 2.0, 0)
     ship.add_child(pole)
     var flag := MeshInstance3D.new()
     var pm := PlaneMesh.new()
-    pm.size = Vector2(1.3, 0.85)
+    pm.size = Vector2(1.3, 0.85) * size
     pm.orientation = PlaneMesh.FACE_Z
     pm.subdivide_width = 14
     pm.subdivide_depth = 3
     flag.mesh = pm
     var sm := ShaderMaterial.new()
     sm.shader = load("res://shaders/flag.gdshader")
-    sm.set_shader_parameter("kind", 1)
+    sm.set_shader_parameter("kind", kind)
     sm.set_shader_parameter("phase", 1.3)
     flag.material_override = sm
-    flag.position = at + Vector3(0.68, 2.0, 0)
+    flag.position = at + Vector3(0.68 * size, pole_h - 0.425 * size, 0)
     flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     ship.add_child(flag)
+    return [pole, flag]

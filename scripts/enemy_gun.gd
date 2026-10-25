@@ -8,6 +8,7 @@ signal destroyed(gun: EnemyGun)
 var interval: float = 6.0
 var interval_jitter: float = 0.0   # each wait varies by up to this much
 var miss := false                  # fires wild on purpose: close to the ship, never on it
+var blast := 0.0                   # > 0: knocked out, the gun blows up with this many kegs' force
 var power: float = 0.5
 var _scale := 1.0
 var next_fire: float = Tuning.ENEMY_FIRST_SHOT_DELAY
@@ -43,9 +44,15 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
     if frozen:
         return
     var strongest := 0.0
+    var ball := false
     for i in state.get_contact_count():
         strongest = maxf(strongest, state.get_contact_impulse(i).length())
-    if strongest / mass > Tuning.ENEMY_CANNON_BREAK:
+        var other := state.get_contact_collider_object(i)
+        if other is Node and (other as Node).is_in_group("projectile"):
+            ball = true
+    # A heavy piece shrugs off a ball's knock by its weight; one with its own powder
+    # beside it goes up at any ball's touch.
+    if strongest / mass > Tuning.ENEMY_CANNON_BREAK or (ball and blast > 0.0):
         _pending_break = true
 
 func _physics_process(_delta: float) -> void:

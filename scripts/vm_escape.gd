@@ -32,8 +32,9 @@ func ends_by_distance() -> bool:
     return false
 
 func _window() -> float:
-    # The sweet rudder angle wanders slowly: keep adjusting.
-    return 0.5 + 0.28 * sin(v.time * 0.33) + 0.12 * sin(v.time * 0.9)
+    # The sweet rudder angle is never still: it swings across the dial and back, with a
+    # quicker tremble on top, so the helm has to follow it all the time.
+    return clampf(0.72 * sin(v.time * 0.8) + 0.18 * sin(v.time * 2.3), -0.85, 0.85)
 
 func _place() -> void:
     var p := CENTER + Vector3(cos(angle) * radius, 0, sin(angle) * radius)
@@ -44,8 +45,24 @@ func _place() -> void:
     if d.length() > 0.001:
         v._yaw = atan2(-d.x, -d.z) + v.steer * 0.35
 
+var _out_dir := Vector3.ZERO   # the way she runs once she is clear of the funnel
+var _out_t := 0.0
+
 func tick(delta: float) -> void:
     if v.phase != VoyageLevel.Phase.SAILING:
+        return
+    if _out:
+        # Clear of the funnel: she runs straight out and away from it for three seconds,
+        # then the level is done.
+        _out_t += delta
+        v.root.position += _out_dir * 7.0 * delta
+        v._yaw = atan2(-_out_dir.x, -_out_dir.z)
+        v._lat_vel = 0.0
+        v.spray.emitting = true
+        if _out_t >= 3.0:
+            if "--autopilot" in OS.get_cmdline_user_args():
+                print("ESCAPE won at t=%.1f" % v.time)
+            v._win()
         return
     v.steer = move_toward(v.steer, clampf(v._steer_touch + v._steer_gyro, -1.0, 1.0), delta * 4.0)
     var win := _window()
@@ -66,15 +83,14 @@ func tick(delta: float) -> void:
     _place()
     if radius >= R_OUT and not _out:
         _out = true
+        if "--autopilot" in OS.get_cmdline_user_args():
+            print("ESCAPE clear at t=%.1f" % v.time)
         v._say("She's out! She's OUT!")
         Haptics.rumble(2)
-        Engine.time_scale = 0.5
-        var tw := v.create_tween()
-        tw.set_ignore_time_scale(true)
-        tw.tween_interval(1.0)
-        tw.tween_callback(func():
-            Engine.time_scale = 1.0
-            v._win())
+        # Out along the tangent she is already running on, bent a little outward.
+        var tangent := Vector3(-sin(angle), 0, cos(angle))
+        var outward := Vector3(cos(angle), 0, sin(angle))
+        _out_dir = (tangent + outward * 0.6).normalized()
     elif radius <= R_IN:
         _drown()
     elif radius < 9.0 and _said < 2:

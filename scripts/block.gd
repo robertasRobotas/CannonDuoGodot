@@ -61,7 +61,7 @@ func setup(mat: String, sz: Vector3, st: String, static_block: bool, mo: Diction
     elif style == "mound":
         # A hillfort mound: its sloping sides are part of the solid.
         var cp := ConvexPolygonShape3D.new()
-        cp.points = Mound.hull(sz)
+        cp.points = Mound.hull(sz, Mound.skirt_of(tint))
         shape.shape = cp
     else:
         var b := BoxShape3D.new()

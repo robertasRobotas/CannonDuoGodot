@@ -61,12 +61,12 @@ func on_gun_destroyed(_gun: EnemyGun) -> void:
     _clear_markers()
 
 func on_ball_hit(body: Node, speed: float) -> void:
-    if speed < 3.0:
+    if speed < 2.0:
         return   # a ball rolling up to the bags is no hit
     var at: Vector3
     if body is Block:
         var blk := body as Block
-        if blk.is_fragment or blk.style != "sandbag":
+        if blk.is_fragment or not (blk.style == "sandbag" or blk.tint == "nest"):
             return
         at = blk.base_position
     elif body is EnemyGun:
