@@ -1,0 +1,56 @@
+[preset.0]
+
+name="iOS"
+platform="iOS"
+runnable=true
+advanced_options=true
+dedicated_server=false
+custom_features=""
+export_filter="all_resources"
+include_filter=""
+exclude_filter="*/hq/pine_tree/scene.*,*/hq/oak_trees/scene.*,*/hq/maple_tree/scene.*,*/hq/*/textures/*normal*,*/hq/*/textures/*metallicRoughness*,*/hq/maple_tree/textures/grass_*,*/hq/maple_tree/textures/Groundcover_*,*/hq/*/license.txt,*/ph/*/*.gltf,*/ph/*/*.bin,*/hq/pinnace/*.gltf,*/hq/pinnace/*.bin,*/hq/palm_coconut/scene.*,*/hq/palm_plant/scene.*"
+export_path="build/ios/CannonDuo.xcodeproj"
+patches=PackedStringArray()
+encryption_include_filters=""
+encryption_exclude_filters=""
+seed=0
+encrypt_pck=false
+encrypt_directory=false
+script_export_mode=2
+
+[preset.0.options]
+
+custom_template/debug=""
+custom_template/release=""
+application/app_store_team_id="S246Z44JS6"
+application/provisioning_profile_uuid_debug=""
+application/code_sign_identity_debug=""
+application/export_method_debug=1
+application/provisioning_profile_uuid_release=""
+application/code_sign_identity_release=""
+application/export_method_release=0
+application/targeted_device_family=2
+application/bundle_identifier="com.faufaufau.cannonduo"
+application/signature=""
+application/short_version="1.0"
+application/version="104"
+application/min_ios_version="18.0"
+application/additional_plist_content=""
+application/icon_interpolation=4
+application/launch_screens_interpolation=4
+application/export_project_only=false
+application/delete_old_export_dir_if_exists=false
+application/generate_simulator_library_if_missing=true
+capabilities/access_wifi=false
+capabilities/push_notifications=false
+capabilities/performance_gaming_tier=false
+capabilities/performance_a12=false
+user_data/accessible_from_files_app=false
+user_data/accessible_from_itunes_sharing=false
+privacy/camera_usage_description="Cannon Duo does not use the camera."
+privacy/microphone_usage_description="Cannon Duo does not use the microphone."
+privacy/photolibrary_usage_description="Cannon Duo does not use your photos."
+privacy/tracking_enabled=false
+icons/icon_1024x1024="res://icon.png"
+storyboard/image_scale_mode=0
+storyboard/custom_bg_color=Color(0.1, 0.1, 0.18, 1)
