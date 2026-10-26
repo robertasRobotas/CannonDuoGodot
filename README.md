@@ -8,7 +8,7 @@ tuning and level design.
 
 - Godot 4.7.2 at `~/Applications/Godot.app` with the iOS export template installed
   (`~/Library/Application Support/Godot/export_templates/4.7.2.stable/ios.zip`).
-- Xcode 27 for the iOS build. Signing uses team S246Z44JS6 automatically.
+- Xcode 27 for the iOS build. Signing is automatic, using the team in `export_presets.cfg`.
 
 ## Run and build
 
@@ -16,6 +16,8 @@ tuning and level design.
 Tools/shot.sh 1 9 /tmp/level1.png            # run level 1 on the Mac, screenshot after 9 s
 Tools/shot.sh 1 9 /tmp/shot.png 0.55,0,9      # same, auto-firing at 55% power, yaw 0, pitch 9
 Tools/export_ios.sh                            # export to build/ios and install on the iPhone
+npm run release                                # bump the build number, build and upload to TestFlight
+npm run release:ipa                            # same, but only write build/testflight/CannonDuo.ipa
 ```
 
 Debug launch arguments (after `--`): `--level=N`, `--shot=N,SECONDS,PATH`, `--fire=POWER,YAW,PITCH`,

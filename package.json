@@ -1,0 +1,10 @@
+{
+  "name": "cannon-duo",
+  "private": true,
+  "description": "Build scripts for Cannon Duo (Godot). No dependencies.",
+  "scripts": {
+    "release": "bash Tools/export_testflight.sh",
+    "release:ipa": "bash Tools/export_testflight.sh --no-upload",
+    "ios": "sh Tools/export_ios.sh"
+  }
+}
