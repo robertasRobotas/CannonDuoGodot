@@ -1665,14 +1665,17 @@ func _draw_ui() -> void:
     if mode_obj and not mode_obj.ends_by_distance():
         frac = -1.0
     if frac >= 0.0:
-        ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8, 6), Color(1, 1, 1, 0.25))
-        ui.draw_rect(Rect2(w * 0.1, 80, w * 0.8 * frac, 6), Color(1, 1, 1, 0.8))
+        # Under the Captain's line, clear of a phone's notch or island at the very top.
+        var by := 270.0
+        ui.draw_rect(Rect2(w * 0.1, by, w * 0.8, 6), Color(1, 1, 1, 0.25))
+        ui.draw_rect(Rect2(w * 0.1, by, w * 0.8 * frac, 6), Color(1, 1, 1, 0.8))
         var sx := w * 0.1 + w * 0.8 * frac
-        ui.draw_colored_polygon(PackedVector2Array([Vector2(sx, 62), Vector2(sx + 12, 86), Vector2(sx - 12, 86)]), Color.WHITE)
-    # Hearts (the levels where the hull takes damage), along the bottom of the screen.
+        ui.draw_colored_polygon(PackedVector2Array([Vector2(sx, by - 18), Vector2(sx + 12, by + 6), Vector2(sx - 12, by + 6)]), Color.WHITE)
+    # Hearts (the levels where the hull takes damage), along the bottom of the screen,
+    # above a phone's home bar.
     if mode == "sail" or (mode_obj and mode_obj.has_hearts):
         var font := ThemeDB.fallback_font
-        ui.draw_string(font, Vector2(0, ui.size.y - 90), "♥".repeat(maxi(3 - hits, 0)) + "♡".repeat(mini(hits, 3)), HORIZONTAL_ALIGNMENT_CENTER, w, 56, Color(1, 1, 1, 0.9))
+        ui.draw_string(font, Vector2(0, ui.size.y - 150), "♥".repeat(maxi(3 - hits, 0)) + "♡".repeat(mini(hits, 3)), HORIZONTAL_ALIGNMENT_CENTER, w, 56, Color(1, 1, 1, 0.9))
     if phase == Phase.PREP:
         _draw_haul(Vector2(w * 0.72, ui.size.y * 0.42))
     if mode == "waves" and phase == Phase.SAILING:

@@ -75,7 +75,10 @@ const LEVELS := {
         "tip": "The tower will not fall. Powder in the works either side of it: blow both, and the gun on top shoots back."},
     18: {"mode": "escape", "name": "The Eye", "sub": "Caught in the maelstrom", "biome": "opensea", "sky": "night", "sea": 1.0, "swell": 1.8, "storm": true, "dist": 0.0,
         "tip": "Keep the rudder in the white window and she climbs out. The window never stops moving."},
-    19: {"json": true, "file": 11, "name": "Open Water", "sub": "Boats across the sea", "biome": "opensea", "tip": "Sink every boat before it reaches the hull."},
+    19: {"name": "Black Galleon", "sub": "Gun to gun in the storm", "biome": "opensea", "sky": "night", "sea": 0.85, "swell": 1.8, "offshore": 0.0, "scenario": "duel", "file": 8,
+        "duel": {"size": 2.0, "hits": 7, "interval": 2.67, "hits_every": 2, "hits_every_max": 3, "variant": "black"},
+        "look": [0.0, 3.0, -24.0], "shots": 16, "par": 9, "hull": 4, "islets": false, "ammo": [],
+        "tip": "A black galleon twice our size, in a storm by night. Seven balls sink her. She fires fast, and every second or third ball of hers finds us."},
     20: {"mode": "wrecks", "name": "Graveyard of Ships", "sub": "The sea after a battle", "biome": "opensea", "sky": "sunset", "sea": 0.3, "dist": 300.0,
         "tip": "Burning oil takes the rigging. Wreckage takes the hull. Thread between them."},
     21: {"name": "Stormbreak", "sub": "Huge waves", "biome": "opensea", "sky": "storm", "sea": 0.9, "swell": 3.2, "offshore": 0.0,
@@ -204,7 +207,7 @@ static func level(id: int, json: Dictionary) -> Dictionary:
     # The pod: orcas instead of a fort, handled by OrcaDirector inside the level.
     if r.has("orcas"):
         d["orcas"] = int(r.orcas)
-    for key in ["scenario", "stern_gun", "hull", "wave_axis", "islets"]:
+    for key in ["scenario", "stern_gun", "hull", "wave_axis", "islets", "duel"]:
         if r.has(key):
             d[key] = r[key]
     # Ships.

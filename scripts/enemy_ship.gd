@@ -116,8 +116,18 @@ func hit(at: Vector3) -> void:
 ## Dress a big ship as the pirate galleon: a small black flag on a staff at the stern, and
 ## two guns run out on the deck on the side that faces the player (+z), each standing on
 ## the deck as the model has it there. Her fire comes from the two guns in turn.
-func dress_galleon() -> void:
+## `variant` "black": a darker ship, her hull near black and her sails dyed red, with a
+## second flag at the main truck.
+func dress_galleon(variant: String = "") -> void:
     var s := length / HULL_LEN
+    if variant == "black":
+        for c in _model.get_children():
+            if c != _rig:
+                Models.tint(c, Color(0.42, 0.38, 0.4))
+        if _rig:
+            Models.tint(_rig, Color(0.75, 0.28, 0.25))
+        var truck := Vector3(3.0 * s, 32.4 * s + _model.position.y, 0.0)
+        _rig_extras = Atmosphere.ship_flag(self, truck, 0, 1.0)
     # Model space (bow +z, up y) to ship space: the model is turned a quarter back, so
     # model z lands on -x and model x on z.
     # The flag: a short staff on the taffrail, right aft and on the centreline.

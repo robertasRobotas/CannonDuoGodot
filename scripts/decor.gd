@@ -17,8 +17,8 @@ static func style(data: Dictionary, storm: bool) -> Dictionary:
     var terrain: Dictionary = data.get("terrain", {})
     var row: Array = STYLES[(id - 1) % STYLES.size()]
     var sky: String = terrain.get("sky", row[1])
-    if storm:
-        sky = "storm"
+    if storm and sky != "night":
+        sky = "storm"   # a night stays a night: the storm then is rain and sea in the dark
     elif float(data.get("sea", 0.0)) >= 0.4 and sky == "noon":
         sky = "overcast"
     return {"shore": terrain.get("shore", row[0]), "sky": sky, "beach": float(terrain.get("beach", 4.2)), "tree_max": float(terrain.get("tree_max", 0.0)),

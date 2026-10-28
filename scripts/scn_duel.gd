@@ -11,17 +11,23 @@ const HITS := 6
 var progress := 0.0      # 0..1, how far gone she is (the HUD's bar)
 var _galleon: EnemyShip = null
 
+## The level's "duel" dictionary may change the ship: size (times ours), hits (balls to
+## sink her), interval (seconds between her shots, with a quarter of it either way),
+## hits_every / hits_every_max (which of her shots find us), variant (her look).
 func setup(lv: Level) -> void:
     super.setup(lv)
+    var d: Dictionary = level.data.get("duel", {})
+    var hits := int(d.get("hits", HITS))
+    var interval := float(d.get("interval", 4.0))
     var at := level.ship.global_position
-    _galleon = level._spawn_enemy_ship({"position": [at.x, 0.0, at.z - RANGE], "speed": 0.0, "hitPoints": HITS,
-        "hasCannon": true, "interval": 4.0, "length": Ship.LENGTH * 1.5})
-    _galleon.interval = 4.0
-    _galleon.interval_jitter = 1.0
-    _galleon.hits_every = 3
-    _galleon.hits_every_max = 4
-    _galleon.next_fire = 4.0
-    _galleon.dress_galleon()
+    _galleon = level._spawn_enemy_ship({"position": [at.x, 0.0, at.z - RANGE], "speed": 0.0, "hitPoints": hits,
+        "hasCannon": true, "interval": interval, "length": Ship.LENGTH * float(d.get("size", 1.5))})
+    _galleon.interval = interval
+    _galleon.interval_jitter = interval * 0.25
+    _galleon.hits_every = int(d.get("hits_every", 3))
+    _galleon.hits_every_max = int(d.get("hits_every_max", 4))
+    _galleon.next_fire = interval
+    _galleon.dress_galleon(str(d.get("variant", "")))
     _galleon.sails_burn = true
     _galleon.debris_scale = 1.0 / 3.0
     level.ships_remaining = 1
