@@ -93,17 +93,9 @@ if [ ! -d "$OUT/$NAME.xcodeproj" ]; then
   fail "Godot export failed, full log: $OUT/godot_export.log"
 fi
 
-# --- Xcode: archive ------------------------------------------------------------------------------
-echo "==> Archiving"
-xcodebuild -project "$OUT/$NAME.xcodeproj" -scheme "$NAME" -configuration Release \
-  -destination "generic/platform=iOS" -archivePath "$OUT/$NAME.xcarchive" \
-  -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
-  DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE" \
-  CODE_SIGN_IDENTITY="Apple Development" PROVISIONING_PROFILE_SPECIFIER="" \
-  archive -quiet > "$OUT/archive.log" 2>&1 \
-  || { grep -E "error:" "$OUT/archive.log" | head -20 >&2; fail "archive failed, full log: $OUT/archive.log"; }
-
-# --- Xcode: export the IPA, or upload it straight to App Store Connect ------------------------
+# --- Xcode: archive and upload ---------------------------------------------------------------------
+# If App Store Connect already has this build number (say, from an upload made on another Mac),
+# the build number goes up by one and the archive and upload run again, up to 20 times.
 if [ $UPLOAD -eq 1 ]; then DEST=upload; else DEST=export; fi
 cat > "$OUT/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -121,11 +113,52 @@ cat > "$OUT/ExportOptions.plist" <<EOF
 </plist>
 EOF
 
-if [ $UPLOAD -eq 1 ]; then echo "==> Uploading to App Store Connect"; else echo "==> Exporting the IPA"; fi
-xcodebuild -exportArchive -archivePath "$OUT/$NAME.xcarchive" -exportPath "$OUT" \
-  -exportOptionsPlist "$OUT/ExportOptions.plist" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
-  > "$OUT/export.log" 2>&1 \
-  || { grep -iE "error" "$OUT/export.log" | head -20 >&2; fail "export failed, full log: $OUT/export.log"; }
+for attempt in $(seq 1 20); do
+  echo "==> Archiving build $BUILD"
+  rm -rf "$OUT/$NAME.xcarchive"
+  xcodebuild -project "$OUT/$NAME.xcodeproj" -scheme "$NAME" -configuration Release \
+    -destination "generic/platform=iOS" -archivePath "$OUT/$NAME.xcarchive" \
+    -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
+    DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE" \
+    CODE_SIGN_IDENTITY="Apple Development" PROVISIONING_PROFILE_SPECIFIER="" \
+    CURRENT_PROJECT_VERSION="$BUILD" MARKETING_VERSION="$VERSION" \
+    archive -quiet > "$OUT/archive.log" 2>&1 \
+    || { grep -E "error:" "$OUT/archive.log" | head -20 >&2
+         if grep -qE "No Accounts|No Account for Team" "$OUT/archive.log"; then
+           echo >&2
+           echo "Xcode has no Apple account for team $TEAM. Open Xcode > Settings > Accounts and sign in" >&2
+           echo "with an account on that team, then run this again. Or set ASC_KEY_ID and ASC_ISSUER_ID" >&2
+           echo "(see the top of Tools/export_testflight.sh)." >&2
+         fi
+         fail "archive failed, full log: $OUT/archive.log"; }
+
+  if [ $UPLOAD -eq 1 ]; then echo "==> Uploading to App Store Connect"; else echo "==> Exporting the IPA"; fi
+  if xcodebuild -exportArchive -archivePath "$OUT/$NAME.xcarchive" -exportPath "$OUT" \
+       -exportOptionsPlist "$OUT/ExportOptions.plist" -allowProvisioningUpdates ${AUTH[@]+"${AUTH[@]}"} \
+       > "$OUT/export.log" 2>&1; then
+    break
+  fi
+  # The version was already approved on the App Store: move to the next patch version (1.0 -> 1.0.1).
+  if [ $UPLOAD -eq 1 ] && grep -qE "is closed for new build submissions|must contain a higher version" "$OUT/export.log"; then
+    NEXT=$(echo "$VERSION" | awk -F. '{ if (NF < 3) $3 = 0; $3 += 1; print $1 "." ($2 == "" ? 0 : $2) "." $3 }')
+    echo "==> Version $VERSION is closed on App Store Connect, trying $NEXT"
+    VERSION=$NEXT
+    continue
+  fi
+  if [ $UPLOAD -eq 1 ] && grep -q "has already been used" "$OUT/export.log"; then
+    echo "==> Build $BUILD is already on App Store Connect, trying $((BUILD + 1))"
+    BUILD=$((BUILD + 1))
+    continue
+  fi
+  grep -iE "error" "$OUT/export.log" | head -20 >&2
+  fail "export failed, full log: $OUT/export.log"
+done
+[ -s "$OUT/export.log" ] && grep -qE "has already been used|is closed for new build submissions" "$OUT/export.log" \
+  && fail "no accepted version and build number found after 20 tries"
+
+# Keep the version and build number that were used, so the next run starts above them.
+sed -i '' "s/^application\/version=.*/application\/version=\"$BUILD\"/" "$PRESETS"
+sed -i '' "s/^application\/short_version=.*/application\/short_version=\"$VERSION\"/" "$PRESETS"
 
 if [ $UPLOAD -eq 1 ]; then
   echo "==> Uploaded $VERSION ($BUILD). It appears in TestFlight once Apple finishes processing."
