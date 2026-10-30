@@ -253,9 +253,10 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     else:
         var ps := ProceduralSkyMaterial.new()
         if sky_kind == "night":
-            ps.sky_top_color = Color(0.01, 0.02, 0.06)
-            ps.sky_horizon_color = Color(0.06, 0.09, 0.18)
-            ps.ground_horizon_color = Color(0.06, 0.09, 0.18)
+            var lk := minf(float(data.get("light", 1.0)), 2.5)
+            ps.sky_top_color = Color(0.01, 0.02, 0.06) * lk
+            ps.sky_horizon_color = Color(0.06, 0.09, 0.18) * lk
+            ps.ground_horizon_color = Color(0.06, 0.09, 0.18) * lk
             ps.sun_angle_max = 3.0
             ps.sun_curve = 0.02
         elif sky_kind == "sunset":
@@ -290,8 +291,13 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     if sky_kind == "night":
         e.fog_light_color = Color(0.05, 0.07, 0.13)
         e.fog_density = 0.006
-    # A level can thin or thicken its haze ("fog": multiplier, default 1).
+    # A level can thin or thicken its haze ("fog": multiplier, default 1), and turn its
+    # lights up or down ("light": multiplier on the ambient, the sun or moon and the haze's
+    # glow; a brighter night, say).
     e.fog_density *= float(data.get("fog", 1.0))
+    var light_k := float(data.get("light", 1.0))
+    e.ambient_light_energy *= light_k
+    e.fog_light_color *= light_k
     e.fog_sky_affect = 0.25
     env.environment = e
     add_child(env)
@@ -309,6 +315,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
         # Moonlight: cold, dim, from high on the right.
         sun.light_energy = 0.32
         sun.light_color = Color(0.58, 0.68, 1.0)
+    sun.light_energy *= float(data.get("light", 1.0))
     sun.shadow_enabled = true
     sun.directional_shadow_max_distance = 22.0
     sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL

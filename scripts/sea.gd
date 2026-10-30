@@ -79,6 +79,14 @@ func _process(delta: float) -> void:
     if _mat:
         _mat.set_shader_parameter("sea_time", t)
 
+## A bigger (or smaller) animated patch: `size` metres square, `subdiv` vertices across.
+func set_extent(size: float, subdiv: int) -> void:
+    var plane := PlaneMesh.new()
+    plane.size = Vector2(size, size)
+    plane.subdivide_width = subdiv
+    plane.subdivide_depth = subdiv
+    mesh = plane
+
 ## Open-sea waves run along x (across the view) instead of z.
 func set_wave_axis(along_x: bool) -> void:
     wave_x = along_x

@@ -196,10 +196,12 @@ void fragment() {
         if (d < sk.z * 1.25) {
             float k = clamp(1.0 - d / sk.z, 0.0, 1.0);
             float ang = atan(rel.y, rel.x);
+            // A great funnel keeps its streaks thin and few, so the water stays water.
+            float big = clamp(26.0 / sk.z, 0.3, 1.0);
             float spiral = 0.5 + 0.5 * sin(ang * 3.0 + log(max(d, 0.4)) * 9.0 - sea_time * 5.0);
             base = mix(base, base * 0.45, k * k);
-            foam += smoothstep(0.35, 1.0, spiral) * (0.25 + 0.55 * k) * smoothstep(1.25, 0.9, d / sk.z);
-            foam += smoothstep(0.75, 1.0, k) * 0.6;
+            foam += smoothstep(mix(0.8, 0.35, big), 1.0, spiral) * (0.25 + 0.55 * k) * smoothstep(1.25, 0.9, d / sk.z) * big;
+            foam += smoothstep(0.75, 1.0, k) * 0.6 * big;
         }
     }
     // Thin foam line along the shore.

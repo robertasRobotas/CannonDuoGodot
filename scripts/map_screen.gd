@@ -53,7 +53,7 @@ func _node_button(i: int) -> Control:
     var id := i + 1
     var locked := id > _next
     var boss := bool(info.get("boss", false))
-    var r := 92.0 if boss else 74.0
+    var r := 138.0 if boss else 74.0
     var b := Button.new()
     b.flat = true
     b.focus_mode = Control.FOCUS_NONE
@@ -186,7 +186,7 @@ func _draw_chart() -> void:
         var p := pts[i]
         var id := i + 1
         var boss := bool(info.get("boss", false))
-        var r := 92.0 if boss else 74.0
+        var r := 138.0 if boss else 74.0
         var locked := id > _next
         var land: Color = BIOME_COLORS.get(info.biome, Color(0.4, 0.6, 0.35))
         # Island blob: sand rim and land, seeded by the level.
@@ -205,16 +205,19 @@ func _draw_chart() -> void:
         # Node disc.
         var fill := Color(1.0, 0.58, 0.18) if id == _next else (Color(0.16, 0.18, 0.24) if not locked else Color(0.2, 0.22, 0.26, 0.7))
         if boss and not locked:
-            fill = Color(0.62, 0.12, 0.10) if id != _next else fill
+            fill = Color(0.62, 0.12, 0.10) if id != _next else Color(0.86, 0.12, 0.10)   # a boss island is red, next or done
         if id == _next:
             var pulse := 1.0 + 0.08 * sin(_t * 4.0)
-            c.draw_circle(p, r * 1.22 * pulse, Color(1.0, 0.8, 0.4, 0.35))
+            c.draw_circle(p, r * 1.22 * pulse, Color(1.0, 0.4, 0.3, 0.35) if boss else Color(1.0, 0.8, 0.4, 0.35))
         c.draw_circle(p, r + 6.0, Color(1, 1, 1, 0.9 if not locked else 0.3))
         c.draw_circle(p, r, fill)
         var font := ThemeDB.fallback_font
         var label := ("☠" if boss else str(id)) if not locked else "🔒"
-        var fs := 64 if boss else 56
+        var fs := 176 if boss else 56
         var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
+        if boss and not locked:
+            # A bolder skull: the glyph drawn as a thick white outline over itself.
+            c.draw_string_outline(font, p + Vector2(-tw / 2.0, fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.WHITE)
         c.draw_string(font, p + Vector2(-tw / 2.0, fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
         # Stars.
         if not locked:

@@ -76,11 +76,11 @@ const LEVELS := {
     18: {"mode": "escape", "name": "The Eye", "sub": "Caught in the maelstrom", "biome": "opensea", "sky": "night", "sea": 1.0, "swell": 1.8, "storm": true, "dist": 0.0,
         "tip": "Keep the rudder in the white window and she climbs out. The window never stops moving."},
     19: {"name": "Black Galleon", "sub": "Gun to gun in the storm", "biome": "opensea", "sky": "night", "sea": 0.85, "swell": 1.8, "offshore": 0.0, "scenario": "duel", "file": 8,
-        "duel": {"size": 2.0, "hits": 7, "interval": 2.67, "hits_every": 2, "hits_every_max": 3, "variant": "black"},
+        "duel": {"size": 2.0, "hits": 7, "interval": 2.67, "hits_every": 2, "hits_every_max": 3, "variant": "black"}, "light": 2.2, "fog": 0.4,
         "look": [0.0, 3.0, -24.0], "shots": 16, "par": 9, "hull": 4, "islets": false, "ammo": [],
         "tip": "A black galleon twice our size, in a storm by night. Seven balls sink her. She fires fast, and every second or third ball of hers finds us."},
-    20: {"mode": "wrecks", "name": "Graveyard of Ships", "sub": "The sea after a battle", "biome": "opensea", "sky": "sunset", "sea": 0.3, "dist": 300.0,
-        "tip": "Burning oil takes the rigging. Wreckage takes the hull. Thread between them."},
+    20: {"mode": "kraken", "name": "The Kraken", "sub": "The beast of the deep", "biome": "opensea", "sky": "overcast", "sea": 0.7, "swell": 2.4, "storm": true, "dist": 300.0, "boss": true, "light": 0.5,
+        "tip": "Ride the swell. When the sea opens, steer out from under its arms, and when they stand up, tap them and fire. Kill it before the mouth takes us."},
     21: {"name": "Stormbreak", "sub": "Huge waves", "biome": "opensea", "sky": "storm", "sea": 0.9, "swell": 3.2, "offshore": 0.0,
         "ships": [[-8.0, -12.0, 0.0, 3, true], [6.0, -16.0, 0.0, 3, true], [-1.0, -24.0, 0.0, 3, true]], "look": [0.0, 1.5, -16.0],
         "tip": "The sea lifts you high. Fire as you rise."},
@@ -132,8 +132,11 @@ const LEVELS := {
 const SHOTS := {"small": 4, "perch": 4, "sandbags": 10, "medium": 5, "large": 6, "keep": 6, "castle": 8, "huge": 8, "boss": 8, "mega": 12, "harbor": 6, "battery": 6, "keyhole": 5, "lighthouse": 7, "ropebridge": 6, "pier": 7}
 const PAR := {"small": 2, "perch": 2, "sandbags": 4, "medium": 3, "large": 3, "keep": 3, "castle": 4, "huge": 4, "boss": 5, "mega": 7, "harbor": 3, "battery": 3, "keyhole": 2, "lighthouse": 3, "ropebridge": 3, "pier": 4}
 
+## The game ends at this island: later rows in LEVELS are kept but not played.
+const LAST_LEVEL := 20
+
 static func level_count() -> int:
-    return LEVELS.size()
+    return mini(LAST_LEVEL, LEVELS.size())
 
 static func row(id: int) -> Dictionary:
     return LEVELS.get(id, {})
@@ -167,14 +170,14 @@ static func level(id: int, json: Dictionary) -> Dictionary:
         d["offshore"] = r.offshore
     if r.has("intro_hold"):
         d["intro_hold"] = r.intro_hold
-    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "blast_power", "chain_delay", "rock_seed", "light", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall", "nest_markers", "storm", "torches", "bonfires"]:
+    for key in ["fov", "intro_from", "sail_in", "sail_after", "blast_radius", "blast_power", "chain_delay", "rock_seed", "light", "fog", "fog_dist", "tnt_knock", "tnt_spark", "tnt_fall", "nest_markers", "storm", "torches", "bonfires"]:
         if r.has(key):
             d[key] = r[key]
     # A voyage at the helm: no castle, no cannon; VoyageLevel reads mode and dist.
     if r.has("mode"):
         d["mode"] = r.mode
         d["dist"] = float(r.get("dist", 260.0))
-        d["boss"] = false
+        d["boss"] = bool(r.get("boss", false))   # the skull on the chart
         return d
     if bool(r.get("json", false)):
         return d

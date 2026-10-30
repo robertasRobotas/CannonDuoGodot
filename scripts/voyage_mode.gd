@@ -19,6 +19,7 @@ static func make(kind: String) -> VoyageMode:
         "wrecks": return VmWrecks.new()
         "gauntlet": return VmGauntlet.new()
         "cave": return VmCave.new()
+        "kraken": return VmKraken.new()
     return null
 
 func build(voyage: VoyageLevel) -> void:
@@ -45,8 +46,16 @@ func camera(_delta: float) -> bool:
 func autopilot_target() -> float:
     return v.root.position.x
 
+## The stars for a run that is won (modes without hearts give three).
+func stars() -> int:
+    return 3
+
 func tap(_pos: Vector2) -> void:
     pass
+
+## A mode that works the touch itself (a gun to lay): return true to keep the helm out of it.
+func input(_ev: InputEvent) -> bool:
+    return false
 
 ## Small white chevrons pointing `dir` (−1 left, +1 right) from the middle of the screen.
 func chevrons(ui: Control, dir: float, strength: float = 1.0) -> void:

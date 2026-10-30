@@ -23,7 +23,7 @@ const LANE := 20.0          # how far to port or starboard the helm allows (defa
 const ROCK_SPAN := 18.0     # rocks stand out to here either side of the course, inside the gorge
 const GORGE_X := 22.5       # the gorge's cliff faces stand here either side, a hull's width past the lane
 var lane := LANE            # a mode may open the channel wider
-const CRUISE := {"sail": 8.0, "waves": 7.0, "reef": 8.0, "whirl": 7.0, "escape": 3.0, "wrecks": 6.5, "gauntlet": 8.5, "cave": 6.5}
+const CRUISE := {"sail": 8.0, "waves": 7.0, "reef": 8.0, "whirl": 7.0, "escape": 3.0, "wrecks": 6.5, "gauntlet": 8.5, "cave": 6.5, "kraken": 7.0}
 
 var data: Dictionary
 var settings: Dictionary
@@ -215,6 +215,8 @@ func _build_sky() -> void:
     # anything can be seen, the camera's own distance behind her allowed for.
     var light_k := float(data.get("light", 1.0))
     e.ambient_light_energy *= light_k
+    if light_k < 1.0 and sky.sky_material is PanoramaSkyMaterial:
+        (sky.sky_material as PanoramaSkyMaterial).energy_multiplier *= light_k   # a darker day darkens its sky too
     if data.has("fog_dist"):
         var from_ship := 11.0
         e.fog_mode = Environment.FOG_MODE_DEPTH
@@ -1299,6 +1301,8 @@ func _read_gyro(delta: float) -> void:
 func _input(ev: InputEvent) -> void:
     if phase == Phase.ENDED:
         return
+    if mode_obj and mode_obj.input(ev):
+        return
     if ev is InputEventScreenTouch:
         var t := ev as InputEventScreenTouch
         if t.pressed and _drag_id < 0:
@@ -1782,7 +1786,7 @@ func _show_result(fail_reason: String) -> void:
     sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     v.add_child(sub)
     if won:
-        var stars := 3 if mode == "waves" or (mode_obj and not mode_obj.has_hearts) else (3 if hits == 0 else (2 if hits == 1 else 1))
+        var stars := (mode_obj.stars() if mode_obj and not mode_obj.has_hearts else (3 if mode == "waves" else (3 if hits == 0 else (2 if hits == 1 else 1))))
         var row := Label.new()
         row.text = "★".repeat(stars) + "☆".repeat(3 - stars)
         row.add_theme_font_size_override("font_size", 110)
