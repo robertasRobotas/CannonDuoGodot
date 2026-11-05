@@ -7,173 +7,139 @@ class_name Story
 ## The 3_before scene is overheard through the cabin door (the eavesdrop presentation).
 const BEATS := {
     "1_before": [
-        ["king", "Grimhorn took our islands. Our people sit in cages."],
-        ["captain", "You heard the king, lad. You're my gunner now."],
-        ["fisher", "Old fisherman's tip: red barrels. Boom."],
+        ["king", "Grimhorn stole my islands, my people and my good spoons."],
+        ["captain", "You're my gunner now, lad. Don't drop the cannon."],
+        ["fisher", "Red barrels go boom. That's my whole speech."],
     ],
     "1_after": [
-        ["mate", "First fort down! I'll carve a notch in the mast."],
+        ["mate", "First fort down! I'll carve a notch in the mast. Captain, we have no knife."],
     ],
     "2_before": [
-        ["captain", "No cannon work today, lad. Take the helm."],
-        ["captain", "Hoist the sail and bring us into port. Mind the rocks."],
+        ["captain", "No cannon today. Helm. The gorge is narrow and the rocks are not."],
+        ["mate", "I steered a cart once. The cart lost."],
     ],
     "2_after": [
-        ["captain", "Well sailed. You might make a sailor yet."],
+        ["captain", "Made fast, and the ship is the same shape as this morning. Well done."],
     ],
     "3_before": [
         ["king", "Captain. Yours is the only ship that came back."],
-        ["king", "The rest lie on the sea floor."],
-        ["king", "Break their forts. Every last one."],
+        ["king", "Also the only ship I had. Try to keep it."],
         ["captain", "...You heard none of that, lad. To your gun."],
     ],
     "3_after": [
-        ["mira", "I'm Mira. I escaped their cages."],
-        ["mira", "I know every fort they hold. I'll mark your chart."],
+        ["mira", "I'm Mira. I escaped their cages. The lock was a potato."],
+        ["mira", "I know every fort they hold. I'll mark your chart. In pencil."],
     ],
     "4_before": [
-        ["captain", "Storm swell ahead. Meet the waves where they're green."],
-        ["captain", "White water rolls a ship over, lad. Steer around it."],
+        ["captain", "Storm swell. Green water lifts you, white water flips you."],
+        ["mate", "Which one is the sky right now?"],
     ],
     "4_after": [
-        ["mate", "My breakfast is still up on that last wave."],
+        ["mate", "My breakfast is still up on that last wave. Say hello to it."],
+    ],
+    "5_before": [
+        ["fisher", "One pirate on a hill with a lookout. He thinks he's a lighthouse."],
+        ["captain", "A pirate who falls off a hill is done for, lad. Make him fall."],
     ],
     "6_before": [
-        ["mira", "The reef here hides at high water. Rocks come up without warning."],
-        ["captain", "There's always a warning, lad. Bubbles. Watch for the boils."],
+        ["captain", "Same gorge, by night, in fog. The rocks moved."],
+        ["mate", "Rocks don't move. ...Captain, the rocks moved."],
+    ],
+    "6_after": [
+        ["mira", "You hit the pier twice. I'm counting it as parking."],
+    ],
+    "7_before": [
+        ["mira", "A log fort. Balls bounce off logs. So does good advice."],
+        ["captain", "The powder is up in the lookouts. Knock it down, let it fall."],
+    ],
+    "7_after": [
+        ["mate", "That keg fell off the tower and exploded. Twice, I think."],
     ],
     "8_before": [
-        ["mate", "Sails astern! Three... four of them!"],
-        ["captain", "They're faster than us. Gunner, the stern chaser. Three balls each."],
-    ],
-    "8_after": [
-        ["mate", "Did you see her masts go? DID YOU SEE?"],
+        ["fisher", "A camp with crates all round it. No powder. Just a lot of wood."],
+        ["captain", "So we knock the towers onto them. Timber solves everything."],
     ],
     "9_before": [
-        ["mira", "Gunships in the bay. Sink them before they sink you."],
+        ["mira", "Two guns in sandbag nests. They fire every few seconds and never hit."],
+        ["captain", "One ball sets a nest alight. The second blows it. Count to two, lad."],
+    ],
+    "9_after": [
+        ["mate", "They missed us forty times. I was starting to feel insulted."],
     ],
     "10_before": [
-        ["captain", "They'll push boats off the beach for a minute. Hold them off."],
-        ["captain", "Then we take the fort. Steady now."],
+        ["captain", "A galleon, thirty metres off, gun to gun. Six balls sink her."],
+        ["mate", "She's bigger than us. Does she know she's bigger than us?"],
+    ],
+    "10_after": [
+        ["mate", "Her sails caught fire and she STILL kept shooting. Respect."],
     ],
     "11_before": [
-        ["fisher", "Port Alder. Their whole loot sits on that quay."],
+        ["fisher", "Port Alder. A gun dug in on the quay. Set it alight, then blow it."],
+        ["mira", "The lookouts behind have no powder. Just pirates and bad posture."],
     ],
     "11_after": [
-        ["mate", "The harbour's ours! Smells like fish and freedom."],
+        ["mate", "The harbour's ours! Smells like fish and freedom. Mostly fish."],
     ],
     "12_before": [
-        ["fisher", "Maelstrom Lane. Lost two cousins to it. Keep off the throats."],
+        ["fisher", "Maelstrom Lane, in a storm, at night. Lost two cousins to it."],
+        ["fisher", "They were terrible cousins. Still. Keep off the throats."],
+    ],
+    "12_after": [
+        ["mate", "I closed my eyes for the whole lane. Did it look nice?"],
+    ],
+    "13_before": [
+        ["mira", "Eagle's Nest. A log fort on a crag. Aim high and pull hard."],
+        ["captain", "The logs only fall to a blast. Find the powder, lad."],
     ],
     "14_before": [
-        ["mira", "A pirate supply ship runs this coast at night. She steers by the lighthouse."],
-        ["captain", "Then we put out the light, and the reef does our work."],
+        ["mira", "The lighthouse. Their powder is up in the lantern, next to the light."],
+        ["mate", "Who keeps powder next to a light? ...Pirates. Right."],
     ],
     "14_after": [
-        ["mate", "She went straight on. Straight ON. Into the rocks."],
+        ["captain", "The light's out and so is the top of the tower. Tidy work."],
+    ],
+    "15_before": [
+        ["captain", "A log keep by firelight. A gun in front of it, behind logs."],
+        ["captain", "Two of your balls are powder. Don't waste them on the sea."],
     ],
     "15_after": [
         ["mira", "They knew we were coming. Someone talks."],
-        ["mate", "Not me! ...Maybe the parrot."],
+        ["mate", "Not me! ...Maybe the parrot. The parrot knows things."],
     ],
     "16_before": [
-        ["captain", "A real ship this time, lad. A galleon. Ship against ship."],
-        ["captain", "Hull shots. Her masts will go at half. Keep hitting."],
+        ["fisher", "The lane again, with fog. You'll see the funnels when it's too late."],
+        ["captain", "So we see them earlier, lad. Keep her in the middle."],
+    ],
+    "17_before": [
+        ["mira", "The old brick tower. It won't fall. Powder on both sides of it."],
+        ["captain", "Blow both stores. The big gun on top shoots back, so hurry."],
     ],
     "17_after": [
-        ["mate", "Captain, the hull's cracked!"],
-        ["fisher", "Port Alder will mend her. You freed them, remember?"],
+        ["mate", "That gun on the tower went up like a festival. A very loud festival."],
     ],
     "18_before": [
         ["mate", "Captain... the water's turning. The whole sea is turning."],
-        ["captain", "The Eye. Helm, lad. Hold her where I say or we go down."],
+        ["captain", "The Eye. Rudder in the white window, lad. The window moves. So do you."],
     ],
     "18_after": [
         ["captain", "Out. I've never seen a ship come out of the Eye."],
+        ["mate", "I've never seen my own lunch twice. New day, new things."],
+    ],
+    "19_before": [
+        ["mira", "A black galleon, twice our size, in a storm by night. She fires fast."],
+        ["captain", "Seven balls sink her. Every second one of hers finds us. Be quick."],
+    ],
+    "19_after": [
+        ["mate", "She's gone! Captain, I'd like it noted I didn't scream."],
+        ["captain", "Noted. You screamed."],
     ],
     "20_before": [
-        ["mira", "The fleet died here. The king's fleet."],
-        ["captain", "Mind the fires. And don't look too long, lad."],
+        ["fisher", "The sea's quiet here. Too quiet. Something big lives under it."],
+        ["captain", "Then we'll meet it with the gun, lad. Load everything we have."],
     ],
-    "21_after": [
-        ["mate", "They boarded us in the dark. The cannon's gone."],
-        ["fisher", "Take mine. Old and small... but she never missed."],
-    ],
-    "22_before": [
-        ["captain", "Guns on both cliffs. They'll fire where they think we'll be."],
-        ["captain", "A ring of white shows where the ball lands. Be anywhere else."],
-    ],
-    "23_before": [
-        ["fisher", "She throws short. Sail close, aim high."],
-    ],
-    "24_before": [
-        ["captain", "Night raid. The harbour's asleep."],
-        ["captain", "Every ball hits something, or the bell rings and they all wake up."],
-    ],
-    "25_before": [
-        ["mira", "Fire Mountain spits burning rock. Let it fight for you."],
-    ],
-    "26_before": [
-        ["mira", "A merchant carries grain to the freed islands. The pirates want her."],
-        ["captain", "Boats will race for her side. Not one reaches her, gunner."],
-    ],
-    "27_before": [
-        ["mira", "Skull Rock. Your cannon is in that vault."],
-    ],
-    "27_after": [
-        ["mate", "Welcome back, old girl!"],
-    ],
-    "28_before": [
-        ["captain", "A rope bridge between the towers. Pirates running across it."],
-        ["captain", "Don't shoot the pirates, lad. Shoot the bridge."],
-    ],
-    "29_before": [
-        ["mira", "Some pirates want out. Free them too."],
-    ],
-    "29_after": [
-        ["olaf", "Olaf. Ten years with Grimhorn. No more."],
-        ["olaf", "My brothers and I will work your gun."],
-    ],
-    "30_before": [
-        ["fisher", "Shark Bay. Nobody swims there. Nobody swims there twice."],
-    ],
-    "31_after": [
-        ["mira", "Letters with the royal seal. Lord Vesk sold us out."],
-        ["king", "Vesk?! He will answer. Finish this, Captain."],
-    ],
-    "32_before": [
-        ["mate", "Captain! Pirates! In the SKY!"],
-        ["captain", "Balloons. Shoot the canvas while they're over their own fort."],
-    ],
-    "33_before": [
-        ["olaf", "Grimhorn was navy once. The best. Then the king broke him."],
-    ],
-    "34_before": [
-        ["mira", "The Hollow cuts a day off the voyage. Through the cliff."],
-        ["captain", "Quiet in there. The roof doesn't like noise."],
-    ],
-    "35_after": [
-        ["mira", "One island left after the vault. It's too quiet."],
-    ],
-    "36_before": [
-        ["captain", "Their vault has one window, lad."],
-        ["captain", "Thread it. Make the king proud."],
-    ],
-    "37_before": [
-        ["captain", "Something big is circling us."],
-        ["mate", "Please be dolphins. Please be dolphins."],
-    ],
-    "37_after": [
-        ["mate", "THE WHALE LIFTED THE SHIP. I kissed the deck twice."],
-        ["fisher", "The old sea looks after her own."],
-    ],
-    "38_before": [
-        ["grimhorn", "The king's little captain. One ship. One cannon."],
-        ["grimhorn", "Welcome to my trap."],
-    ],
-    "38_after": [
-        ["bottle", "\"The islands were the start. My ice fleet sails at the thaw. — The Pirate King\""],
-        ["king", "Valora is free. Rest, gunner. The North will need you soon."],
+    "20_after": [
+        ["king", "The Kraken is dead and Valora is free. Rest, gunner."],
+        ["mate", "Can I have the spoons now?"],
     ],
 }
 
@@ -190,6 +156,8 @@ const MATE_JOKES := [
     "That tower fell like my cousin at a wedding.",
     "The islanders brought fish! I love you, Captain.",
     "I'd have fired sooner, but I blinked.",
+    "The parrot says well done. The parrot says a lot of things.",
+    "I named the cannon Brenda. Brenda did great today.",
 ]
 
 static func beat(id: int, when: String) -> Array:

@@ -76,7 +76,7 @@ func tick(delta: float) -> void:
                 ring.material_override.albedo_color.a = 0.75 * (1.0 - k) + 0.1
             if k >= 1.0:
                 rk.state = 2
-                v.rocks.append({"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false})
+                v.rocks.append({"x": rk.x, "z": rk.z, "r": rk.r, "hit": false, "grazed": false, "polys": VoyageLevel.rock_polys(rk.node, float(rk.x), float(rk.z), float(rk.r))})
                 v._splash_at(Vector3(float(rk.x), 0.1, float(rk.z)))
                 if rk.has("boil"):
                     (rk.boil as CPUParticles3D).emitting = false

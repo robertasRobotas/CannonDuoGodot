@@ -223,8 +223,21 @@ void fragment() {
         }
         foam += wake * trail * streak * 0.45;
     }
-    ALBEDO = mix(base, foam_color, clamp(foam, 0.0, 1.0));
-    ROUGHNESS = 0.12;
-    SPECULAR = 0.4;
+    // Real foam is lace, not paint: the detail texture at two scales, drifting against
+    // each other, cuts every foam term into holes and threads. Light foam is only a few
+    // threads; heavy foam closes up but keeps its holes, and its edge is always ragged.
+    float f = clamp(foam, 0.0, 1.0);
+    float lace_a = texture(normal_map, world_pos.xz * 0.23 + vec2(sea_time * 0.017, -sea_time * 0.011)).b;
+    float lace_b = texture(normal_map, world_pos.xz * 0.61 + vec2(-sea_time * 0.03, sea_time * 0.024)).g;
+    float lace_c = texture(normal_map, world_pos.xz * 1.7 + vec2(sea_time * 0.05, sea_time * 0.04)).r;
+    float lace = lace_a * 0.45 + lace_b * 0.35 + lace_c * 0.2;   // coarse patches, threads, and fine bubbles close up
+    float cut = smoothstep(0.75 - 0.45 * f, 0.92 - 0.35 * f, lace);
+    float foam_k = f * (0.15 + 0.85 * cut);
+    // Fresh foam is bright and dry; thin foam is wet and lets the water show through.
+    vec3 foam_tint = mix(foam_color * vec3(0.88, 0.92, 0.96), foam_color, cut);
+    ALBEDO = mix(base, foam_tint, foam_k);
+    // Foam is dull and scatters light; the water around it stays glassy.
+    ROUGHNESS = mix(0.12, 0.85, foam_k);
+    SPECULAR = mix(0.4, 0.1, foam_k);
     METALLIC = 0.0;
 }

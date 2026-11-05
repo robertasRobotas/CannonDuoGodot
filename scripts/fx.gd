@@ -141,8 +141,10 @@ func blast(at: Vector3, hold: float = 1.0) -> void:
     tw.tween_callback(ring.queue_free)
 
 func splash(at: Vector3) -> void:
-    _burst(at, Color(1, 0.98, 0.94), 30, 3.5, 0.12, 0.7)
-    _sprites(at, "res://assets/particles/whitePuff12.png", Color(0.9, 0.95, 1.0, 0.8), 8, 3.0, 1.1, 0.9, -5.0, 1.8, 30.0)
+    # A column of white water thrown up by the ball, breaking into fine drops as it falls back.
+    _burst(at, Color(1, 0.98, 0.95), 90, 6.0, 0.1, 0.8, -9.0)
+    _burst(at, Color(0.96, 0.98, 1.0), 40, 3.5, 0.15, 0.6, -9.0)
+    _sprites(at, "res://assets/particles/circle_05.png", Color(0.95, 0.98, 1.0, 0.6), 14, 4.5, 1.0, 1.0, -5.0, 1.0, 22.0)
 
 func intercept(at: Vector3) -> void:
     _burst(at, Color(0.98, 0.78, 0.32), 50, 4, 0.12, 0.6)

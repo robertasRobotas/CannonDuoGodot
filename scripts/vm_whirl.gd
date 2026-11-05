@@ -1,5 +1,5 @@
 ## Maelstrom Lane: whirlpools in a storm, real funnels in the water that pull at the hull.
-## They open in the ship's own path, 20 to 25 m ahead and a little toward the nearer side
+## They open in the ship's own path, 20 to 25 m ahead and 1.5 m toward the nearer side
 ## of the channel, one at a time: the next opens two to four seconds after the last is
 ## astern. Skirt them. Get drawn into the throat and the ship goes round and down. The sea
 ## sets gently toward the middle of the channel, so the centre is always the slightly
@@ -25,12 +25,12 @@ var _next_in := -1.0     # seconds until the next funnel opens (< 0: waiting to 
 var _last: Dictionary = {}
 const GROW := 6.0        # seconds a funnel takes to open from a small eddy to its full size
 
-## A funnel opens in the ship's path: 25 to 35 m ahead, and 3 to 5 m from her line toward
+## A funnel opens in the ship's path: 20 to 25 m ahead, and 1.5 m from her line toward
 ## the nearer side of the channel, so the open water is always back toward the middle.
 func _spawn_ahead() -> void:
     var sp := v.root.position
     var side := signf(sp.x) if absf(sp.x) > 0.5 else (1.0 if _rng.randf() < 0.5 else -1.0)
-    var x := clampf(sp.x + side * _rng.randf_range(3.0, 5.0), -v.lane + 4.0, v.lane - 4.0)
+    var x := clampf(sp.x + side * 1.5, -v.lane + 4.0, v.lane - 4.0)
     var z := sp.z - _rng.randf_range(20.0, 25.0)
     _pool(x, z, _rng.randf_range(6.0, 8.0) * 1.25, _rng)
     _last = pools[pools.size() - 1]

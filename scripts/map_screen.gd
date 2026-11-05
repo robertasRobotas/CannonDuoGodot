@@ -212,13 +212,13 @@ func _draw_chart() -> void:
         c.draw_circle(p, r + 6.0, Color(1, 1, 1, 0.9 if not locked else 0.3))
         c.draw_circle(p, r, fill)
         var font := ThemeDB.fallback_font
-        var label := ("☠" if boss else str(id)) if not locked else "🔒"
-        var fs := 176 if boss else 56
-        var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
         if boss and not locked:
-            # A bolder skull: the glyph drawn as a thick white outline over itself.
-            c.draw_string_outline(font, p + Vector2(-tw / 2.0, fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.WHITE)
-        c.draw_string(font, p + Vector2(-tw / 2.0, fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+            _draw_skull(c, p, r)   # drawn, not a glyph: the phone's fonts have no skull
+        else:
+            var label := str(id) if not locked else "🔒"
+            var fs := 56
+            var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
+            c.draw_string(font, p + Vector2(-tw / 2.0, fs * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
         # Stars.
         if not locked:
             var got := int(_stars.get(str(id), 0))
@@ -230,6 +230,50 @@ func _draw_chart() -> void:
             var sp := p + Vector2(r * 2.1 * (1.0 if p.x < 589 else -1.0), -10 + sin(_t * 2.0) * 6.0)
             _draw_ship(c, sp)
     _draw_fog(c)
+
+## The boss's skull and crossbones, drawn in white with a dark edge inside a disc of
+## radius `r`: crossed bones behind, a cranium with its jaw, eye sockets, nose and teeth.
+func _draw_skull(c: Control, p: Vector2, r: float) -> void:
+    var white := Color(0.97, 0.96, 0.92)
+    var edge := Color(0.22, 0.04, 0.03)
+    var R := r * 0.56
+    var head := p + Vector2(0, -r * 0.1)
+    # Crossbones
+    for s: float in [-1.0, 1.0]:
+        var a := head + Vector2(-s * r * 0.72, r * 0.1)
+        var b := head + Vector2(s * r * 0.72, r * 0.78)
+        c.draw_line(a, b, edge, r * 0.2)
+    for s: float in [-1.0, 1.0]:
+        var a := head + Vector2(-s * r * 0.72, r * 0.1)
+        var b := head + Vector2(s * r * 0.72, r * 0.78)
+        c.draw_line(a, b, white, r * 0.12)
+        var dir := (b - a).normalized()
+        var side := Vector2(-dir.y, dir.x)
+        for e: Vector2 in [a, b]:
+            for k: float in [-1.0, 1.0]:
+                c.draw_circle(e + side * k * r * 0.07, r * 0.085, edge)
+                c.draw_circle(e + side * k * r * 0.07, r * 0.065, white)
+    # Cranium and jaw, with a dark edge
+    var jaw_top := head.y + R * 0.45
+    var jaw_bot := head.y + R * 1.12
+    var jaw_w := R * 0.58
+    c.draw_circle(head, R + r * 0.045, edge)
+    c.draw_rect(Rect2(head.x - jaw_w - r * 0.045, jaw_top, (jaw_w + r * 0.045) * 2.0, jaw_bot - jaw_top + r * 0.045), edge)
+    c.draw_circle(head, R, white)
+    c.draw_rect(Rect2(head.x - jaw_w, jaw_top, jaw_w * 2.0, jaw_bot - jaw_top), white)
+    # Eye sockets, the nose and the teeth
+    for s: float in [-1.0, 1.0]:
+        var eye := head + Vector2(s * R * 0.4, -R * 0.02)
+        var pts := PackedVector2Array()
+        for k in 20:
+            var ang := TAU * k / 20.0
+            pts.append(eye + Vector2(cos(ang) * R * 0.25, sin(ang) * R * 0.3))
+        c.draw_colored_polygon(pts, edge)
+    c.draw_colored_polygon(PackedVector2Array([head + Vector2(0, R * 0.28), head + Vector2(-R * 0.12, R * 0.56), head + Vector2(R * 0.12, R * 0.56)]), edge)
+    for k in 5:
+        var x := head.x - jaw_w * 0.8 + jaw_w * 1.6 * float(k) / 4.0
+        c.draw_line(Vector2(x, jaw_top + R * 0.28), Vector2(x, jaw_bot - R * 0.06), edge, r * 0.025)
+    c.draw_line(Vector2(head.x - jaw_w * 0.9, jaw_top + R * 0.28), Vector2(head.x + jaw_w * 0.9, jaw_top + R * 0.28), edge, r * 0.025)
 
 func _draw_fog(c: Control) -> void:
     var y0 := _node_pos(_visible_count() - 1).y + 200.0

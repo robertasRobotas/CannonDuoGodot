@@ -48,6 +48,10 @@ func _ready() -> void:
             get_tree().create_timer(float(parts[0])).timeout.connect(func():
                 get_viewport().get_texture().get_image().save_png(parts[1])
                 get_tree().quit())
+        elif arg.begins_with("--won="):
+            # Debug: the first N levels won with three stars, so the chart opens further down.
+            for i in range(1, int(arg.substr(6)) + 1):
+                progress.stars[str(i)] = 3
         elif arg == "--upgrades":
             # Debug: every shop upgrade at its top level, some gold.
             var up := {}

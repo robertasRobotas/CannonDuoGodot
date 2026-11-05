@@ -306,15 +306,16 @@ static func _bubbles(size: float) -> CPUParticles3D:
     p.spread = 30.0
     p.initial_velocity_min = 0.8
     p.initial_velocity_max = 1.8
-    p.scale_amount_min = 0.15 * size
-    p.scale_amount_max = 0.4 * size
+    p.scale_amount_min = 0.08 * size
+    p.scale_amount_max = 0.22 * size
     p.mesh = QuadMesh.new()
     var m := StandardMaterial3D.new()
-    m.albedo_texture = load("res://assets/particles/whitePuff12.png")
-    m.albedo_color = Color(1, 1, 1, 0.6)
+    m.albedo_texture = load("res://assets/particles/circle_05.png")
+    m.albedo_color = Color(0.95, 0.98, 1.0, 0.55)
     m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    m.billboard_keep_scale = true
     p.material_override = m
     return p
 

@@ -123,11 +123,12 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
     spray.scale_amount_max = 0.38
     spray.mesh = QuadMesh.new()
     var sm := StandardMaterial3D.new()
-    sm.albedo_texture = load("res://assets/particles/whitePuff12.png")
-    sm.albedo_color = Color(1, 1, 1, 0.55)
+    sm.albedo_texture = load("res://assets/particles/circle_05.png")
+    sm.albedo_color = Color(0.96, 0.98, 1.0, 0.55)
     sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+    sm.billboard_keep_scale = true   # else every drop is drawn a metre wide, whatever its scale
     spray.material_override = sm
     spray.emitting = false
     root.add_child(spray)
@@ -162,7 +163,7 @@ func build(level_data: Dictionary, user_settings: Dictionary) -> void:
 ## The gyroscope helm, where the phone has one (the settings toggle).
 func set_gyro(on: bool) -> void:
     settings["gyro"] = on
-    gyro_on = on and (Input.get_gyroscope().length() > 0.0 or OS.has_feature("mobile"))
+    gyro_on = on and (Input.get_gravity().length() > 0.0 or Input.get_accelerometer().length() > 0.0 or OS.has_feature("mobile"))
     _steer_gyro = 0.0
 
 ## Sky, sun and haze, matching the battle levels' look.
@@ -335,161 +336,149 @@ func _build_course_rocks() -> void:
             var holder := make_rock(shape, false)   # bare stone: no foam ring to give it away
             holder.position = Vector3(x, 0.0, z)
             add_child(holder)
-            var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false}
+            var rock := {"x": x, "z": z, "r": r, "hit": false, "grazed": false, "polys": rock_polys(holder, x, z, r)}
             row.append(rock)
             rocks.append(rock)
         z -= rng.randf_range(12.0, 18.0)
 
-## A cliff's five rings: the lower three are stone (grey as the rocks in the water; those
-## entries are unused). The stone fades into a mossy grey-green at the shoulder ring, where
-## the turf begins in that same tone, and the turf deepens to dark green at the peak.
-const CLIFF_RINGS: Array = [Color.WHITE, Color.WHITE, Color.WHITE, Color(0.52, 0.62, 0.4), Color(0.28, 0.48, 0.16)]
-## A mountain's rings, all grass: deep green in the valleys, lighter up the slopes and tops.
-const MOUNTAIN_RINGS: Array = [Color(0.6, 0.8, 0.5), Color(0.7, 0.9, 0.55), Color(0.8, 0.95, 0.65), Color(0.9, 1.0, 0.75), Color(1.0, 1.0, 0.85)]
+# Noise for the ground: broad hills, crags and a fine roughness, one field each.
+var _n_big: FastNoiseLite
+var _n_mid: FastNoiseLite
+var _n_fine: FastNoiseLite
+var _n_ridge: FastNoiseLite
+var _zq := 0.0   # the quay's face: where the gorge ends and the town's ground begins
 
-static var _turf_mat: StandardMaterial3D
+func _ground_noise() -> void:
+    if _n_big:
+        return
+    _n_big = FastNoiseLite.new()
+    _n_big.seed = 4077
+    _n_big.frequency = 0.011
+    _n_big.fractal_octaves = 3
+    _n_mid = FastNoiseLite.new()
+    _n_mid.seed = 4078
+    _n_mid.frequency = 0.045
+    _n_mid.fractal_octaves = 3
+    _n_fine = FastNoiseLite.new()
+    _n_fine.seed = 4079
+    _n_fine.frequency = 0.21
+    _n_fine.fractal_octaves = 2
+    _n_ridge = FastNoiseLite.new()
+    _n_ridge.seed = 4080
+    _n_ridge.frequency = 0.0055
+    _n_ridge.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+    _n_ridge.fractal_octaves = 4
 
-## Grass over the cliff tops and the mountains, shaded through vertex colours.
-static func _turf_material() -> StandardMaterial3D:
-    if _turf_mat == null:
-        _turf_mat = Models.tex_material("leafy_grass", 0.08, Color(0.85, 1.0, 0.75)).duplicate()
-        _turf_mat.vertex_color_use_as_albedo = true
-    return _turf_mat
+## The gorge's ground either side of the channel, as real terrain: under the water at the
+## foot, a sheer face of rock rising from the waterline at GORGE_X, then rolling turf
+## uplands climbing away behind it, all from noise so no two stretches are alike. The wall
+## sinks to a low bank over the last stretch before the quay, where the town's ground
+## takes over.
+func _gorge_height(x: float, z: float) -> float:
+    var d := absf(x) - GORGE_X
+    var big := _n_big.get_noise_2d(x, z)
+    var mid := _n_mid.get_noise_2d(x, z)
+    var fine := _n_fine.get_noise_2d(x, z)
+    var fade := smoothstep(0.0, 1.0, clampf((z - (_zq + 2.0)) / 30.0, 0.0, 1.0))
+    if d < 0.0:
+        return (0.5 + d * 2.5) * fade + 0.3 * (1.0 - fade)
+    var top := 11.0 + 4.5 * big + 2.5 * mid
+    var wc := 4.5 + 1.5 * mid     # how far the face leans back
+    var h: float
+    if d < wc:
+        h = 0.5 + top * pow(d / wc, 0.55) + 0.7 * fine * (d / wc)
+    else:
+        var u := d - wc
+        h = top + 3.0 * mid + 1.2 * fine + u * 0.22 + 7.0 * big * clampf(u / 25.0, 0.0, 1.0)
+    return h * fade + 0.3 * (1.0 - fade)
 
-## The gorge: a wall of cliffs down either side of the course, from behind the start right
-## to the quay. Each side is one mesh of tall stone lumps (the rocks' chunks, grown big) in
-## two rows: a front row at the waterline and a taller row behind it, staggered, so the wall
-## reads as massive rock rather than a fence. Their inner faces stand at GORGE_X, so the
-## helm's limit (`lane`) is the cliff, not an invisible line. The tops are turf, and trees
-## grow from the lumps' ledges, shoulders and peaks.
+## Stone where the ground stands steep or meets the water, turf where it lies gentle;
+## the turf a deeper green low down, paler up the slopes.
+func _gorge_colour(p: Vector3, slope: float) -> Color:
+    var turf := 1.0 - smoothstep(0.4, 0.6, slope)
+    turf *= clampf((p.y - 0.7) / 0.8, 0.0, 1.0)
+    var wet := clampf((p.y + 0.4) / 1.8, 0.0, 1.0)
+    var v := 0.9 + 0.2 * _n_fine.get_noise_2d(p.x * 3.0, p.z * 3.0)
+    var stone := Color(1.0, 1.0, 1.04) * (0.6 + 0.4 * wet) * v
+    var grass := Color(0.78, 1.0, 0.62).lerp(Color(1.0, 1.15, 0.8), clampf(p.y / 28.0, 0.0, 1.0)) * v
+    var c := stone.lerp(grass, turf)
+    c.a = turf
+    return c
+
 func _build_gorge() -> void:
+    _ground_noise()
     var rng := RandomNumberGenerator.new()
     rng.seed = 4077
-    var zq := -goal - 12.0    # the quay's face: the cliffs run down to it
+    _zq = -goal - 12.0
+    var h := Callable(self, "_gorge_height")
     for side: float in [-1.0, 1.0]:
-        var st := SurfaceTool.new()
-        st.begin(Mesh.PRIMITIVE_TRIANGLES)
-        var turf := SurfaceTool.new()
-        turf.begin(Mesh.PRIMITIVE_TRIANGLES)
-        for row in 2:
-            var z := 40.0 + rng.randf_range(0.0, 6.0)
-            # The front row ends against the quay's end; the back row a little short of it,
-            # clear of the houses behind the quay.
-            var end := zq + (6.0 if row == 0 else 10.0)
-            while z > end:
-                var rr := rng.randf_range(5.0, 8.0) * (1.0 if row == 0 else 1.4)
-                var hh := rng.randf_range(9.0, 15.0) * (1.0 if row == 0 else 1.6)
-                # The lump's jitter reaches 1.3 of its radius: set it back so its nearest
-                # face never comes inside GORGE_X.
-                var x := side * (GORGE_X + rr * 1.3 + (0.0 if row == 0 else rr * 0.9))
-                var size := Vector3(rr, hh, rr * rng.randf_range(0.8, 1.3))
-                var rings := _chunk(st, Vector3(x, 0.0, z), size, rng.randf_range(0.0, TAU), rng.randf_range(0.8, 1.0), rng, CLIFF_RINGS, turf, 3)
-                _plant_cliff(rings, side, rng)
-                z -= size.z * rng.randf_range(0.9, 1.2)
-        st.generate_normals()
-        var mi := MeshInstance3D.new()
-        mi.mesh = st.commit()
-        mi.material_override = _stone_material()
-        add_child(mi)
-        turf.generate_normals()
-        var top := MeshInstance3D.new()
-        top.mesh = turf.commit()
-        top.material_override = _turf_material()
-        add_child(top)
-    _build_hinterland(zq, rng)
+        add_child(Terrain.build(side * (GORGE_X - 3.0), side * (GORGE_X + 76.0), 60.0, _zq + 2.0, 2.0, h, Callable(self, "_gorge_colour")))
+        # Woods on the uplands and shoulders, shrubs clinging to the ledges of the face.
+        for i in 260:
+            var x := side * (GORGE_X + rng.randf_range(0.3, 74.0))
+            var z := rng.randf_range(_zq + 12.0, 52.0)
+            var y := _gorge_height(x, z)
+            if y < 1.6:
+                continue
+            var slope := Terrain.slope_at(h, x, z)
+            var far := absf(x) > GORGE_X + 32.0
+            if slope < 0.45:
+                var kind: String = ["pine", "pine", "oak_medium", "maple", "oak_large"][rng.randi_range(0, 4)]
+                _tree(("far:" if far else "") + kind, Vector3(x, y - 0.2, z), rng.randf_range(5.0, 9.0) * (1.3 if far else 1.0), rng)
+            elif slope < 0.72 and rng.randf() < 0.5 and not far:
+                _tree("palm_plant" if rng.randf() < 0.5 else "oak_small", Vector3(x, y - 0.5, z), rng.randf_range(1.4, 2.4), rng)
+    _build_hinterland(_zq, rng)
     _flush_trees()
 
-## Trees on one lump of the gorge: a pine on most peaks, two to four trees on the upper
-## shoulder (the ring below the peak), and shrubs on the ledge at mid height on the side
-## that faces the channel. Each is sunk a little into the stone, so it grows out of the rock.
-func _plant_cliff(rings: Array, side: float, rng: RandomNumberGenerator) -> void:
-    var ledge: Array = rings[rings.size() - 3]
-    var shoulder: Array = rings[rings.size() - 2]
-    var peak: Vector3 = rings[rings.size() - 1][0]
-    if rng.randf() < 0.7:
-        _tree("pine", peak, rng.randf_range(4.5, 7.5), rng)
-    for i in rng.randi_range(2, 4):
-        var p: Vector3 = shoulder[rng.randi_range(0, shoulder.size() - 1)]
-        if p.y < 1.5:
-            continue   # too near the water
-        var kind: String = ["oak_small", "maple", "palm_plant", "pine", "oak_medium"][rng.randi_range(0, 4)]
-        var h := rng.randf_range(1.6, 2.6) if kind == "palm_plant" else rng.randf_range(3.0, 5.5)
-        _tree(kind, p, h, rng)
-    for i in rng.randi_range(1, 2):
-        var p: Vector3 = ledge[rng.randi_range(0, ledge.size() - 1)]
-        # Only ledges that face the channel show from the water.
-        if p.y < 1.2 or p.x * side > absf(peak.x):
-            continue
-        _tree("palm_plant" if rng.randf() < 0.6 else "oak_small", p, rng.randf_range(1.4, 2.4), rng)
+## The range behind the town: ridged mountains rising from the plain, their lower slopes
+## under forest, the steep faces and the high tops bare rock.
+func _mountain_height(x: float, z: float) -> float:
+    var back := (_zq - 42.0) - z    # metres back from the plain's edge
+    var env := smoothstep(0.0, 1.0, clampf(back / 75.0, 0.0, 1.0))
+    var r := (_n_ridge.get_noise_2d(x, z) + 1.0) * 0.5
+    var big := _n_big.get_noise_2d(x * 0.6, z * 0.6)
+    var mid := _n_mid.get_noise_2d(x * 0.5, z * 0.5)
+    var h := env * (74.0 * pow(r, 1.5) + 12.0 * big + minf(back * 0.1, 18.0)) + env * 3.0 * mid
+    return maxf(h, 0.0) + 0.05
 
-## The land behind the harbour town: green ground out to the sides and far back, a range of
-## mountains across the whole width behind it (green slopes, bare peaks), and woods between.
+func _mountain_colour(p: Vector3, slope: float) -> Color:
+    var turf := 1.0 - smoothstep(0.42, 0.6, slope)
+    turf *= 1.0 - smoothstep(40.0, 56.0, p.y)   # bare above the tree line
+    var v := 0.88 + 0.24 * _n_fine.get_noise_2d(p.x * 1.5, p.z * 1.5)
+    var stone := Color(0.8, 0.78, 0.78).lerp(Color(1.0, 0.98, 0.96), clampf(p.y / 70.0, 0.0, 1.0)) * v
+    var grass := Color(0.62, 0.86, 0.5).lerp(Color(0.95, 1.1, 0.72), clampf(p.y / 45.0, 0.0, 1.0)) * v
+    var c := stone.lerp(grass, turf)
+    c.a = turf
+    return c
+
 func _build_hinterland(zq: float, rng: RandomNumberGenerator) -> void:
     var grass := Models.tex_material("leafy_grass", 0.05, Color(0.8, 0.9, 0.7))
     # Ground: the main sweep behind the town's sand, and two strips either side of the quay
     # under the cliffs' ends.
-    _block(Vector3(0.0, -0.4, zq - 130.0), Vector3(600.0, 1.0, 200.0), grass)
+    _block(Vector3(0.0, -0.4, zq - 130.0), Vector3(700.0, 1.0, 200.0), grass)
     for side: float in [-1.0, 1.0]:
         _block(Vector3(side * 160.0, -0.4, zq - 12.0), Vector3(280.0, 1.0, 36.0), grass)
-    # The mountains: two rows of massifs, the back row higher. Each massif is a tall lump
-    # with two or three lower ones leaning on its flanks, so it has shoulders, not one spike.
-    var st := SurfaceTool.new()
-    st.begin(Mesh.PRIMITIVE_TRIANGLES)
-    for row in 2:
-        var x := -260.0 + rng.randf_range(0.0, 20.0)
-        while x < 260.0:
-            var rr := rng.randf_range(16.0, 26.0) * (1.0 if row == 0 else 1.5)
-            var hh := rng.randf_range(22.0, 40.0) * (1.0 if row == 0 else 1.7)
-            var z := zq - (58.0 if row == 0 else 105.0) - rng.randf_range(0.0, 15.0)
-            var rings := _chunk(st, Vector3(x, 0.0, z), Vector3(rr, hh, rr * rng.randf_range(0.7, 1.1)), rng.randf_range(0.0, TAU), rng.randf_range(0.85, 1.0), rng, MOUNTAIN_RINGS)
-            _plant_mountain(rings, z, 50, rng)
-            for k in rng.randi_range(2, 3):
-                var a := rng.randf_range(0.0, TAU)
-                var d := rr * rng.randf_range(0.6, 1.1)
-                var fr := rr * rng.randf_range(0.5, 0.8)
-                var fh := hh * rng.randf_range(0.4, 0.7)
-                var fz := z + sin(a) * d * 0.6
-                rings = _chunk(st, Vector3(x + cos(a) * d, 0.0, fz), Vector3(fr, fh, fr * rng.randf_range(0.7, 1.2)), rng.randf_range(0.0, TAU), rng.randf_range(0.85, 1.0), rng, MOUNTAIN_RINGS)
-                _plant_mountain(rings, fz, 30, rng)
-            x += rr * rng.randf_range(1.5, 1.9)
-    st.generate_normals()
-    var mi := MeshInstance3D.new()
-    mi.mesh = st.commit()
-    mi.material_override = _turf_material()
-    add_child(mi)
+    var h := Callable(self, "_mountain_height")
+    add_child(Terrain.build(-340.0, 340.0, zq - 42.0, zq - 330.0, 5.0, h, Callable(self, "_mountain_colour")))
+    # Forest up the slopes, as far as the trees grow.
+    for i in 900:
+        var x := rng.randf_range(-320.0, 320.0)
+        var z := zq - 44.0 - rng.randf_range(0.0, 190.0)
+        var y := _mountain_height(x, z)
+        if y < 1.5 or y > 40.0 or Terrain.slope_at(h, x, z) > 0.45:
+            continue
+        var kind: String = ["pine", "pine", "pine", "oak_medium", "oak_large"][rng.randi_range(0, 4)]
+        _tree("far:" + kind, Vector3(x, y - 0.6, z), rng.randf_range(8.0, 13.0), rng)
     # Woods on the ground: thickest toward the mountains, thinning to the town's back.
     for i in 220:
         var x := rng.randf_range(-230.0, 230.0)
         var z := zq - rng.randf_range(10.0, 60.0)
         # Keep off the town (its houses stand within 50 either side, to 30 back) and the
         # church on the right.
-        if absf(x) < 52.0 and z > zq - 32.0:
+        if absf(x) < 60.0 and z > zq - 42.0:
             continue
         var kind: String = ["pine", "oak_medium", "oak_large", "maple", "palm_coconut"][rng.randi_range(0, 4)]
         _tree(kind, Vector3(x, 0.1, z), rng.randf_range(4.0, 8.0), rng)
-
-## Woods up a mountain's slopes: `count` trees scattered over the faces between the
-## waterline ring and the shoulder, on the side that looks toward the harbour (z greater
-## than the lump's centre `cz`), so the slopes the player sees are thick with forest. Each
-## tree stands on a point picked inside one face of the lump, sunk a little into it.
-func _plant_mountain(rings: Array, cz: float, count: int, rng: RandomNumberGenerator) -> void:
-    var n: int = (rings[0] as Array).size()
-    for i in count:
-        var j := rng.randi_range(1, 2)   # the band between rings j and j + 1
-        var k := rng.randi_range(0, n - 1)
-        var lo: Array = rings[j]
-        var hi: Array = rings[j + 1]
-        var u := rng.randf()
-        var a: Vector3 = (lo[k] as Vector3).lerp(lo[(k + 1) % n], u)
-        var b: Vector3 = (hi[k] as Vector3).lerp(hi[(k + 1) % n], u)
-        var p := a.lerp(b, rng.randf())
-        if p.y < 0.8 or p.z < cz:
-            continue
-        # Pines mostly, some oaks; no maples (the heaviest mesh) by the hundred. Big, so
-        # they read from the water. Their own MultiMesh group, far off, so it can drop to
-        # the meshes' coarse LODs.
-        var kind: String = ["pine", "pine", "pine", "oak_medium", "oak_large"][rng.randi_range(0, 4)]
-        _tree("far:" + kind, p - Vector3(0.0, 0.6, 0.0), rng.randf_range(7.0, 13.0), rng)
 
 var _trees: Dictionary = {}   # tree kind -> its transforms, drawn as one MultiMesh each
 
@@ -557,13 +546,34 @@ func make_rock(shape: Dictionary, foam: bool = true) -> Node3D:
     var holder := Node3D.new()
     var r := float(shape.r)
     var h := float(shape.h)
-    holder.add_child(_crag(r * float(shape.w), h, dice))
+    var outlines: Array = []
+    holder.add_child(_crag(r * float(shape.w), h, dice, outlines))
+    holder.set_meta("outline", outlines)
     if foam:
         var ring := VoyageMode.foam_ring(r * 1.2, 0.4)
         ring.position.y = Tuning.SEA_LEVEL + 0.06
         holder.add_child(ring)
     holder.set_meta("top", h)
     return holder
+
+## A rock's stone at the waterline, in world x/z: one polygon per lump, for the hull to
+## strike. Built from the outlines make_rock kept, or, for a rock built some other way,
+## a circle of its hull radius.
+static func rock_polys(holder: Node3D, x: float, z: float, r: float) -> Array:
+    var polys: Array = []
+    if holder and holder.has_meta("outline"):
+        for ring: PackedVector2Array in holder.get_meta("outline"):
+            var poly := PackedVector2Array()
+            for q: Vector2 in ring:
+                poly.append(q + Vector2(x, z))
+            polys.append(poly)
+    if polys.is_empty():
+        var poly := PackedVector2Array()
+        for i in 10:
+            var a := TAU * float(i) / 10.0
+            poly.append(Vector2(x + cos(a) * r, z + sin(a) * r))
+        polys.append(poly)
+    return polys
 
 static var _stone_mat: StandardMaterial3D
 
@@ -576,7 +586,7 @@ static func _stone_material() -> StandardMaterial3D:
 
 ## A crag: a low heap of four to seven angular chunks of grey stone, sharp-edged, each a
 ## jittered few-sided lump, built into one mesh. Dark and wet at the waterline, paler up top.
-static func _crag(radius: float, height: float, dice: RandomNumberGenerator) -> MeshInstance3D:
+static func _crag(radius: float, height: float, dice: RandomNumberGenerator, outlines: Array = []) -> MeshInstance3D:
     var st := SurfaceTool.new()
     st.begin(Mesh.PRIMITIVE_TRIANGLES)
     var n := dice.randi_range(4, 7)
@@ -586,7 +596,8 @@ static func _crag(radius: float, height: float, dice: RandomNumberGenerator) -> 
         var rr := radius * (dice.randf_range(0.6, 0.8) if i == 0 else dice.randf_range(0.35, 0.6))
         var hh := height * (dice.randf_range(0.8, 1.0) if i == 0 else dice.randf_range(0.35, 0.85))
         var size := Vector3(rr, hh, rr * dice.randf_range(0.7, 1.3))
-        _chunk(st, Vector3(cos(a) * d, 0.0, sin(a) * d), size, dice.randf_range(0.0, TAU), dice.randf_range(0.85, 1.05), dice)
+        var rows := _chunk(st, Vector3(cos(a) * d, 0.0, sin(a) * d), size, dice.randf_range(0.0, TAU), dice.randf_range(0.85, 1.05), dice)
+        outlines.append(_waterline(rows))
     st.generate_normals()
     var mi := MeshInstance3D.new()
     mi.mesh = st.commit()
@@ -630,6 +641,30 @@ static func _chunk(st: SurfaceTool, at: Vector3, size: Vector3, yaw: float, shad
         var c1 := (ring_colors[j + 1] as Color) * shade if tint1 else _wet(hi[0].y, shade)
         _band(st_upper if upper else st, lo, hi, c0, c1)
     return rows
+
+## Where a lump's faces cross the water: its ring of vertices at y = 0, found between the
+## two rings either side of the waterline, as a polygon in x/z.
+static func _waterline(rows: Array) -> PackedVector2Array:
+    var poly := PackedVector2Array()
+    var n: int = (rows[0] as Array).size()
+    for i in n:
+        var best := Vector2.ZERO
+        var found := false
+        for j in rows.size() - 1:
+            var a: Vector3 = rows[j][i]
+            var b: Vector3 = rows[j + 1][i]
+            if a.y <= 0.0 and b.y > 0.0:
+                var t := -a.y / (b.y - a.y)
+                var q := a.lerp(b, t)
+                best = Vector2(q.x, q.z)
+                found = true
+                break
+        if not found:
+            # All above or all below: take the ring nearest the water.
+            var q: Vector3 = rows[2][i]
+            best = Vector2(q.x, q.z)
+        poly.append(best)
+    return poly
 
 ## Grey, darker and wetter toward the waterline.
 static func _wet(y: float, shade: float) -> Color:
@@ -716,17 +751,11 @@ func _build_port() -> void:
     _build_town(zq)
     var rng := RandomNumberGenerator.new()
     rng.seed = 7
-    for i in 6:
-        var prop := Models.prop("wooden_crate_01" if i % 2 == 0 else "wine_barrel_01")
-        prop.scale = Vector3.ONE * rng.randf_range(1.1, 1.6)
-        prop.position = Vector3(rng.randf_range(-9.0, 9.0), 1.25, zq - 4.0 + rng.randf_range(-2.0, 2.0))
-        prop.rotation.y = rng.randf_range(0.0, TAU)
-        add_child(prop)
-    for i in 7:
-        var t := Models.tree("palm_coconut", rng.randf_range(5.0, 7.5))
-        t.position = Vector3(rng.randf_range(-52.0, 52.0), 0.2, zq - 10.0 - rng.randf_range(0.0, 3.0))
+    for i in 8:
+        var t := Models.tree("palm_coconut" if i % 2 == 0 else "oak_medium", rng.randf_range(5.0, 7.5))
+        t.position = Vector3(rng.randf_range(-56.0, 56.0), 1.2, zq - 24.0 - rng.randf_range(0.0, 4.0))
         add_child(t)
-    Atmosphere.ship_flag(self, Vector3(-8.0, 1.2, zq - 3.0))
+    Atmosphere.ship_flag(self, Vector3(-14.0, 1.2, zq - 2.0))
 
 ## A box of `size` in `mat`, centred at `at`.
 func _block(at: Vector3, size: Vector3, mat: Material, yaw: float = 0.0) -> MeshInstance3D:
@@ -843,72 +872,20 @@ func _build_bridge(zq: float) -> void:
 ## The town behind the quay: a row of whitewashed and stone houses with tiled roofs, a long
 ## warehouse, and a round church tower over them all.
 func _build_town(zq: float) -> void:
-    var rng := RandomNumberGenerator.new()
-    rng.seed = 11
-    var walls: Array = [Models.flat_material(Color(0.93, 0.9, 0.82), 0.9), Models.flat_material(Color(0.88, 0.8, 0.66), 0.9), Models.tex_material("large_sandstone_blocks", 0.6, Color(0.9, 0.86, 0.78))]
-    var ground := 0.2
-    var x := -50.0
-    while x < 50.0:
-        var w := rng.randf_range(4.0, 7.0)
-        var d := rng.randf_range(4.0, 6.0)
-        var h := rng.randf_range(2.8, 4.6)
-        var z := zq - 13.0 - rng.randf_range(0.0, 9.0)
-        if absf(x) > 9.0 or z < zq - 17.0:
-            _house(Vector3(x, ground, z), Vector3(w, h, d), walls[rng.randi_range(0, walls.size() - 1)], rng)
-        x += w + rng.randf_range(2.0, 5.0)
-    # The warehouse by the quay's end, long and low.
-    _house(Vector3(-32.0, ground, zq - 12.0), Vector3(16.0, 4.2, 8.0), walls[2], rng, 0.4)
-    # The church: a hall and a round tower with a red cone.
-    _house(Vector3(22.0, ground, zq - 26.0), Vector3(10.0, 5.5, 7.0), walls[0], rng, 0.7)
-    var tower := MeshInstance3D.new()
-    var tm := CylinderMesh.new()
-    tm.top_radius = 2.0
-    tm.bottom_radius = 2.2
-    tm.height = 14.0
-    tm.radial_segments = 14
-    tower.mesh = tm
-    tower.material_override = walls[0]
-    tower.position = Vector3(29.0, ground + 7.0, zq - 26.0)
-    add_child(tower)
-    var cone := MeshInstance3D.new()
-    var cm := CylinderMesh.new()
-    cm.top_radius = 0.0
-    cm.bottom_radius = 2.6
-    cm.height = 4.5
-    cm.radial_segments = 14
-    cone.mesh = cm
-    cone.material_override = Models.flat_material(Color(0.62, 0.22, 0.16), 0.7)
-    cone.position = Vector3(29.0, ground + 16.2, zq - 26.0)
-    add_child(cone)
-
-## One house: walls, a tiled gable roof, a door and windows on the seaward side.
-func _house(at: Vector3, size: Vector3, wall: Material, rng: RandomNumberGenerator, roof_k: float = 0.55) -> void:
-    _block(at + Vector3(0, size.y / 2.0, 0), size, wall)
-    var roof := MeshInstance3D.new()
-    var pm := PrismMesh.new()
-    var roof_h := size.y * roof_k
-    pm.size = Vector3(size.z + 0.8, roof_h, size.x + 0.8)
-    pm.left_to_right = 0.5
-    roof.mesh = pm
-    roof.material_override = Models.tex_material("clay_roof_tiles_02", 1.2, Color(0.95, 0.75, 0.7))
-    roof.position = at + Vector3(0, size.y + roof_h / 2.0, 0)
-    roof.rotation.y = PI / 2.0
-    add_child(roof)
-    var dark := Models.flat_material(Color(0.2, 0.14, 0.1), 0.8)
-    var front := at.z + size.z / 2.0 + 0.03
-    _block(Vector3(at.x + rng.randf_range(-size.x * 0.25, size.x * 0.25), at.y + 0.95, front), Vector3(0.9, 1.9, 0.06), dark)
-    for sx: float in [-1.0, 1.0]:
-        _block(Vector3(at.x + sx * size.x * 0.33, at.y + size.y * 0.6, front), Vector3(0.7, 0.8, 0.06), dark)
+    HarbourTown.build(self, zq, str(data.get("terrain", {}).get("sky", "noon")) == "night")
 
 # MARK: Waves
 
 func _spawn_crest(final := false) -> void:
     var rng := RandomNumberGenerator.new()
-    rng.seed = int(time * 977.0) + crests.size()
+    rng.seed = randi() ^ (int(time * 977.0) + crests.size())   # a fresh lay-out every run
+    # The white water breaks dead ahead of the ship, wherever she is now, so every crest
+    # has to be steered round: held inside the lane so there is always green to one side.
+    var bx := clampf(root.position.x + rng.randf_range(-3.0, 3.0), -(LANE - 6.0), LANE - 6.0)
     var c := {
         # Born inside the animated patch (which trails the ship), behind the haze.
         "z": root.position.z - 100.0,
-        "bx": rng.randf_range(-7.0, 7.0),
+        "bx": bx,
         "bw": rng.randf_range(5.0, 8.0),
         "h": (11.0 if final else rng.randf_range(2.4, 3.4)),
         "final": final,
@@ -926,7 +903,7 @@ func _spawn_crest(final := false) -> void:
     node.position = Vector3(0, 0, c.z)
     if not final:
         var spume := CPUParticles3D.new()
-        spume.amount = 28
+        spume.amount = 48
         spume.lifetime = 0.45
         spume.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
         spume.emission_box_extents = Vector3(float(c.bw), 0.2, 0.4)
@@ -935,15 +912,16 @@ func _spawn_crest(final := false) -> void:
         spume.initial_velocity_min = 4.0
         spume.initial_velocity_max = 8.0
         spume.gravity = Vector3(0, -12, 0)
-        spume.scale_amount_min = 0.07
-        spume.scale_amount_max = 0.18
+        spume.scale_amount_min = 0.12
+        spume.scale_amount_max = 0.3
         spume.mesh = QuadMesh.new()
         var m := StandardMaterial3D.new()
-        m.albedo_texture = load("res://assets/particles/whitePuff12.png")
-        m.albedo_color = Color(1, 1, 1, 0.45)
+        m.albedo_texture = load("res://assets/particles/circle_05.png")
+        m.albedo_color = Color(0.96, 0.98, 1.0, 0.6)
         m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
         m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
         m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+        m.billboard_keep_scale = true
         spume.material_override = m
         spume.position = Vector3(float(c.bx), float(c.h) * 1.1, 0)
         node.add_child(spume)
@@ -1011,7 +989,7 @@ func _tick_sailing(delta: float) -> void:
     elif absf(nx) < lane - 2.5:
         _cliff_hit = false
     root.position.x = nx
-    _yaw = lerpf(_yaw, atan2(-_lat_vel, maxf(speed, 1.0)), minf(delta * 4.0, 1.0))
+    _yaw = lerpf(_yaw, clampf(atan2(-_lat_vel, maxf(speed, 4.0)), -0.5, 0.5), minf(delta * 4.0, 1.0))
     if mode == "sail":
         _check_rocks()
         if _has_pier and root.position.z < _pier_z + 4.2 and root.position.x < _pier_edge + 1.9:
@@ -1043,7 +1021,8 @@ func _tick_sailing(delta: float) -> void:
             Haptics.thump()
             _win()
 
-const HULL_R := 2.0   # the hull's reach round the ship's centre against a rock's radius
+const HULL_HALF := 3.6    # bow and stern from the ship's centre, along her keel
+const HULL_W := 1.35      # the hull's half beam
 var _cliff_hit := false   # she is against the gorge's wall: one hit until she comes clear
 var _hit_time := -10.0    # when the last heart went
 
@@ -1060,35 +1039,59 @@ func _strike_cliff(side: float) -> void:
     take_hit("The hull broke up against the cliffs.", ["Off the cliffs, lad!", "You'll have us swimming!"][mini(hits, 1)])
     _lat_vel = -side * 4.0
 
+## The hull against the rocks: her keel line, bow to stern, with the hull's half beam
+## either side, against each rock's stone at the waterline. Only real contact counts.
 func _check_rocks() -> void:
+    var c := Vector2(root.position.x, root.position.z)
+    var fwd := Vector2(-sin(_yaw), -cos(_yaw))
+    var bow := c + fwd * HULL_HALF
+    var stern := c - fwd * HULL_HALF
     for r: Dictionary in rocks:
-        var off := Vector2(root.position.x - float(r.x), root.position.z - float(r.z))
-        var reach := float(r.r) + HULL_R
-        var dist := off.length()
-        if dist > reach + 2.0:
+        var rc := Vector2(float(r.x), float(r.z))
+        if c.distance_to(rc) > float(r.r) * 1.5 + HULL_HALF + 3.0:
             continue
-        if dist < reach:
-            # Into the stone: the hull is pushed back out and glances off sideways, so she
-            # never sails through. Dead ahead, the push leans to one side so she slides round.
-            var n := off / maxf(dist, 0.01)
+        if not r.has("polys"):
+            r["polys"] = rock_polys(null, rc.x, rc.y, float(r.r))
+        var best := 1e9
+        var on_hull := c
+        var on_rock := rc
+        for poly: PackedVector2Array in r.polys:
+            var n := poly.size()
+            for i in n:
+                var pts := Geometry2D.get_closest_points_between_segments(bow, stern, poly[i], poly[(i + 1) % n])
+                var d := pts[0].distance_to(pts[1])
+                if d < best:
+                    best = d
+                    on_hull = pts[0]
+                    on_rock = pts[1]
+            if Geometry2D.is_point_in_polygon(c, poly) or Geometry2D.is_point_in_polygon(bow, poly) or Geometry2D.is_point_in_polygon(stern, poly):
+                best = 0.0
+                on_hull = c
+                on_rock = rc
+        var pen := HULL_W - best
+        if pen > 0.0:
+            # Into the stone: the hull is eased back out along the line of contact. Dead
+            # ahead, the push leans to one side so she slides round rather than stopping.
+            var n := on_hull - on_rock
+            n = n.normalized() if n.length() > 0.01 else (c - rc).normalized()
             if absf(n.x) < 0.3:
-                n.x = 0.3 if n.x >= 0.0 else -0.3
+                n.x = 0.3 if (c.x - rc.x) >= 0.0 else -0.3
                 n = n.normalized()
-            root.position.x = clampf(root.position.x + n.x * (reach - dist), -lane, lane)
-            root.position.z += n.y * (reach - dist)
-            _lat_vel = n.x * 3.5
+            root.position.x = clampf(root.position.x + n.x * pen, -lane, lane)
+            root.position.z += n.y * pen
+            _lat_vel = lerpf(_lat_vel, n.x * 2.5, 0.5)
             if not bool(r.hit):
                 r.hit = true
-                _splash_at(Vector3(float(r.x), 0.2, float(r.z)))
+                _splash_at(Vector3(on_rock.x, 0.2, on_rock.y))
                 take_hit("The hull gave way on the rocks.", ["Mind the rocks, lad!", "You'll have us swimming!"][mini(hits, 1)])
-                speed = -1.5   # a weak bounce back off the stone
+                speed = maxf(speed, 0.8)   # she loses her way on the stone, but keeps her head
             else:
-                speed = minf(speed, 1.2)   # scraping along it: she crawls until she is round
-        elif not bool(r.grazed) and dist < reach + 1.9:
+                speed = minf(speed, 1.5)   # scraping along it: she crawls until she is round
+        elif not bool(r.grazed) and best < HULL_W + 1.6:
             r.grazed = true
             Haptics.detent()
             # A whisker past: a breath of slow motion to savour it.
-            if dist < reach + 0.8 and phase == Phase.SAILING:
+            if best < HULL_W + 0.7 and phase == Phase.SAILING:
                 Engine.time_scale = 0.55
                 var tw := create_tween()
                 tw.set_ignore_time_scale(true)
@@ -1289,14 +1292,26 @@ func _update_camera(delta: float) -> void:
 
 # MARK: Input
 
+const TILT_FULL := 0.38   # the sideways share of gravity that is full helm (a roll of some 22 degrees)
+const TILT_DEAD := 0.04   # the share ignored as the hand's unsteadiness
+
+## The tilt helm: the ship turns as far as the phone is tilted, and holds the turn for as
+## long as the phone is held over; level the phone and she runs straight. The roll is
+## read from gravity's sideways share in the phone's frame, so it is the same whether the
+## phone is held upright or flat: right edge down is helm to starboard.
 func _read_gyro(delta: float) -> void:
     if not gyro_on or phase != Phase.SAILING:
         return
-    var rate := -Input.get_gyroscope().y
-    if absf(rate) < Tuning.GYRO_DEADZONE:
-        rate = 0.0
-    _steer_gyro = clampf(_steer_gyro + rate * delta * 1.7, -1.0, 1.0)
-    _steer_gyro = move_toward(_steer_gyro, 0.0, delta * 0.55)
+    var g := Input.get_gravity()
+    if g.length() < 0.05:
+        g = Input.get_accelerometer()
+    if g.length() < 0.05:
+        return
+    var roll := g.x / g.length()
+    var want := 0.0
+    if absf(roll) > TILT_DEAD:
+        want = clampf((roll - signf(roll) * TILT_DEAD) / (TILT_FULL - TILT_DEAD), -1.0, 1.0)
+    _steer_gyro = lerpf(_steer_gyro, want, minf(delta * 8.0, 1.0))
 
 func _input(ev: InputEvent) -> void:
     if phase == Phase.ENDED:
@@ -1343,6 +1358,16 @@ func _autopilot(delta: float) -> void:
             target = 12.0   # debug: hold off to starboard and run into the quay
         if "--hit-pier" in OS.get_cmdline_user_args() and root.position.z < -(goal - 45.0):
             target = _pier_left + 8.0   # debug: run bow on into the pier head
+        if "--ram" in OS.get_cmdline_user_args():
+            # debug: make for the nearest rock ahead, a little off its centre
+            var best_dz := -1e9
+            for r: Dictionary in rocks:
+                var dz := float(r.z) - root.position.z
+                if dz < -70.0 or dz > -4.0 or bool(r.hit):
+                    continue
+                if dz > best_dz:
+                    best_dz = dz
+                    target = float(r.x) + 0.8
     elif mode_obj:
         target = mode_obj.autopilot_target()
         if mode_obj.drives():
@@ -1464,8 +1489,8 @@ func _bow_sheet(at: Vector3, k: float) -> void:
     var p := CPUParticles3D.new()
     p.emitting = false
     p.one_shot = true
-    p.amount = int(60 + 80 * k)
-    p.lifetime = 1.0
+    p.amount = int(90 + 70 * k)
+    p.lifetime = 0.7
     p.explosiveness = 0.9
     p.local_coords = false
     p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -1474,9 +1499,9 @@ func _bow_sheet(at: Vector3, k: float) -> void:
     p.spread = 40.0
     p.initial_velocity_min = 3.0 + 3.0 * k
     p.initial_velocity_max = 6.0 + 5.0 * k
-    p.gravity = Vector3(0, -12, 0)
-    p.scale_amount_min = 0.25
-    p.scale_amount_max = 0.6 + 0.3 * k
+    p.gravity = Vector3(0, -14, 0)
+    p.scale_amount_min = 0.04
+    p.scale_amount_max = 0.1 + 0.04 * k
     p.mesh = QuadMesh.new()
     p.material_override = spray.material_override
     p.position = at
@@ -1488,16 +1513,19 @@ func _splash_at(at: Vector3) -> void:
     var p := CPUParticles3D.new()
     p.emitting = false
     p.one_shot = true
-    p.amount = 50
-    p.lifetime = 0.9
+    p.amount = 220
+    p.lifetime = 0.65
     p.explosiveness = 1.0
-    p.direction = Vector3(0, 1, 0)
-    p.spread = 60.0
-    p.initial_velocity_min = 4.0
-    p.initial_velocity_max = 9.0
+    p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+    p.emission_box_extents = Vector3(1.2, 0.1, 0.6)
+    # Thrown up and ahead of the bow: never back into the camera, where a drop fills the screen.
+    p.direction = Vector3(0, 1, -0.5)
+    p.spread = 38.0
+    p.initial_velocity_min = 3.0
+    p.initial_velocity_max = 8.0
     p.gravity = Vector3(0, -13, 0)
-    p.scale_amount_min = 0.2
-    p.scale_amount_max = 0.5
+    p.scale_amount_min = 0.05
+    p.scale_amount_max = 0.14
     p.mesh = QuadMesh.new()
     p.material_override = spray.material_override
     p.position = at
