@@ -140,6 +140,11 @@ func set_sinks(list: Array[Vector4]) -> void:
         if not _sinks.is_empty():
             _far_mat.set_shader_parameter("holes", _sinks)
 
+## Cuts the water away within `r` of (x, z); r 0 closes it.
+func set_hole(x: float, z: float, r: float) -> void:
+    if _mat:
+        _mat.set_shader_parameter("hole", Vector3(x, z, r))
+
 func sink_dip(qx: float, qz: float) -> float:
     var dip := 0.0
     for s in _sinks:

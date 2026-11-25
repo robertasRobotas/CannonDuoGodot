@@ -3,7 +3,7 @@ extends Node
 
 var LEVEL_COUNT := Campaign.level_count()
 var progress: Dictionary = {"stars": {}, "best": {}}
-var settings: Dictionary = {"gyro": true, "trajectory": true, "sound": 100, "music": 100, "vibration": true}
+var settings: Dictionary = {"gyro": true, "trajectory": true, "sound": 100, "music": 100, "vibration": 100}
 const DAILY_ID := 100
 var music: Music
 var _ui: CanvasLayer
@@ -24,7 +24,7 @@ func _ready() -> void:
     Audio.setup()
     Audio.set_volume("Sfx", int(settings.get("sound", 100)))
     music.set_volume(int(settings.get("music", 100)))
-    Haptics.enabled = bool(settings.get("vibration", true))
+    Haptics.set_strength(int(settings.get("vibration", 100)))
     _preload_assets()
     get_tree().root.content_scale_size = Vector2i(1179, 2556)
     _show_menu()
@@ -45,6 +45,9 @@ func _ready() -> void:
         elif arg.begins_with("--levels="):
             var parts := arg.substr(9).split(",")
             _show_levels()
+            if parts.size() > 2:
+                # --levels=SECONDS,PATH,ID  debug: the chart scrolled to level ID
+                (_ui.get_child(0) as MapScreen)._scroll_to.call_deferred(int(parts[2]))
             get_tree().create_timer(float(parts[0])).timeout.connect(func():
                 get_viewport().get_texture().get_image().save_png(parts[1])
                 get_tree().quit())
@@ -59,6 +62,13 @@ func _ready() -> void:
                 up[k] = (Tuning.SHOP[k].price as Array).size()
             progress["upgrades"] = up
             progress["gold"] = 1234
+        elif arg.begins_with("--settings="):
+            # --settings=SECONDS,PATH  debug: a screenshot of the settings screen
+            var parts := arg.substr(11).split(",")
+            _show_settings()
+            get_tree().create_timer(float(parts[0])).timeout.connect(func():
+                get_viewport().get_texture().get_image().save_png(parts[1])
+                get_tree().quit())
         elif arg.begins_with("--shop="):
             var parts := arg.substr(7).split(",")
             _show_shop()
@@ -138,8 +148,8 @@ func _load_state() -> void:
         var parsed = JSON.parse_string(f.get_as_text())
         if parsed is Dictionary:
             settings.merge(parsed, true)
-    # Sound and music were on/off switches before they became 0–100 sliders.
-    for key in ["sound", "music"]:
+    # Sound, music and vibration were on/off switches before they became 0–100 sliders.
+    for key in ["sound", "music", "vibration"]:
         if settings.get(key) is bool:
             settings[key] = 100 if settings[key] else 0
 
@@ -524,19 +534,20 @@ func _show_settings() -> void:
 func add_settings_rows(v: Control) -> void:
     for entry in [["gyro", "Aim with gyroscope"], ["trajectory", "Trajectory helper"], ["sound", "Sound effects"], ["music", "Music"], ["vibration", "Vibration"]]:
         var key: String = entry[0]
-        if key == "sound" or key == "music":
+        if key == "sound" or key == "music" or key == "vibration":
             v.add_child(_volume_row(entry[1], key))
             continue
         var cb := CheckButton.new()
         cb.text = entry[1]
         cb.add_theme_font_size_override("font_size", 36)
+        # The switch itself at twice the theme's size, easy to hit with a thumb.
+        for icon in ["checked", "unchecked", "checked_disabled", "unchecked_disabled"]:
+            cb.add_theme_icon_override(icon, _big_switch(cb, icon))
         cb.button_pressed = bool(settings.get(key, true))
         cb.toggled.connect(func(on):
             settings[key] = on
             _save_state()
-            if key == "vibration":
-                Haptics.enabled = on
-            elif _level and is_instance_valid(_level):
+            if _level and is_instance_valid(_level):
                 if key == "gyro":
                     _level.set_gyro(on)
                 else:
@@ -590,16 +601,33 @@ func _volume_row(text: String, key: String) -> HBoxContainer:
         value.text = str(percent)
         if key == "music":
             music.set_volume(percent)
+        elif key == "vibration":
+            Haptics.set_strength(percent)
         else:
             Audio.set_volume("Sfx", percent)
             if _level and is_instance_valid(_level):
                 _level.settings[key] = percent
                 if _level.ambience:
                     _level.ambience.enabled = percent > 0)
-    s.drag_ended.connect(func(_changed): _save_state())
+    s.drag_ended.connect(func(_changed):
+        _save_state()
+        if key == "vibration":
+            Haptics.pop())   # feel the new strength
     row.add_child(s)
     row.add_child(value)
     return row
+
+## The theme's switch icon scaled up two times (made once, then shared).
+var _switch_icons: Dictionary = {}
+func _big_switch(cb: CheckButton, icon: String) -> Texture2D:
+    if not _switch_icons.has(icon):
+        var src := cb.get_theme_icon(icon)
+        var img := src.get_image()
+        if img.is_compressed():
+            img.decompress()
+        img.resize(src.get_width() * 2, src.get_height() * 2, Image.INTERPOLATE_LANCZOS)
+        _switch_icons[icon] = ImageTexture.create_from_image(img)
+    return _switch_icons[icon]
 
 func _circle_texture(size: int) -> ImageTexture:
     var img := Image.create(size, size, false, Image.FORMAT_RGBA8)

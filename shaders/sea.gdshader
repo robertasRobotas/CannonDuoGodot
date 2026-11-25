@@ -53,6 +53,8 @@ uniform vec2 current = vec2(0.0, 0.0);
 // Whirlpools: x, z centre, radius, depth. A real funnel in the surface, matched on the CPU.
 uniform int sink_count = 0;
 uniform vec4 sinks[4];
+// A hole cut in the water (xz centre, radius): the Kraken's gullet shows through it.
+uniform vec3 hole = vec3(0.0, 0.0, 0.0);
 
 float sink_dip(vec2 q) {
     float dip = 0.0;
@@ -151,6 +153,9 @@ vec3 ripple_normal(vec2 p, float t) {
 }
 
 void fragment() {
+	if (hole.z > 0.0 && distance(world_pos.xz, hole.xy) < hole.z) {
+		discard;
+	}
     float sz = shore_at(world_pos.x);
     float depth_mix = open_sea ? 0.7 : clamp((world_pos.z - sz) / 10.0, 0.0, 1.0);
     vec3 base = mix(shallow_color, deep_color, depth_mix);

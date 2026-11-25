@@ -2,8 +2,8 @@
 ## the sea begins to turn under the ship, slowly at first, a maelstrom three times the
 ## Eye's growing to its full width, and out of it the beast's arms come up. The helm is
 ## no use now: the current carries her round and down toward the mouth in the middle.
-## The gun is all we have, laid and loaded as at any castle: drag to aim, pull down to
-## load, let go to fire. Shoot the arms until the beast dies; reach the mouth first and she
+## The gun is all we have, laid and loaded as at any castle: turn the phone to aim (or drag,
+## with the gyro off), pull down to load, let go to fire. Shoot the arms until the beast dies; reach the mouth first and she
 ## breaks up and goes down.
 class_name VmKraken
 extends VoyageMode
@@ -16,7 +16,6 @@ const R_MOUTH := 11.0        # into the mouth
 const ROAD_TIME := 90.0      # seconds from the beast's rising to the mouth
 const HP := 12               # arms to shoot
 const ARM_H := Ship.LENGTH * 2.25
-const ARM_COLOR := Color(0.07, 0.26, 0.13)
 const INTRO_CRESTS := 3
 const ARMS_UP := 2           # arms standing at once
 
@@ -29,7 +28,7 @@ var radius := R_START
 var angle := 0.0
 var _t := 0.0                # time in the stage
 var _intro_done_at := -1.0
-var _arms: Array = []        # {node, pivot, segs, alive, up, t, ring, mat, sunk}
+var _arms: Array = []        # {node, pivot, alive, up, t, mat, phase, sunk}
 var _balls: Array = []       # {node, pos, vel, t}
 var _wrecks: Array = []
 var _mouth: Node3D
@@ -49,6 +48,12 @@ var _touch_start := Vector2.ZERO
 var _aim_last := Vector2.ZERO
 var _load_start_y := 0.0
 var _shots := 0
+# Gyro aim, as at a castle: yaw from the phone's turn rate, pitch from gravity, each with a
+# reference that slides along past the limit so turning back moves the aim at once.
+var _gyro_ready := false
+var _yaw_raw := 0.0
+var _yaw_offset := 0.0
+var _pitch_ref := 0.0
 var _auto_next := 0.0
 
 func build(voyage: VoyageLevel) -> void:
@@ -118,97 +123,175 @@ func _open_funnel() -> void:
     _build_mouth()
     _build_wrecks()
 
-## The mouth at the bottom of the funnel: a lip of dark flesh, three rings of teeth curving
-## inward, a black throat ringed inside, and bones of its last meals about the lip.
-func _build_mouth() -> void:
-    _mouth = Node3D.new()
-    _mouth.position = Vector3(centre.x, Tuning.SEA_LEVEL - DEPTH + 1.5, centre.z)
-    var flesh := Models.flat_material(Color(0.28, 0.05, 0.07), 0.85)
-    var dark := Models.flat_material(Color(0.16, 0.02, 0.04), 0.9)
-    var lip := MeshInstance3D.new()
-    var tm := TorusMesh.new()
-    tm.inner_radius = R_MOUTH * 0.78
-    tm.outer_radius = R_MOUTH * 1.12
-    tm.rings = 48
-    tm.ring_segments = 12
-    lip.mesh = tm
-    lip.material_override = flesh
-    lip.position.y = 0.2
-    _mouth.add_child(lip)
-    var gum := MeshInstance3D.new()
-    var gm := CylinderMesh.new()
-    gm.top_radius = R_MOUTH * 0.8
-    gm.bottom_radius = R_MOUTH * 0.5
-    gm.height = 4.0
-    gm.radial_segments = 32
-    gum.mesh = gm
-    gum.material_override = dark
-    gum.position.y = -1.8
-    _mouth.add_child(gum)
-    for ring in 3:
-        var tr := MeshInstance3D.new()
-        var rm := TorusMesh.new()
-        rm.inner_radius = R_MOUTH * (0.5 - ring * 0.13)
-        rm.outer_radius = R_MOUTH * (0.58 - ring * 0.13)
-        rm.rings = 32
-        rm.ring_segments = 8
-        tr.mesh = rm
-        tr.material_override = flesh if ring % 2 == 0 else dark
-        tr.position.y = -3.6 - ring * 1.6
-        _mouth.add_child(tr)
-    var throat := MeshInstance3D.new()
-    var cm := CylinderMesh.new()
-    cm.top_radius = R_MOUTH * 0.3
-    cm.bottom_radius = 0.3
-    cm.height = 10.0
-    cm.radial_segments = 20
-    throat.mesh = cm
-    var thm := StandardMaterial3D.new()
-    thm.albedo_color = Color(0.03, 0.0, 0.01)
-    thm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    throat.material_override = thm
-    throat.position.y = -8.5
-    _mouth.add_child(throat)
-    var tooth := Models.flat_material(Color(0.9, 0.88, 0.78), 0.55)
-    var yellow := Models.flat_material(Color(0.82, 0.76, 0.58), 0.6)
-    for i in 40:
-        var a := float(i) / 40.0 * TAU
-        _tooth(_mouth, Vector3(cos(a) * R_MOUTH * 0.98, 0.8, sin(a) * R_MOUTH * 0.98), randf_range(2.8, 4.0), 0.6, -a, 0.5, tooth)
-    for i in 30:
-        var a := (float(i) + 0.5) / 30.0 * TAU
-        _tooth(_mouth, Vector3(cos(a) * R_MOUTH * 0.72, -0.6, sin(a) * R_MOUTH * 0.72), randf_range(2.0, 3.0), 0.5, -a, 0.7, yellow)
-    for i in 24:
-        var a := (float(i) + 0.25) / 24.0 * TAU
-        _tooth(_mouth, Vector3(cos(a) * R_MOUTH * 0.5, -2.2, sin(a) * R_MOUTH * 0.5), randf_range(1.4, 2.2), 0.4, -a, 0.9, tooth)
-    # Bones and a broken keel about the lip.
-    var bone := Models.flat_material(Color(0.85, 0.83, 0.74), 0.7)
-    for i in 10:
-        var a := randf() * TAU
-        var b := MeshInstance3D.new()
-        var bm := CylinderMesh.new()
-        bm.top_radius = 0.14
-        bm.bottom_radius = 0.18
-        bm.height = randf_range(1.6, 3.2)
-        b.mesh = bm
-        b.material_override = bone
-        b.position = Vector3(cos(a) * R_MOUTH * randf_range(1.05, 1.25), 0.4, sin(a) * R_MOUTH * randf_range(1.05, 1.25))
-        b.rotation = Vector3(randf_range(-1.4, 1.4), randf(), randf_range(-1.4, 1.4))
-        _mouth.add_child(b)
-    v.add_child(_mouth)
+const MOUTH_SHADER := preload("res://shaders/kraken_mouth.gdshader")
+const TOOTH_SHADER := preload("res://shaders/kraken_tooth.gdshader")
+## The mouth's cross-section from the outer skirt (under the water) over the lip and down
+## the gullet: (radius in R_MOUTH, height in metres). LIP_INDEX is the crest.
+const MOUTH_PROFILE := [Vector2(1.75, -3.0), Vector2(1.45, -1.4), Vector2(1.2, -0.3), Vector2(1.04, 0.75),
+    Vector2(0.94, 0.65), Vector2(0.88, 0.0), Vector2(0.82, -1.2), Vector2(0.70, -3.5), Vector2(0.56, -6.0),
+    Vector2(0.42, -8.5), Vector2(0.28, -11.5), Vector2(0.15, -14.5), Vector2(0.04, -17.5)]
+const LIP_INDEX := 3.5
+## Rings of fangs down the gullet: radius (R_MOUTH), height, count, length, how deep it
+## is (darkness), and how far it points inward rather than up.
+const TOOTH_RINGS := [[0.93, 0.45, 46, 2.2, 0.0, 0.55], [0.80, -1.6, 40, 1.9, 0.3, 0.68], [0.65, -4.4, 32, 1.6, 0.5, 0.8],
+    [0.49, -7.2, 26, 1.3, 0.7, 0.88], [0.34, -10.2, 20, 1.0, 0.9, 0.93]]
 
-func _tooth(parent: Node3D, at: Vector3, h: float, r: float, yaw: float, lean: float, mat: Material) -> void:
-    var t := MeshInstance3D.new()
-    var cm := CylinderMesh.new()
-    cm.top_radius = 0.0
-    cm.bottom_radius = r
-    cm.height = h
-    cm.radial_segments = 7
-    t.mesh = cm
-    t.material_override = mat
-    t.position = at
-    t.rotation = Vector3(0.0, yaw, 0.0)
-    t.rotate_object_local(Vector3(0, 0, 1), lean)
-    parent.add_child(t)
+static var _mouth_mesh_cache: ArrayMesh
+static var _mouth_lip_u := 0.34
+static var _tooth_mesh_cache: ArrayMesh
+
+## The lathe of MOUTH_PROFILE, smoothed (Catmull-Rom), with folds round the gullet.
+static func _mouth_mesh() -> ArrayMesh:
+    if _mouth_mesh_cache:
+        return _mouth_mesh_cache
+    var pts: Array[Vector2] = []
+    var sub := 6
+    var n := MOUTH_PROFILE.size()
+    for i in n - 1:
+        var p0: Vector2 = MOUTH_PROFILE[maxi(i - 1, 0)]
+        var p1: Vector2 = MOUTH_PROFILE[i]
+        var p2: Vector2 = MOUTH_PROFILE[i + 1]
+        var p3: Vector2 = MOUTH_PROFILE[mini(i + 2, n - 1)]
+        for j in sub:
+            var t := float(j) / sub
+            var t2 := t * t
+            var t3 := t2 * t
+            pts.append(0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3))
+    pts.append(MOUTH_PROFILE[n - 1])
+    # Arc length along the profile for UV.x; the crest's share of it for the shader.
+    var lens: Array[float] = [0.0]
+    for i in range(1, pts.size()):
+        var d := Vector2(pts[i].x * R_MOUTH, pts[i].y) - Vector2(pts[i - 1].x * R_MOUTH, pts[i - 1].y)
+        lens.append(lens[i - 1] + d.length())
+    var total: float = lens[lens.size() - 1]
+    _mouth_lip_u = lens[int(LIP_INDEX * sub)] / total
+    var sides := 96
+    var grid: Array = []   # rows of Vector3
+    for i in pts.size():
+        var u := lens[i] / total
+        var inner := smoothstep(_mouth_lip_u + 0.04, _mouth_lip_u + 0.15, u)
+        var row: Array[Vector3] = []
+        for j in sides:
+            var a := TAU * j / sides
+            # Folds down the gullet, twisting a little with depth.
+            var fold := 1.0 + inner * 0.06 * sin(a * 18.0 + pts[i].y * 0.12)
+            var r := pts[i].x * R_MOUTH * fold
+            row.append(Vector3(cos(a) * r, pts[i].y, sin(a) * r))
+        grid.append(row)
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    var rows := grid.size()
+    for i in rows:
+        for j in sides + 1:
+            var jj := j % sides
+            var p: Vector3 = grid[i][jj]
+            var du: Vector3 = grid[mini(i + 1, rows - 1)][jj] - grid[maxi(i - 1, 0)][jj]
+            var dv: Vector3 = grid[i][(jj + 1) % sides] - grid[i][(jj - 1 + sides) % sides]
+            var nrm := dv.cross(du).normalized()
+            if nrm.length() < 0.5:
+                nrm = Vector3.UP
+            st.set_normal(nrm)
+            st.set_uv(Vector2(lens[i] / total, float(j) / sides))
+            st.add_vertex(p)
+    var w := sides + 1
+    for i in rows - 1:
+        for j in sides:
+            var i0 := i * w + j
+            st.add_index(i0)
+            st.add_index(i0 + w)
+            st.add_index(i0 + 1)
+            st.add_index(i0 + 1)
+            st.add_index(i0 + w)
+            st.add_index(i0 + w + 1)
+    st.generate_tangents()
+    _mouth_mesh_cache = st.commit()
+    return _mouth_mesh_cache
+
+## A fang one metre long: a cone swept along a hook that bends over toward +x, flaring
+## at the root.
+static func _tooth_mesh() -> ArrayMesh:
+    if _tooth_mesh_cache:
+        return _tooth_mesh_cache
+    var rings := 16
+    var sides := 10
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    var p := Vector3(0, -0.12, 0)
+    for i in rings + 1:
+        var k := float(i) / rings
+        var th := 1.25 * k * k
+        var tan := Vector3(sin(th), cos(th), 0)
+        var nx := Vector3(cos(th), -sin(th), 0)
+        var r := 0.17 * pow(1.0 - k, 0.85) * (1.0 + 0.6 * (1.0 - smoothstep(0.0, 0.18, k))) + 0.004
+        for j in sides + 1:
+            var a := TAU * j / sides
+            var dir := nx * cos(a) * 0.8 + Vector3(0, 0, 1) * sin(a)   # a little flattened
+            st.set_normal((nx * cos(a) + Vector3(0, 0, 1) * sin(a)).normalized())
+            st.set_uv(Vector2(k, float(j) / sides))
+            st.add_vertex(p + dir * r)
+        p += tan * (1.12 / rings)
+    var w := sides + 1
+    for i in rings:
+        for j in sides:
+            var i0 := i * w + j
+            st.add_index(i0)
+            st.add_index(i0 + 1)
+            st.add_index(i0 + w)
+            st.add_index(i0 + 1)
+            st.add_index(i0 + w + 1)
+            st.add_index(i0 + w)
+    _tooth_mesh_cache = st.commit()
+    return _tooth_mesh_cache
+
+## The mouth at the bottom of the funnel: a thick lip of hide rolling into a wet, folded
+## gullet that goes black down the throat, and five rings of hooked fangs down it. Built
+## about its own origin (the water at the lip).
+static func make_mouth() -> Node3D:
+    var mouth := Node3D.new()
+    var flesh := MeshInstance3D.new()
+    flesh.mesh = _mouth_mesh()
+    var fm := ShaderMaterial.new()
+    fm.shader = MOUTH_SHADER
+    fm.set_shader_parameter("lip_u", _mouth_lip_u)
+    flesh.material_override = fm
+    mouth.add_child(flesh)
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 7717
+    for ring: Array in TOOTH_RINGS:
+        var count := int(ring[2])
+        var mm := MultiMesh.new()
+        mm.transform_format = MultiMesh.TRANSFORM_3D
+        mm.mesh = _tooth_mesh()
+        mm.instance_count = count
+        var off := rng.randf() * TAU
+        for i in count:
+            var a := off + TAU * (float(i) + rng.randf_range(-0.2, 0.2)) / count
+            var inward := Vector3(-cos(a), 0, -sin(a))
+            var ci := float(ring[5]) + rng.randf_range(-0.08, 0.08)
+            var yv := (inward * ci + Vector3.UP * sqrt(maxf(1.0 - ci * ci, 0.05))).normalized()
+            var xv := (Vector3.DOWN - yv * yv.dot(Vector3.DOWN)).normalized()
+            # Each hook leans a little to one side or the other.
+            var side := yv.cross(xv).normalized()
+            xv = (xv + side * rng.randf_range(-0.3, 0.3)).normalized()
+            var zv := xv.cross(yv).normalized()
+            xv = yv.cross(zv).normalized()
+            var len := float(ring[3]) * rng.randf_range(0.75, 1.15)
+            var base := Vector3(cos(a), 0, sin(a)) * (float(ring[0]) * R_MOUTH - 0.1) + Vector3(0, float(ring[1]), 0)
+            mm.set_instance_transform(i, Transform3D(Basis(xv, yv, zv).scaled(Vector3(len, len, len)), base))
+        var mi := MultiMeshInstance3D.new()
+        mi.multimesh = mm
+        var tm := ShaderMaterial.new()
+        tm.shader = TOOTH_SHADER
+        tm.set_shader_parameter("shade", float(ring[4]))
+        mi.material_override = tm
+        mouth.add_child(mi)
+    return mouth
+
+func _build_mouth() -> void:
+    _mouth = make_mouth()
+    _mouth.position = Vector3(centre.x, Tuning.SEA_LEVEL - DEPTH + 1.5, centre.z)
+    v.add_child(_mouth)
+    v.sea.set_hole(centre.x, centre.z, R_MOUTH * 0.9)
 
 ## Wreckage going round in the funnel: broken hulls with a stump of mast, and planks.
 func _build_wrecks() -> void:
@@ -260,56 +343,98 @@ func _tick_wrecks(delta: float) -> void:
 
 # MARK: Arms
 
-## An arm of the beast: twelve tapering green segments curving up out of the water and
-## over at the tip, two rows of pale suckers down the inner side, the skin knobbled.
+const TENTACLE_SHADER := preload("res://shaders/tentacle.gdshader")
+const ARM_RINGS := 72
+const ARM_SIDES := 22
+const ARM_HITS := 16
+
+static var _arm_mesh: ArrayMesh
+static var _arm_spine: Array = []   # [{pos: Vector3, r: float, k: float}] for hit tests
+
+## Radius of the arm at `k` (0 root .. 1 tip): thick and slightly swollen at the root,
+## tapering to a whip.
+static func _arm_radius(k: float) -> float:
+    return 2.1 * pow(1.0 - k, 0.95) * (1.0 + 0.1 * sin(k * PI * 1.4)) + 0.05
+
+## The bend angle along the arm: leaning back a little low down, then curling over harder
+## and harder toward the tip, three quarters of a turn and more: a hook to seize a ship.
+static func _arm_theta(k: float) -> float:
+    return -0.55 * k + 5.4 * pow(k, 3.4)
+
+## One shared mesh: a tube swept along the curling spine, with UVs for the skin shader.
+static func _tentacle_mesh() -> ArrayMesh:
+    if _arm_mesh:
+        return _arm_mesh
+    var L := ARM_H * 1.3
+    # The trunk runs on 30 m under the root, so the cut end never shows above the water
+    # down the funnel's side.
+    var spine: Array = [{"pos": Vector3(0, -30.0, 0), "th": 0.0, "r": _arm_radius(0.0), "k": 0.0, "q": -30.0 / _arm_radius(0.0)}]
+    var p := Vector3.ZERO
+    var qlen := 0.0
+    for i in ARM_RINGS + 1:
+        var k := float(i) / ARM_RINGS
+        var th := _arm_theta(k)
+        var r := _arm_radius(k)
+        spine.append({"pos": p, "th": th, "r": r, "k": k, "q": qlen})
+        var ds := L / ARM_RINGS
+        p += Vector3(sin(th), cos(th), 0.0) * ds
+        qlen += ds / maxf(r, 0.12)
+    var st := SurfaceTool.new()
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    for i in spine.size():
+        var e: Dictionary = spine[i]
+        var th: float = e.th
+        var n := Vector3(cos(th), -sin(th), 0.0)   # toward the inside of the curl
+        var b := Vector3(0, 0, 1)
+        for j in ARM_SIDES + 1:
+            var a := TAU * float(j) / ARM_SIDES
+            var dir := n * cos(a) + b * sin(a)
+            # A little flatter on the sucker side, as a real arm is.
+            var rr: float = e.r * (1.0 - 0.18 * maxf(cos(a), 0.0))
+            st.set_normal(dir)
+            st.set_uv(Vector2(e.k, float(j) / ARM_SIDES))
+            st.set_uv2(Vector2(e.q, 0.0))
+            st.add_vertex((e.pos as Vector3) + dir * rr)
+    var row := ARM_SIDES + 1
+    for i in spine.size() - 1:
+        for j in ARM_SIDES:
+            var i0 := i * row + j
+            var i1 := i0 + row
+            st.add_index(i0)
+            st.add_index(i0 + 1)
+            st.add_index(i1)
+            st.add_index(i0 + 1)
+            st.add_index(i1 + 1)
+            st.add_index(i1)
+    st.generate_tangents()   # the skin shader's normal map: suckers and wrinkles in relief
+    _arm_mesh = st.commit()
+    for h in ARM_HITS:
+        var e: Dictionary = spine[1 + int(float(h) / (ARM_HITS - 1) * ARM_RINGS)]
+        _arm_spine.append({"pos": e.pos, "r": e.r, "k": e.k})
+    return _arm_mesh
+
+## The writhing offset of the shader (shaders/tentacle.gdshader), for the same point here.
+static func _writhe(k: float, t: float, ph: float) -> Vector3:
+    return Vector3(1.6 * k * k * sin(0.8 * t + ph + 1.0 - 2.5 * k), 0.0, 2.2 * pow(k, 1.6) * sin(1.1 * t + ph - 3.0 * k))
+
+## An arm of the beast: one smooth tapering tentacle curling up out of the water and over
+## at the tip, wet mottled skin on its back and two rows of suckers along the inner side.
 func _make_arm() -> Dictionary:
     var root := Node3D.new()
     var pivot := Node3D.new()
     root.add_child(pivot)
-    var mat := Models.flat_material(ARM_COLOR, 0.45)
-    var under := Models.flat_material(Color(0.1, 0.3, 0.17), 0.5)
-    var sucker := Models.flat_material(Color(0.6, 0.66, 0.5), 0.8)
-    var n := 12
-    var y := 0.0
-    var bend := 0.0
-    var x := 0.0
-    var segs: Array = []
-    for i in n:
-        var k := float(i) / float(n - 1)
-        var seg := MeshInstance3D.new()
-        var cm := CylinderMesh.new()
-        var r0 := lerpf(2.25, 0.33, pow(k, 0.85))
-        var r1 := lerpf(2.25, 0.33, pow((float(i) + 1.0) / float(n - 1), 0.85))
-        cm.bottom_radius = r0
-        cm.top_radius = maxf(r1, 0.14)
-        var h := ARM_H / float(n) * 1.12
-        cm.height = h
-        cm.radial_segments = 14
-        seg.mesh = cm
-        seg.material_override = mat if i % 3 != 2 else under
-        seg.position = Vector3(x, y + h / 2.0, 0)
-        seg.rotation.z = bend
-        pivot.add_child(seg)
-        segs.append(seg)
-        if i >= 1 and i < n - 1:
-            for side in [-0.55, 0.55]:
-                var s := MeshInstance3D.new()
-                var sm := SphereMesh.new()
-                sm.radius = r0 * 0.26
-                sm.height = r0 * 0.4
-                sm.radial_segments = 8
-                sm.rings = 4
-                s.mesh = sm
-                s.material_override = sucker
-                s.position = Vector3(x - r0 * 0.9, y + h / 2.0, r0 * float(side))
-                pivot.add_child(s)
-        # Straight for the lower half, then curling over, hard at the tip.
-        bend -= 0.04 if k < 0.45 else (0.16 + 0.1 * k)
-        x += sin(-bend) * h * 0.5
-        y += cos(bend) * h
+    var mat := ShaderMaterial.new()
+    mat.shader = TENTACLE_SHADER
+    var ph := randf() * TAU
+    mat.set_shader_parameter("phase", ph)
+    var body := MeshInstance3D.new()
+    body.mesh = _tentacle_mesh()
+    body.material_override = mat
+    body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    pivot.add_child(body)
     root.position.y = Tuning.SEA_LEVEL - ARM_H - 1.0
     v.add_child(root)
-    return {"node": root, "pivot": pivot, "segs": segs, "alive": true, "up": 0.0, "t": 0.0, "mat": mat, "sunk": false}
+    return {"node": root, "pivot": pivot, "alive": true, "up": 0.0, "t": 0.0, "mat": mat, "phase": ph, "sunk": false}
 
 func _arm_at(a: Dictionary, pos: Vector3, face: Vector3) -> void:
     (a.node as Node3D).position = Vector3(pos.x, Tuning.SEA_LEVEL - ARM_H - 1.0, pos.z)
@@ -337,8 +462,10 @@ func _tick_arms(delta: float) -> void:
         var pivot := a.pivot as Node3D
         a.t = float(a.t) + delta
         var t := float(a.t)
+        (a.mat as ShaderMaterial).set_shader_parameter("t_arm", t)
         # The water's own height here: down the funnel's side, not the level sea.
         var water := Tuning.SEA_LEVEL + v.sea.height(node.position.x, node.position.z)
+        (a.mat as ShaderMaterial).set_shader_parameter("water_y", water)
         if a.sunk:
             a.up = maxf(float(a.up) - delta * 0.9, 0.0)
             node.position.y = water - ARM_H - 1.0 + (ARM_H + 1.0) * float(a.up)
@@ -407,7 +534,7 @@ func input(ev: InputEvent) -> bool:
                 if mv.y > absf(mv.x) * 0.8 and _reload <= 0.0:
                     _load_touch = d.index
                     _load_start_y = _touch_start.y
-                else:
+                elif not v.gyro_on:   # with the gyro on, the phone aims and the finger only loads
                     _aim_touch = d.index
                     _aim_last = _touch_start
         if d.index == _aim_touch:
@@ -481,9 +608,10 @@ func _arm_struck(pos: Vector3) -> Dictionary:
     for a: Dictionary in _arms:
         if not a.alive or a.sunk or float(a.up) < 0.3:
             continue
-        for seg: MeshInstance3D in a.segs:
-            var r: float = (seg.mesh as CylinderMesh).bottom_radius
-            if pos.distance_to(seg.global_position) < r + 0.35:
+        var xf := (a.pivot as Node3D).global_transform
+        for e: Dictionary in _arm_spine:
+            var at: Vector3 = xf * ((e.pos as Vector3) + _writhe(e.k, float(a.t), float(a.phase)))
+            if pos.distance_to(at) < float(e.r) + 0.35:
                 return a
     return {}
 
@@ -493,7 +621,7 @@ func _hit_arm(a: Dictionary, at: Vector3) -> void:
     hp -= 1
     Haptics.crack()
     v._shake = maxf(v._shake, 0.6)
-    (a.mat as StandardMaterial3D).albedo_color = Color(0.2, 0.38, 0.24)   # bruised pale
+    (a.mat as ShaderMaterial).set_shader_parameter("bruise", 1.0)
     v._splinters(at)
     var base := (a.node as Node3D).global_position
     v._splash_at(Vector3(base.x, Tuning.SEA_LEVEL, base.z))
@@ -576,6 +704,8 @@ func tick(delta: float) -> void:
         return
     _t += delta
     _reload = maxf(_reload - delta, 0.0)
+    if stage == Stage.OPENING or stage == Stage.FIGHT:
+        _gyro_aim(delta)
     # The funnel opens slowly to its full width, and stays; it closes when the beast dies.
     if stage == Stage.WON:
         _funnel_k = maxf(_funnel_k - delta / 2.0, 0.0)
@@ -626,6 +756,42 @@ func tick(delta: float) -> void:
     if v.autopilot:
         _autopilot(delta)
 
+## Aim from the phone's motion while the gyro setting is on. The first reading sets the
+## references, so the gun starts where it points now.
+func _gyro_aim(delta: float) -> void:
+    if not v.gyro_on or v.autopilot:
+        _gyro_ready = false
+        return
+    var grav := Input.get_gravity()
+    var pitch_abs := rad_to_deg(atan2(grav.z, -grav.y)) * Tuning.GYRO_GAIN if grav.length() > 0.5 else 0.0
+    if not _gyro_ready:
+        _gyro_ready = true
+        _yaw_raw = 0.0
+        _yaw_offset = -aim_yaw
+        _pitch_ref = pitch_abs - aim_pitch
+        return
+    var rate := -Input.get_gyroscope().y
+    if absf(rate) < Tuning.GYRO_DEADZONE:
+        rate = 0.0
+    rate = clampf(rate, -4.0, 4.0)
+    _yaw_raw += rad_to_deg(rate) * delta * Tuning.GYRO_GAIN
+    var yaw := _yaw_raw - _yaw_offset
+    if yaw > Tuning.YAW_RANGE:
+        _yaw_offset = _yaw_raw - Tuning.YAW_RANGE
+        yaw = Tuning.YAW_RANGE
+    elif yaw < -Tuning.YAW_RANGE:
+        _yaw_offset = _yaw_raw + Tuning.YAW_RANGE
+        yaw = -Tuning.YAW_RANGE
+    var pitch := pitch_abs - _pitch_ref
+    if pitch > Tuning.PITCH_MAX:
+        _pitch_ref = pitch_abs - Tuning.PITCH_MAX
+        pitch = Tuning.PITCH_MAX
+    elif pitch < Tuning.PITCH_MIN:
+        _pitch_ref = pitch_abs - Tuning.PITCH_MIN
+        pitch = Tuning.PITCH_MIN
+    aim_yaw = lerpf(aim_yaw, yaw, minf(delta * Tuning.GYRO_SMOOTH, 1.0))
+    aim_pitch = lerpf(aim_pitch, pitch, minf(delta * Tuning.GYRO_SMOOTH, 1.0))
+
 ## The gun turns and lifts with the aim.
 func _lay_gun() -> void:
     if _cannon:
@@ -668,6 +834,11 @@ func camera(delta: float) -> bool:
     var aim := Vector3(-sin(v._yaw + deg_to_rad(aim_yaw)), 0, -cos(v._yaw + deg_to_rad(aim_yaw)))
     var want := p - aim * 10.0 + Vector3(0, 6.5, 0)
     var look := p + aim * 14.0 + Vector3(0, 2.0 + aim_pitch * 0.06, 0)
+    if "--look-mouth" in OS.get_cmdline_user_args() and _mouth:
+        # Debug: from beside the ship, looking down into the mouth.
+        var to := (centre - Vector3(p.x, 0, p.z)).normalized()
+        want = p - to * 6.0 + Vector3(0, 9.0, 0)
+        look = _mouth.global_position + Vector3(0, -2.0, 0)
     if v._shake > 0.005:
         want += Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0) * v._shake * 0.3
         v._shake = maxf(v._shake - delta * 1.8, 0.0)

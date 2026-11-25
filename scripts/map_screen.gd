@@ -10,13 +10,32 @@ signal back
 
 const ROW := 330.0
 const TOP := 470.0   # below the header
-const BIOME_COLORS := {"tropic": Color(0.40, 0.66, 0.34), "meadow": Color(0.52, 0.72, 0.38), "harbor": Color(0.62, 0.58, 0.52),
-    "highlands": Color(0.30, 0.52, 0.42), "badlands": Color(0.78, 0.46, 0.30), "volcano": Color(0.35, 0.28, 0.28), "opensea": Color(0.55, 0.52, 0.48)}
+## How shaders/map_island.gdshader paints each biome: beach, low and high ground, rock,
+## the peak (snow or lava), and how much of it is rock, peak and tree canopy.
+const BIOMES := {
+    "tropic": {"sand": Vector3(0.96, 0.88, 0.66), "low": Vector3(0.40, 0.56, 0.22), "high": Vector3(0.13, 0.40, 0.15), "rock": Vector3(0.48, 0.45, 0.40), "rock_amt": 0.5, "trees": 0.72},
+    "meadow": {"sand": Vector3(0.90, 0.83, 0.64), "low": Vector3(0.56, 0.72, 0.30), "high": Vector3(0.36, 0.60, 0.24), "rock": Vector3(0.52, 0.50, 0.44), "rock_amt": 0.25, "trees": 0.36},
+    "harbor": {"sand": Vector3(0.80, 0.76, 0.64), "low": Vector3(0.50, 0.60, 0.34), "high": Vector3(0.36, 0.48, 0.30), "rock": Vector3(0.58, 0.56, 0.52), "rock_amt": 0.9, "trees": 0.40},
+    "highlands": {"sand": Vector3(0.70, 0.68, 0.60), "low": Vector3(0.28, 0.48, 0.28), "high": Vector3(0.12, 0.32, 0.20), "rock": Vector3(0.46, 0.46, 0.46), "rock_amt": 1.0, "trees": 0.66,
+        "peak": Vector3(0.96, 0.97, 1.0), "peak_amt": 1.0},
+    "badlands": {"sand": Vector3(0.92, 0.72, 0.50), "low": Vector3(0.80, 0.50, 0.30), "high": Vector3(0.62, 0.32, 0.20), "rock": Vector3(0.50, 0.26, 0.18), "rock_amt": 1.0, "trees": 0.0},
+    "volcano": {"sand": Vector3(0.34, 0.31, 0.30), "low": Vector3(0.30, 0.30, 0.24), "high": Vector3(0.17, 0.14, 0.13), "rock": Vector3(0.13, 0.10, 0.10), "rock_amt": 1.0, "trees": 0.22,
+        "peak": Vector3(1.0, 0.42, 0.08), "peak_amt": 1.0, "glow": 1.0},
+    "opensea": {"sand": Vector3(0.88, 0.82, 0.66), "low": Vector3(0.44, 0.44, 0.38), "high": Vector3(0.36, 0.36, 0.33), "rock": Vector3(0.34, 0.33, 0.31), "rock_amt": 1.0, "trees": 0.0, "sink": 0.36},
+}
+const SEA_SHADER := preload("res://shaders/map_sea.gdshader")
+const ISLAND_SHADER := preload("res://shaders/map_island.gdshader")
+const SKULL_SHADER := preload("res://shaders/map_skull.gdshader")
+const CLOUD_SHADER := preload("res://shaders/map_clouds.gdshader")
+
+static var _noise_tex: ImageTexture
 
 var _infos: Array = []
 var _stars: Dictionary = {}
 var _next := 1
 var _content: Control
+var _over: Control        # the layer drawn every frame: discs, stars, ship
+var _skull: SubViewport   # the boss's skull, rendered once
 var _scroll: ScrollContainer
 var _t := 0.0
 
@@ -34,12 +53,92 @@ func build(infos: Array, stars: Dictionary, next_id: int, gold: int, total_stars
     # Only the way you have sailed and the next castle are charted; beyond is fog.
     _content.custom_minimum_size = Vector2(1179, maxf(2700.0, _node_pos(_visible_count() - 1).y + 620))
     _content.mouse_filter = Control.MOUSE_FILTER_PASS
-    _content.draw.connect(_draw_chart)
     _scroll.add_child(_content)
+    # Bottom to top: sea, route, islands, then markers and fog, then the tap targets.
+    var sea := ColorRect.new()
+    sea.material = _material(SEA_SHADER, {"normals": load("res://assets/water/waternormals.jpg"), "noise": _noise()})
+    _content.add_child(_layer(sea))
+    var route := Control.new()
+    route.draw.connect(_draw_route.bind(route))
+    _content.add_child(_layer(route))
+    for i in _visible_count():
+        _content.add_child(_island(i))
+    _over = Control.new()
+    _over.draw.connect(_draw_chart)
+    _content.add_child(_layer(_over))
+    # The cloud bank over the uncharted water, and its line of text on top.
+    var fog_top := _fog_y() - 120.0
+    var clouds := ColorRect.new()
+    clouds.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    clouds.position = Vector2(0, fog_top)
+    clouds.size = Vector2(1179, _content.custom_minimum_size.y - fog_top)
+    clouds.material = _material(CLOUD_SHADER, {"size_px": clouds.size, "edge": 120.0})
+    _content.add_child(clouds)
+    var fog_text := Control.new()
+    fog_text.draw.connect(_draw_fog_text.bind(fog_text))
+    _content.add_child(_layer(fog_text))
+    for i in _visible_count():
+        if bool(_infos[i].get("boss", false)):
+            _bake_skull()
+            break
     for i in _visible_count():
         _content.add_child(_node_button(i))
     _header(gold, total_stars, max_stars, daily_note)
     _scroll_to.call_deferred(next_id)
+
+func _layer(c: Control) -> Control:
+    c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    return c
+
+func _material(shader: Shader, params: Dictionary) -> ShaderMaterial:
+    var m := ShaderMaterial.new()
+    m.shader = shader
+    for k in params:
+        m.set_shader_parameter(k, params[k])
+    return m
+
+## Seamless cloudy noise shared by the sea and island shaders.
+static func _noise() -> Texture2D:
+    if _noise_tex == null:
+        var n := FastNoiseLite.new()
+        n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+        n.frequency = 0.012
+        n.fractal_octaves = 4
+        _noise_tex = ImageTexture.create_from_image(n.get_seamless_image(256, 256))
+    return _noise_tex
+
+## The island under node `i`: a shader rectangle, big enough for its shallows.
+func _island(i: int) -> ColorRect:
+    var info: Dictionary = _infos[i]
+    var b: Dictionary = BIOMES.get(info.biome, BIOMES.tropic)
+    var radius := 285.0 if bool(info.get("boss", false)) else 190.0
+    var size := Vector2(radius * 1.3, radius * 0.85) * 2.0 * 1.8
+    var rng := RandomNumberGenerator.new()
+    rng.seed = (i + 1) * 977
+    var rect := ColorRect.new()
+    rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    rect.size = size
+    rect.position = _node_pos(i) - size / 2.0
+    rect.material = _material(ISLAND_SHADER, {"noise": _noise(), "sand_tex": load("res://assets/ph/tex/coast_sand_01.jpg"),
+        "land_tex": load("res://assets/ph/tex/leafy_grass.jpg"), "size_px": size, "radius": radius,
+        "seed": Vector2(rng.randf(), rng.randf()), "sand_col": b.sand, "low_col": b.low, "high_col": b.high, "rock_col": b.rock,
+        "rock": b.rock_amt, "trees": b.trees, "peak_col": b.get("peak", Vector3.ONE), "peak": b.get("peak_amt", 0.0),
+        "glow": b.get("glow", 0.0), "sink": b.get("sink", 0.0)})
+    return rect
+
+## Renders the skull shader once into a texture; drawing it live every frame would be waste.
+func _bake_skull() -> void:
+    _skull = SubViewport.new()
+    _skull.size = Vector2i(384, 384)
+    _skull.transparent_bg = true
+    _skull.disable_3d = true
+    _skull.render_target_update_mode = SubViewport.UPDATE_ONCE
+    var rect := ColorRect.new()
+    rect.size = Vector2(384, 384)
+    rect.material = _material(SKULL_SHADER, {})
+    _skull.add_child(rect)
+    add_child(_skull)
 
 func _visible_count() -> int:
     return mini(_next, _infos.size())
@@ -141,20 +240,11 @@ func _scroll_to(id: int) -> void:
 
 func _process(delta: float) -> void:
     _t += delta
-    if _content:
-        _content.queue_redraw()
+    if _over:
+        _over.queue_redraw()
 
-func _draw_chart() -> void:
-    var c := _content
-    var h := c.size.y
-    # Sea.
-    c.draw_rect(Rect2(0, 0, 1179, h), Color(0.07, 0.30, 0.46))
-    for i in int(h / 90.0):
-        var y := i * 90.0 + fmod(_t * 12.0, 90.0)
-        for k in 5:
-            var x := fmod(k * 260.0 + i * 131.0, 1179.0)
-            c.draw_arc(Vector2(x, y), 22.0, PI * 1.1, PI * 1.9, 8, Color(1, 1, 1, 0.07), 3.0)
-    # Route.
+## The dotted course between the castles, under the islands.
+func _draw_route(c: Control) -> void:
     var pts := PackedVector2Array()
     for i in _visible_count():
         pts.append(_node_pos(i))
@@ -168,19 +258,27 @@ func _draw_chart() -> void:
                 continue
             var p0 := a.lerp(b, float(k) / steps) + Vector2(sin(float(k) / steps * PI) * 60.0, 0)
             var p1 := a.lerp(b, float(k + 1) / steps) + Vector2(sin(float(k + 1) / steps * PI) * 60.0, 0)
-            c.draw_line(p0, p1, Color(1.0, 0.86, 0.5, 0.85) if done else Color(1, 1, 1, 0.3), 7.0)
-    # Chapter title above the first island.
-    var font0 := ThemeDB.fallback_font
-    var ch := "Chapter 1  ·  The Valora Islands"
-    var cw := font0.get_string_size(ch, HORIZONTAL_ALIGNMENT_CENTER, -1, 40).x
-    c.draw_string(font0, Vector2(589 - cw / 2.0, TOP + 40), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.86, 0.5, 0.9))
+            c.draw_line(p0 + Vector2(2, 3), p1 + Vector2(2, 3), Color(0, 0.05, 0.1, 0.35), 7.0)
+            c.draw_line(p0, p1, Color(1.0, 0.86, 0.5, 0.9) if done else Color(1, 1, 1, 0.4), 7.0)
     # The route runs on into the fog past the next castle.
     if _visible_count() < _infos.size() or _next > _infos.size():
         var last := pts[pts.size() - 1]
         for k in 6:
             var p0 := last + Vector2(sin(k * 0.6) * 40.0, 110.0 + k * 60.0)
             c.draw_line(p0, p0 + Vector2(0, 30), Color(1, 1, 1, 0.3 - k * 0.045), 7.0)
-    # Islands and nodes.
+
+func _draw_chart() -> void:
+    var c := _over
+    var pts := PackedVector2Array()
+    for i in _visible_count():
+        pts.append(_node_pos(i))
+    # Chapter title above the first island.
+    var font0 := ThemeDB.fallback_font
+    var ch := "Chapter 1  ·  The Valora Islands"
+    var cw := font0.get_string_size(ch, HORIZONTAL_ALIGNMENT_CENTER, -1, 40).x
+    c.draw_string_outline(font0, Vector2(589 - cw / 2.0, TOP + 40), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, 8, Color(0.02, 0.10, 0.18, 0.7))
+    c.draw_string(font0, Vector2(589 - cw / 2.0, TOP + 40), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 40, Color(1.0, 0.86, 0.5, 0.95))
+    # Markers on the islands.
     for i in _visible_count():
         var info: Dictionary = _infos[i]
         var p := pts[i]
@@ -188,20 +286,6 @@ func _draw_chart() -> void:
         var boss := bool(info.get("boss", false))
         var r := 138.0 if boss else 74.0
         var locked := id > _next
-        var land: Color = BIOME_COLORS.get(info.biome, Color(0.4, 0.6, 0.35))
-        # Island blob: sand rim and land, seeded by the level.
-        var rng := RandomNumberGenerator.new()
-        rng.seed = id * 977
-        var blob := PackedVector2Array()
-        var rim := PackedVector2Array()
-        for k in 18:
-            var ang := TAU * k / 18.0
-            var rr := r * rng.randf_range(1.55, 1.95)
-            blob.append(p + Vector2(cos(ang) * rr * 1.3, sin(ang) * rr * 0.8))
-            rim.append(p + Vector2(cos(ang) * (rr + 14.0) * 1.3, sin(ang) * (rr + 14.0) * 0.8))
-        if info.biome != "opensea":
-            c.draw_colored_polygon(rim, Color(0.93, 0.84, 0.62, 0.9 if not locked else 0.4))
-            c.draw_colored_polygon(blob, land if not locked else land.darkened(0.5))
         # Node disc.
         var fill := Color(1.0, 0.58, 0.18) if id == _next else (Color(0.16, 0.18, 0.24) if not locked else Color(0.2, 0.22, 0.26, 0.7))
         if boss and not locked:
@@ -213,7 +297,7 @@ func _draw_chart() -> void:
         c.draw_circle(p, r, fill)
         var font := ThemeDB.fallback_font
         if boss and not locked:
-            _draw_skull(c, p, r)   # drawn, not a glyph: the phone's fonts have no skull
+            c.draw_texture_rect(_skull.get_texture(), Rect2(p - Vector2(r, r) * 1.06, Vector2(r, r) * 2.12), false)
         else:
             var label := str(id) if not locked else "🔒"
             var fs := 56
@@ -229,64 +313,13 @@ func _draw_chart() -> void:
         if id == _next:
             var sp := p + Vector2(r * 2.1 * (1.0 if p.x < 589 else -1.0), -10 + sin(_t * 2.0) * 6.0)
             _draw_ship(c, sp)
-    _draw_fog(c)
 
-## The boss's skull and crossbones, drawn in white with a dark edge inside a disc of
-## radius `r`: crossed bones behind, a cranium with its jaw, eye sockets, nose and teeth.
-func _draw_skull(c: Control, p: Vector2, r: float) -> void:
-    var white := Color(0.97, 0.96, 0.92)
-    var edge := Color(0.22, 0.04, 0.03)
-    var R := r * 0.56
-    var head := p + Vector2(0, -r * 0.1)
-    # Crossbones
-    for s: float in [-1.0, 1.0]:
-        var a := head + Vector2(-s * r * 0.72, r * 0.1)
-        var b := head + Vector2(s * r * 0.72, r * 0.78)
-        c.draw_line(a, b, edge, r * 0.2)
-    for s: float in [-1.0, 1.0]:
-        var a := head + Vector2(-s * r * 0.72, r * 0.1)
-        var b := head + Vector2(s * r * 0.72, r * 0.78)
-        c.draw_line(a, b, white, r * 0.12)
-        var dir := (b - a).normalized()
-        var side := Vector2(-dir.y, dir.x)
-        for e: Vector2 in [a, b]:
-            for k: float in [-1.0, 1.0]:
-                c.draw_circle(e + side * k * r * 0.07, r * 0.085, edge)
-                c.draw_circle(e + side * k * r * 0.07, r * 0.065, white)
-    # Cranium and jaw, with a dark edge
-    var jaw_top := head.y + R * 0.45
-    var jaw_bot := head.y + R * 1.12
-    var jaw_w := R * 0.58
-    c.draw_circle(head, R + r * 0.045, edge)
-    c.draw_rect(Rect2(head.x - jaw_w - r * 0.045, jaw_top, (jaw_w + r * 0.045) * 2.0, jaw_bot - jaw_top + r * 0.045), edge)
-    c.draw_circle(head, R, white)
-    c.draw_rect(Rect2(head.x - jaw_w, jaw_top, jaw_w * 2.0, jaw_bot - jaw_top), white)
-    # Eye sockets, the nose and the teeth
-    for s: float in [-1.0, 1.0]:
-        var eye := head + Vector2(s * R * 0.4, -R * 0.02)
-        var pts := PackedVector2Array()
-        for k in 20:
-            var ang := TAU * k / 20.0
-            pts.append(eye + Vector2(cos(ang) * R * 0.25, sin(ang) * R * 0.3))
-        c.draw_colored_polygon(pts, edge)
-    c.draw_colored_polygon(PackedVector2Array([head + Vector2(0, R * 0.28), head + Vector2(-R * 0.12, R * 0.56), head + Vector2(R * 0.12, R * 0.56)]), edge)
-    for k in 5:
-        var x := head.x - jaw_w * 0.8 + jaw_w * 1.6 * float(k) / 4.0
-        c.draw_line(Vector2(x, jaw_top + R * 0.28), Vector2(x, jaw_bot - R * 0.06), edge, r * 0.025)
-    c.draw_line(Vector2(head.x - jaw_w * 0.9, jaw_top + R * 0.28), Vector2(head.x + jaw_w * 0.9, jaw_top + R * 0.28), edge, r * 0.025)
+## Where the cloud bank over the uncharted water begins.
+func _fog_y() -> float:
+    return _node_pos(_visible_count() - 1).y + 200.0
 
-func _draw_fog(c: Control) -> void:
-    var y0 := _node_pos(_visible_count() - 1).y + 200.0
-    # A soft bank of fog: many thin bands easing in, with drifting wisps along its edge.
-    var steps := 48
-    var band := 9.0
-    for k in steps:
-        var t := float(k + 1) / steps
-        c.draw_rect(Rect2(0, y0 + k * band, 1179, band + 1.0), Color(0.72, 0.78, 0.84, t * t * (3.0 - 2.0 * t) * 0.97))
-    c.draw_rect(Rect2(0, y0 + steps * band, 1179, c.size.y - (y0 + steps * band)), Color(0.72, 0.78, 0.84, 0.97))
-    for k in 9:
-        var wx := fmod(k * 173.0 + _t * 14.0, 1400.0) - 110.0
-        c.draw_circle(Vector2(wx, y0 + 30.0 + sin(k * 1.7) * 20.0), 70.0 + (k % 3) * 22.0, Color(0.78, 0.83, 0.88, 0.35))
+func _draw_fog_text(c: Control) -> void:
+    var y0 := _fog_y()
     var font := ThemeDB.fallback_font
     var done := _next > _infos.size()
     var t := "Chapter 2  ·  The Frozen North" if done else "Uncharted waters"

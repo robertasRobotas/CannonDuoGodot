@@ -3,9 +3,16 @@
 class_name Haptics
 
 static var enabled := true
+## The vibration setting, 0..1: scales every buzz; 0 turns them off.
+static var strength := 1.0
 ## Off while a result panel or menu is up.
 static var muted := false
 static var _busy_until := 0.0
+
+## From the 0–100 setting.
+static func set_strength(percent: int) -> void:
+    strength = clampf(percent / 100.0, 0.0, 1.0)
+    enabled = strength > 0.0
 
 static func tick(power: float) -> void:
     _buzz(8 + int(10 * power), 0.25 + 0.35 * power)
@@ -50,4 +57,4 @@ static func _buzz(ms: int, amplitude: float) -> void:
         return
     var d := mini(ms, 350)
     _busy_until = now + d / 1000.0 + 0.06
-    Input.vibrate_handheld(d, amplitude)
+    Input.vibrate_handheld(d, clampf(amplitude * strength, 0.01, 1.0))
